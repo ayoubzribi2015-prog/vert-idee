@@ -4,6 +4,7 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { GoogleGenAI, Type } from '@google/genai';
 import path from 'path';
+import http from 'http';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import mammoth from 'mammoth';
@@ -946,13 +947,15 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
 async function startServer() {
   const distPath = path.resolve(process.cwd(), 'dist');
   const isProduction = fs.existsSync(distPath);
+  const server = http.createServer(app);
 
   if (!isProduction) {
     console.log('Running in development mode (Vite middleware)');
     const vite = await createViteServer({
-      server: { 
+      server: {
         middlewareMode: true,
-        hmr: false,
+        // Share the app's HTTP server so the HMR WebSocket uses the same port/origin as the page (works behind the preview proxy)
+        hmr: { server },
       },
       appType: 'spa',
     });
@@ -965,7 +968,7 @@ async function startServer() {
     });
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 
