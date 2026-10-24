@@ -1,0 +1,8 @@
+{
+  "name": "Vert_Idée - Expert Entrepreneuriat Vert & Empreinte Carbone",
+  "description": "Plateforme experte d'évaluation des aspects écologiques, sociaux et d'éco-conception avec calcul de l'empreinte carbone et export de rapports Word.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

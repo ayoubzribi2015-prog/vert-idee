@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with Google account info",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "ProjectAudit": {
+      "title": "ProjectAudit",
+      "description": "Comprehensive green entrepreneurship audit and carbon footprint report",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "sector": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "projectSynthesis": { "type": "object" },
+        "environmentalAspects": { "type": "object" },
+        "socialAspects": { "type": "object" },
+        "greenEntrepreneurshipIntegration": { "type": "object" },
+        "sdgAlignment": { "type": "array" },
+        "impactIndicators": { "type": "object" },
+        "greenFinancingAndLabels": { "type": "object" },
+        "priorityActionPlan": { "type": "object" }
+      },
+      "required": ["id", "userId", "title", "sector", "description", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile documents indexed by auth.uid"
+    },
+    "/users/{userId}/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/ProjectAudit" },
+      "description": "User project audits and carbon evaluations accessible only by the owner"
+    }
+  }
+}
