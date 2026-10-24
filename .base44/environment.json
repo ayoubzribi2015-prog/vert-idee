@@ -1,0 +1,13 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/api/ai-status",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "GEMINI_API_KEY",
+      "description": "Google AI Studio API key (https://aistudio.google.com/apikey) — powers the AI audit engine (/api/analyze) and the green assistant (/api/chat). Not required to boot: without it those endpoints fall back to the built-in deterministic expert audit engine.",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": false
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+# Base44 development environment for Vert'Idée.
+#
+# Runs the app FROM THE CLONED SOURCE: Express (`server.ts`) mounts Vite in
+# middleware mode, so a single process on host port 3000 serves both the API and
+# the live-reloading frontend (single-origin wiring — no CORS needed).
+#
+#   docker compose -f docker-compose.base44.yml up -d --build
+#
+# Notes:
+#   * `node:22` is a plain runtime image; the repository is bind-mounted, so code
+#     edits are picked up by Vite's HMR without rebuilding anything.
+#   * Dependencies are installed on container startup from `bun.lock` with Bun,
+#     because `npm install` fails on this tree (ERESOLVE: @vitejs/plugin-react
+#     peer conflict against vite 8). `node_modules/` lives on the sandbox
+#     filesystem, which keeps the repo's lockfile untouched.
+services:
+  web:
+    image: node:22
+    working_dir: /app
+    restart: on-failure
+    command:
+      - sh
+      - -ec
+      - |
+        if ! command -v bun >/dev/null 2>&1; then
+          curl -fsSL https://bun.sh/install | bash
+        fi
+        export PATH="/root/.bun/bin:$PATH"
+        bun install --frozen-lockfile
+        exec bun run dev
+    ports:
+      # The preview iframe always shows whatever listens on host port 3000.
+      - "3000:3000"
+    volumes:
+      - .:/app
+    environment:
+      - PORT=3000
+      # Passed through from the platform; Vite >= 6.1 appends it to
+      # server.allowedHosts so the preview's proxied host is accepted.
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+      # Sandbox preview flag. The app needs no sandbox-only overrides: it already
+      # binds 0.0.0.0 and runs in Vite dev/middleware mode by default.
+      - BASE44_PREVIEW_MODE
+    env_file:
+      # Platform-managed secrets (GEMINI_API_KEY, ...). Kept out of the repo and
+      # listed last so a value from the dashboard always wins.
+      - /run/base44/app.env
+    healthcheck:
+      # /api/ai-status is an existing read-only endpoint; 200 proves the Express
+      # app (and therefore the Vite middleware layer) is actually serving.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/ai-status >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    labels:
+      base44.project: "Vert'Idée"
+      base44.kind: "web"
+      base44.port: "3000"
