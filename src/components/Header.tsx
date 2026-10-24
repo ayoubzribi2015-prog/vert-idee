@@ -116,11 +116,8 @@ export const Header: React.FC<HeaderProps> = ({
                     className="text-2xl font-black tracking-tight text-[#063428] font-serif-title cursor-pointer hover:text-[#10634e] transition-colors"
                   >
                     Vert<span className="text-[#2d7a5e]">_</span>Idée
-                  </span>
-                  <span className="hidden sm:inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-stone-100 text-stone-700 border border-stone-200">
-                    Audit Green
-                  </span>
-                </div>
+  </span>
+  </div>
                 <p className="text-[11px] text-stone-600 font-medium hidden md:block">
                   Transition Écologique & Empreinte Carbone
                 </p>

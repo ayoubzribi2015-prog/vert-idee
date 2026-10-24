@@ -49,6 +49,8 @@ import { generateWordReport } from './utils/docxExport';
 import {
   auth,
   signInWithGoogle,
+  completeRedirectSignIn,
+  getGoogleAuthErrorMessage,
   logOut,
   subscribeToUserProjects,
   saveUserProject,
@@ -91,6 +93,11 @@ export default function App() {
   // Boot test
   useEffect(() => {
     testFirestoreConnection();
+    completeRedirectSignIn().then((redirectUser) => {
+      if (redirectUser) {
+        setToastMessage(`Connecté avec succès en tant que ${redirectUser.email} ! Votre historique personnel est actif.`);
+      }
+    });
   }, []);
 
 
@@ -135,16 +142,13 @@ export default function App() {
       setIsLoggingIn(true);
       setErrorMessage(null);
       const loggedUser = await signInWithGoogle();
-      setToastMessage(`Connecté avec succès en tant que ${loggedUser.email} ! Votre historique personnel est actif.`);
+      if (loggedUser) {
+        setToastMessage(`Connecté avec succès en tant que ${loggedUser.email} ! Votre historique personnel est actif.`);
+      }
     } catch (err: any) {
       console.error('Login error:', err);
-      if (err?.code !== 'auth/popup-closed-by-user') {
-        setErrorMessage(
-          err?.message?.includes('popup')
-            ? 'La fenêtre d\'authentification Google a été bloquée. Veuillez autoriser les fenêtres contextuelles pour vous connecter.'
-            : 'Erreur lors de la connexion Google.'
-        );
-      }
+      const message = getGoogleAuthErrorMessage(err);
+      if (message) setErrorMessage(message);
     } finally {
       setIsLoggingIn(false);
     }

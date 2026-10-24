@@ -11,9 +11,5 @@ export default defineConfig(() => {
         '@': path.resolve(import.meta.dirname, '.'),
       },
     },
-    server: {
-      hmr: false,
-      watch: null,
-    },
   };
 });
