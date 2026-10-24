@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { GoogleGenAI, Type } from '@google/genai';
+import { generateText, Output, jsonSchema, type ModelMessage } from 'ai';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
@@ -65,64 +66,130 @@ async function generateContentWithResilience(options: {
   singleAttemptTimeoutMs?: number;
   totalTimeoutMs?: number;
 }): Promise<{ response: any; modelUsed: string }> {
-  if (Date.now() < geminiQuotaExhaustedUntil) {
-    console.warn('[Gemini Engine] Quota épuisé, passage direct au repli expert.');
-    throw new Error('429 - Quota temporairement épuisé');
-  }
-
   const startTime = Date.now();
-  const singleTimeout = options.singleAttemptTimeoutMs || 10000;
-  const totalTimeout = options.totalTimeoutMs || 16000;
+  const singleTimeout = options.singleAttemptTimeoutMs || 15000;
+  const totalTimeout = options.totalTimeoutMs || 30000;
 
-  const models = options.preferredModels || [
-    'gemini-3.1-flash-lite',
-    'gemini-3.5-flash-lite',
-    'gemini-3.8-flash',
-  ];
+  const models = options.preferredModels || DEFAULT_MODELS;
   let lastError: any = null;
 
-  for (const modelName of models) {
-    if (Date.now() - startTime >= totalTimeout) {
-      console.warn(`[Gemini Engine] Temps limite global (${totalTimeout}ms) atteint avant d'essayer "${modelName}".`);
-      break;
-    }
+  const providers: Array<'gemini' | 'gateway'> = [];
+  if (hasGeminiKey() && Date.now() >= geminiQuotaExhaustedUntil) providers.push('gemini');
+  if (hasGatewayCredentials() && Date.now() >= gatewayUnavailableUntil) providers.push('gateway');
 
-    try {
-      console.log(`[Gemini Engine] Requête sur "${modelName}" (timeout: ${singleTimeout}ms)...`);
-      
-      const apiCallPromise = ai.models.generateContent({
-        model: modelName,
-        contents: options.contents,
-        config: options.config,
-      });
+  if (providers.length === 0) {
+    throw new Error(
+      'Aucun fournisseur IA disponible : définissez GEMINI_API_KEY (ou activez Vercel AI Gateway).'
+    );
+  }
 
-      const response = await promiseWithTimeout(
-        apiCallPromise,
-        singleTimeout,
-        `Délai dépassé (${singleTimeout}ms) pour le modèle ${modelName}`
-      );
+  for (const provider of providers) {
+    for (const modelName of models) {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= totalTimeout) break;
+      const attemptTimeout = Math.min(singleTimeout, totalTimeout - elapsed);
+      const label = provider === 'gemini' ? modelName : `google/${modelName}`;
 
-      if (response && response.text) {
-        console.log(`[Gemini Engine] Réponse générée avec succès depuis "${modelName}" en ${Date.now() - startTime}ms !`);
-        return { response, modelUsed: modelName };
-      }
-    } catch (err: any) {
-      lastError = err;
-      const errMsg = err?.message || String(err);
-      console.warn(`[Gemini Engine] Le modèle "${modelName}" a renvoyé : ${errMsg}`);
+      try {
+        console.log(`[AI Engine] ${provider} → "${label}" (timeout: ${attemptTimeout}ms)...`);
+        const call =
+          provider === 'gemini'
+            ? ai.models
+                .generateContent({ model: modelName, contents: options.contents, config: options.config })
+                .then((r) => ({ text: r?.text || '' }))
+            : generateViaGateway(label, options.contents, options.config);
 
-      if (
-        errMsg.includes('quota') ||
-        errMsg.includes('429') ||
-        errMsg.includes('Resource has been exhausted')
-      ) {
-        geminiQuotaExhaustedUntil = Date.now() + 30 * 60 * 1000;
-        break;
+        const response = await promiseWithTimeout(
+          call,
+          attemptTimeout,
+          `Délai dépassé (${attemptTimeout}ms) pour le modèle ${label}`
+        );
+
+        if (response && response.text) {
+          console.log(`[AI Engine] Succès "${label}" via ${provider} en ${Date.now() - startTime}ms`);
+          return { response, modelUsed: `${provider}:${label}` };
+        }
+      } catch (err: any) {
+        lastError = err;
+        const errMsg = err?.message || String(err);
+        console.warn(`[AI Engine] ${provider} "${label}" a échoué : ${errMsg}`);
+
+        const isAuthOrQuota =
+          /quota|429|exhausted|API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
+        if (isAuthOrQuota) {
+          if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
+          else gatewayUnavailableUntil = Date.now() + 10 * 60 * 1000;
+          break;
+        }
       }
     }
   }
 
-  throw lastError || new Error('Les modèles Gemini ont mis trop de temps ou sont indisponibles.');
+  throw lastError || new Error('Les modèles IA ont mis trop de temps ou sont indisponibles.');
+}
+
+const DEFAULT_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.5-flash'];
+let gatewayUnavailableUntil = 0;
+
+function hasGeminiKey(): boolean {
+  return !!process.env.GEMINI_API_KEY?.trim();
+}
+
+function hasGatewayCredentials(): boolean {
+  return !!(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
+}
+
+function geminiSchemaToJsonSchema(schema: any): any {
+  if (!schema || typeof schema !== 'object') return schema;
+  if (Array.isArray(schema)) return schema.map(geminiSchemaToJsonSchema);
+  const out: any = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === 'type' && typeof value === 'string') out.type = value.toLowerCase();
+    else if (key === 'properties' && value && typeof value === 'object') {
+      out.properties = Object.fromEntries(
+        Object.entries(value as Record<string, any>).map(([k, v]) => [k, geminiSchemaToJsonSchema(v)])
+      );
+    } else if (key === 'items') out.items = geminiSchemaToJsonSchema(value);
+    else if (key === 'propertyOrdering' || key === 'nullable') continue;
+    else out[key] = value;
+  }
+  return out;
+}
+
+function toGatewayMessages(contents: any): ModelMessage[] {
+  if (typeof contents === 'string') return [{ role: 'user', content: contents }];
+  if (!Array.isArray(contents)) return [{ role: 'user', content: String(contents ?? '') }];
+
+  if (contents.every((c) => c && typeof c === 'object' && 'role' in c)) {
+    return contents.map((c: any) => {
+      const text = (c.parts || []).map((p: any) => p?.text || '').join('\n');
+      return c.role === 'model'
+        ? ({ role: 'assistant', content: text } as ModelMessage)
+        : ({ role: 'user', content: text } as ModelMessage);
+    });
+  }
+
+  const parts = contents.map((p: any) =>
+    p?.inlineData
+      ? { type: 'file' as const, data: p.inlineData.data, mediaType: p.inlineData.mimeType }
+      : { type: 'text' as const, text: p?.text || '' }
+  );
+  return [{ role: 'user', content: parts }];
+}
+
+async function generateViaGateway(model: string, contents: any, config: any = {}): Promise<{ text: string }> {
+  const result = await generateText({
+    model,
+    system: config?.systemInstruction,
+    messages: toGatewayMessages(contents),
+    temperature: config?.temperature,
+    seed: config?.seed,
+    maxOutputTokens: config?.maxOutputTokens,
+    ...(config?.responseSchema
+      ? { output: Output.object({ schema: jsonSchema(geminiSchemaToJsonSchema(config.responseSchema)) }) }
+      : {}),
+  });
+  return { text: result.text };
 }
 
 // Firebase Storage for shared/default projects (legacy support with memory fallback)
@@ -153,6 +220,26 @@ async function saveProjectToFirestore(project: any): Promise<void> {
     // Stored in inMemoryProjects fallback
   }
 }
+
+app.get('/api/ai-status', async (req: express.Request, res: express.Response) => {
+  const status: Record<string, any> = {
+    geminiKeyConfigured: hasGeminiKey(),
+    gatewayConfigured: hasGatewayCredentials(),
+  };
+  if (req.query.probe === '1') {
+    try {
+      const { response, modelUsed } = await generateContentWithResilience({
+        contents: 'Réponds uniquement par "OK".',
+        singleAttemptTimeoutMs: 15000,
+        totalTimeoutMs: 25000,
+      });
+      status.probe = { ok: true, modelUsed, reply: response.text.slice(0, 40) };
+    } catch (err: any) {
+      status.probe = { ok: false, error: err?.message || String(err) };
+    }
+  }
+  res.json(status);
+});
 
 // REST API for Cloud History
 app.get('/api/projects', async (req: express.Request, res: express.Response) => {
@@ -255,8 +342,9 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
       // Si le texte extrait est très court (ex: scan d'image), tentative via Gemini vision/multimodal
       if (!extractedText || extractedText.trim().length < 40) {
         try {
-          const aiRes = await ai.models.generateContent({
-            model: 'gemini-3.1-flash-lite',
+          const { response: aiRes } = await generateContentWithResilience({
+            singleAttemptTimeoutMs: 25000,
+            totalTimeoutMs: 40000,
             contents: [
               {
                 inlineData: {
@@ -312,8 +400,7 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
     // Synthèse obligatoire en 7 lignes max contenants les informations les plus pertinentes pour bien décrire l'idée de projet
     let finalDescription = extractedText;
     try {
-      const summaryRes = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+      const { response: summaryRes } = await generateContentWithResilience({
         contents: `À partir du contenu du document importé ci-dessous, rédige une description concise et percutante de l'idée de projet et de sa proposition de valeur, STRICTEMENT LIMITÉE À 7 LIGNES MAXIMUM. Cette description doit condenser les informations les plus pertinentes (problème résolu, solution technique, intrants/procédés et proposition de valeur écologique) pour renseigner le champ de diagnostic.
 
 Document source :
@@ -482,9 +569,9 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
     try {
       const { response, modelUsed } = await generateContentWithResilience({
         contents: userPrompt,
-        preferredModels: ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'],
-        singleAttemptTimeoutMs: 12000,
-        totalTimeoutMs: 18000,
+        preferredModels: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash'],
+        singleAttemptTimeoutMs: 30000,
+        totalTimeoutMs: 55000,
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.1,
@@ -905,9 +992,9 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
     try {
       const { response, modelUsed } = await generateContentWithResilience({
         contents,
-        preferredModels: ['gemini-3.8-flash', 'gemini-3.1-flash-lite'],
-        singleAttemptTimeoutMs: 10000,
-        totalTimeoutMs: 15000,
+        preferredModels: ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
+        singleAttemptTimeoutMs: 20000,
+        totalTimeoutMs: 35000,
         config: {
           systemInstruction,
           temperature: 0.7,

@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
@@ -100,32 +102,85 @@ export async function testFirestoreConnection() {
 }
 
 // Sign in with Google (Gmail)
-export async function signInWithGoogle(): Promise<FirebaseUser> {
-  const path = 'users';
+async function upsertUserProfile(user: FirebaseUser): Promise<void> {
+  try {
+    await setDoc(
+      doc(db, 'users', user.uid),
+      {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || user.email?.split('@')[0] || 'Utilisateur',
+        photoURL: user.photoURL || '',
+        lastLoginAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    // A profile write failure must never block a successful Google authentication
+    console.warn('Profil utilisateur non synchronisé dans Firestore :', error);
+  }
+}
+
+const REDIRECT_FALLBACK_CODES = new Set([
+  'auth/popup-blocked',
+  'auth/operation-not-supported-in-this-environment',
+  'auth/web-storage-unsupported',
+]);
+
+const isInIframe = () => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+};
+
+export async function signInWithGoogle(): Promise<FirebaseUser | null> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-
-    // Save/update user profile in Firestore
-    if (user) {
-      await setDoc(
-        doc(db, 'users', user.uid),
-        {
-          uid: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || user.email?.split('@')[0] || 'Utilisateur',
-          photoURL: user.photoURL || '',
-          lastLoginAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-    }
-
-    return user;
+    await upsertUserProfile(result.user);
+    return result.user;
   } catch (error: any) {
-    if (error?.code === 'auth/popup-closed-by-user') throw error;
-    handleFirestoreError(error, OperationType.WRITE, path);
+    if (REDIRECT_FALLBACK_CODES.has(error?.code) && !isInIframe()) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
     throw error;
+  }
+}
+
+export async function completeRedirectSignIn(): Promise<FirebaseUser | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result?.user) {
+      await upsertUserProfile(result.user);
+      return result.user;
+    }
+  } catch (error) {
+    console.warn('Résultat de redirection Google indisponible :', error);
+  }
+  return null;
+}
+
+export function getGoogleAuthErrorMessage(error: any): string | null {
+  const code: string = error?.code || '';
+  switch (code) {
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return null;
+    case 'auth/popup-blocked':
+      return 'La fenêtre de connexion Google a été bloquée par le navigateur. Autorisez les fenêtres contextuelles pour ce site puis réessayez.';
+    case 'auth/unauthorized-domain':
+      return `Le domaine « ${window.location.hostname} » n'est pas autorisé pour la connexion Google. Ajoutez-le dans Firebase Console > Authentication > Settings > Authorized domains.`;
+    case 'auth/operation-not-allowed':
+      return 'La connexion Google n\'est pas activée. Activez le fournisseur « Google » dans Firebase Console > Authentication > Sign-in method.';
+    case 'auth/network-request-failed':
+      return 'Erreur réseau pendant la connexion Google. Vérifiez votre connexion Internet puis réessayez.';
+    case 'auth/web-storage-unsupported':
+    case 'auth/operation-not-supported-in-this-environment':
+      return 'Votre navigateur bloque les cookies tiers nécessaires à la connexion. Ouvrez l\'application dans un nouvel onglet puis réessayez.';
+    default:
+      return `Erreur lors de la connexion Google${code ? ` (${code})` : ''}.`;
   }
 }
 
