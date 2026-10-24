@@ -12,19 +12,37 @@ import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
 import { generateExpertAuditFallback } from './src/utils/fallbackExpertAudit.ts';
 
-dotenv.config();
+dotenv.config({ path: ['.env.development.local', '.env.local', '.env'], quiet: true });
 
-// Load Firebase config
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[Server] Rejet non géré (ignoré pour garder le serveur actif) :', reason?.message || reason);
+});
+process.on('uncaughtException', (err: any) => {
+  console.error('[Server] Exception non capturée (ignorée pour garder le serveur actif) :', err?.message || err);
+});
+
 const firebaseConfig = JSON.parse(fs.readFileSync('./firebase-applet-config.json', 'utf8'));
 
-// Initialize Firebase Admin
-if (!getApps().length) {
-  initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
+// Firebase Admin needs Application Default Credentials; without them the gRPC client
+// throws asynchronously and kills the process, so only enable it when credentials exist.
+const hasAdminCredentials = !!(
+  process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+  process.env.K_SERVICE ||
+  process.env.GOOGLE_CLOUD_PROJECT ||
+  process.env.FUNCTION_TARGET
+);
+
+if (hasAdminCredentials && !getApps().length) {
+  initializeApp({ projectId: firebaseConfig.projectId });
 }
 
-const firestore = getFirestore(firebaseConfig.firestoreDatabaseId);
+const firestoreInstance = hasAdminCredentials ? getFirestore(firebaseConfig.firestoreDatabaseId) : null;
+const firestore = {
+  collection(name: string) {
+    if (!firestoreInstance) throw new Error('Firestore Admin indisponible (pas de credentials).');
+    return firestoreInstance.collection(name);
+  },
+};
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -1033,7 +1051,7 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
 // Vite middleware or static serving
 async function startServer() {
   const distPath = path.resolve(process.cwd(), 'dist');
-  const isProduction = fs.existsSync(distPath);
+  const isProduction = process.env.NODE_ENV === 'production' && fs.existsSync(distPath);
   const server = http.createServer(app);
 
   if (!isProduction) {
