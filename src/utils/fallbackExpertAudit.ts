@@ -13,7 +13,7 @@ import type { ProjectAudit } from '../types.ts';
 export function generateExpertAuditFallback(
   title: string,
   description: string,
-  location: string = 'Tunisie / International'
+  location: string = 'Tunisie'
 ): Omit<ProjectAudit, 'id' | 'createdAt'> {
   // L'évaluation est fondée STRICTEMENT sur la description opérationnelle et le lieu.
   // Le titre commercial ne doit EN AUCUN CAS altérer les scores ni la catégorisation.

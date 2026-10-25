@@ -238,7 +238,7 @@ export default function App() {
       setIsModalOpen(false);
       setInfoRequest(null);
       setOriginalFormData(null);
-      setActiveTab('environmental');
+      setActiveTab('synthesis');
       setToastMessage(
         user
           ? `Diagnostic enregistré dans votre compte Cloud Gmail (${user.email}) !`

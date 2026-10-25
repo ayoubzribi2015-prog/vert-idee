@@ -456,6 +456,14 @@ interface CachedAudit {
 }
 const auditContentCache = new Map<string, CachedAudit>();
 
+// Lieu d'implantation par défaut : si l'utilisateur ne précise aucun lieu, le
+// diagnostic considère que le projet est implanté en Tunisie.
+const DEFAULT_LOCATION = 'Tunisie';
+
+function resolveLocation(loc?: string | null): string {
+  return (loc || '').trim() || DEFAULT_LOCATION;
+}
+
 function normalizeDescriptionKey(desc: string, loc: string, answers?: any): string {
   const cleanDesc = (desc || '').toLowerCase().trim().replace(/\s+/g, ' ');
   const cleanLoc = (loc || '').toLowerCase().trim().replace(/\s+/g, ' ');
@@ -476,7 +484,7 @@ app.post('/api/analyze', async (req: express.Request, res: express.Response) => 
     // Vérification du cache de cohérence déterministe
     // Si la même description opérationnelle a déjà été évaluée (ex. "grandii" vs "t3allem"),
     // nous garantissons des scores strictement identiques et une parfaite cohérence sans dérive stochastique
-    const cacheKey = normalizeDescriptionKey(description, location, req.body && req.body.answers);
+    const cacheKey = normalizeDescriptionKey(description, resolveLocation(location), req.body && req.body.answers);
     const cached = auditContentCache.get(cacheKey);
     if (cached && Date.now() - cached.cachedAt < 24 * 60 * 60 * 1000) {
       console.log(`[Audit Engine] Projet équivalent détecté en cache pour "${title}". Application déterministe des scores et du diagnostic.`);
@@ -493,7 +501,7 @@ app.post('/api/analyze', async (req: express.Request, res: express.Response) => 
         title,
         sector: finalSector,
         description,
-        location: location || 'Non spécifié',
+        location: resolveLocation(location),
         targetAudience: targetAudience || 'B2B / B2C Éco-responsable',
         businessModel: businessModel || 'Économie Circulaire & Vente directe',
         lifeCycleDetails: lifeCycleDetails || '',
@@ -572,7 +580,7 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
 Voici le projet à auditer selon les 8 sections officielles par le Collège des 2 Experts Environnementaux :
 - Nom commercial / Marque du projet (Libellé administratif uniquement, NE DOIT PAS INFLUENCER LES SCORES) : ${title}
 - Description opérationnelle de l'activité & Proposition de valeur (FONDEMENT STRICT DU SCORING) : ${description}
-- Lieu d'implantation : ${location || 'Tunisie / International'}
+- Lieu d'implantation : ${resolveLocation(location)}
 ${sector ? `- Secteur suggéré : ${sector}` : ''}
 ${targetAudience ? `- Cible suggérée : ${targetAudience}` : ''}
 ${businessModel ? `- Modèle économique suggéré : ${businessModel}` : ''}
@@ -905,7 +913,7 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
         aiErr?.message
       );
       // Moteur d'audit expert déterministe : garantit que l'utilisateur reçoit TOUJOURS son rapport complet sans être bloqué
-      parsedData = generateExpertAuditFallback(title, description, location || 'Tunisie / Europe');
+      parsedData = generateExpertAuditFallback(title, description, resolveLocation(location));
     }
 
     // Mettre en cache déterministe si l'analyse est complète
@@ -923,7 +931,7 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
       title,
       sector: finalSector,
       description,
-      location: location || 'Non spécifié',
+      location: resolveLocation(location),
       targetAudience: targetAudience || 'B2B / B2C Éco-responsable',
       businessModel: businessModel || 'Économie Circulaire & Vente directe',
       lifeCycleDetails: lifeCycleDetails || '',
@@ -976,7 +984,7 @@ Si la question ou le projet abordé concerne des technologies militaires, des ar
 ${projectContext ? `
 Contexte technique actuel du projet audité :
 - Titre : ${projectContext.title || 'Non spécifié'}
-- Lieu d'implantation : ${projectContext.location || 'Non spécifié'}
+- Lieu d'implantation : ${resolveLocation(projectContext.location)}
 - Secteur : ${projectContext.sector || 'Non spécifié'}
 - Description : ${projectContext.description || 'Non spécifié'}
 - Scores d'impact : Environnement ${projectContext.projectSynthesis?.scores?.environmental ?? '--'}/100, Social ${projectContext.projectSynthesis?.scores?.social ?? '--'}/100, Circularité ${projectContext.projectSynthesis?.scores?.circularity ?? '--'}/100, Global ${projectContext.projectSynthesis?.scores?.globalScore ?? '--'}/100
