@@ -89,7 +89,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
     await onSubmit({
       title: title.trim(),
       description: description.trim(),
-      location: location.trim() || 'France / Europe',
+      location: location.trim() || 'Tunisie',
     });
   };
 

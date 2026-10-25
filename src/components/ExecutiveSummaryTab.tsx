@@ -106,7 +106,7 @@ export const ExecutiveSummaryTab: React.FC<ExecutiveSummaryTabProps> = ({ projec
           <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-stone-100 text-xs text-stone-600">
             <span>Secteur : <strong className="text-stone-900 font-semibold">{project.sector}</strong></span>
             <span aria-hidden="true" className="text-stone-300">·</span>
-            <span>Implantation : <strong className="text-stone-900 font-semibold">{project.location || 'France / Europe'}</strong></span>
+            <span>Implantation : <strong className="text-stone-900 font-semibold">{project.location || 'Tunisie'}</strong></span>
             {project.targetAudience && (
               <>
                 <span aria-hidden="true" className="text-stone-300">·</span>

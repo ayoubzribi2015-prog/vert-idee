@@ -80,7 +80,7 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
     await onSubmit({
       title,
       description,
-      location: location.trim() || 'France / Europe',
+      location: location.trim() || 'Tunisie',
     });
   };
 
