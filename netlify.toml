@@ -5,7 +5,7 @@
 [functions]
   node_bundler = "esbuild"
   # Packages with native/worker files or dynamic requires are shipped as-is instead of bundled.
-  external_node_modules = ["pdf-parse", "pdfjs-dist", "firebase-admin", "mammoth", "xlsx"]
+  external_node_modules = ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas", "firebase-admin", "mammoth", "xlsx"]
 
 [[redirects]]
   from = "/*"
