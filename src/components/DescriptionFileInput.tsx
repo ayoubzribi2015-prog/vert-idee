@@ -203,7 +203,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={isExtracting}
-          className={`w-full px-4 py-3.5 rounded-xl border text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#10634e]/20 focus:border-[#10634e] transition-all resize-y shadow-2xs leading-relaxed ${
+          className={`w-full px-3.5 sm:px-4 py-3 sm:py-3.5 rounded-xl border text-base sm:text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#10634e]/20 focus:border-[#10634e] transition-all resize-y shadow-2xs leading-relaxed min-h-[130px] ${
             isDragging ? 'border-[#10634e] bg-[#edf5f0]/20' : 'border-stone-300 bg-white'
           }`}
         />

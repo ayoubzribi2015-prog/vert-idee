@@ -272,24 +272,25 @@
   .bg-gradient-to-tl {
     --tw-gradient-position: to top left !important;
   }
-
-  /* Mobile smartphone optimization utilities */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  /* Eliminates mobile touch tap lag and transparent highlight */
-  button, a, input, select, textarea {
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* Safe padding for modern smartphones with bottom indicator bars */
-  .pb-safe {
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  }
 }
+
+/* Mobile smartphone optimization utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe padding for modern smartphones with bottom indicator bars */
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Eliminates mobile touch tap lag and transparent highlight */
+button, a, input, select, textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
