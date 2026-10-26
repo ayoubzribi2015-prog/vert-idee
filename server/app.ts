@@ -21,11 +21,19 @@ const hasAdminCredentials = !!(
   process.env.FUNCTION_TARGET
 );
 
-if (hasAdminCredentials && !getApps().length) {
-  initializeApp({ projectId: firebaseConfig.projectId });
+let firestoreInstance: any = null;
+if (hasAdminCredentials) {
+  try {
+    if (!getApps().length) {
+      initializeApp({ projectId: firebaseConfig.projectId });
+    }
+    firestoreInstance = getFirestore(firebaseConfig.firestoreDatabaseId);
+  } catch (err: any) {
+    console.warn('[Firebase Admin] Initialisation ignorée (pas de credentials valides):', err?.message);
+    firestoreInstance = null;
+  }
 }
 
-const firestoreInstance = hasAdminCredentials ? getFirestore(firebaseConfig.firestoreDatabaseId) : null;
 const firestore = {
   collection(name: string) {
     if (!firestoreInstance) throw new Error('Firestore Admin indisponible (pas de credentials).');
@@ -38,6 +46,18 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 let geminiQuotaExhaustedUntil = 0;
+let gatewayUnavailableUntil = 0;
+
+// Valid model names per Gemini API SDK guidelines
+const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+
+function hasGeminiKey(): boolean {
+  return !!process.env.GEMINI_API_KEY?.trim();
+}
+
+function hasGatewayCredentials(): boolean {
+  return !!(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
+}
 
 // Initialise Gemini
 const ai = new GoogleGenAI({
@@ -50,7 +70,7 @@ const ai = new GoogleGenAI({
 });
 
 /**
- * Promesse avec délai d'expiration (timeout)
+ * Promesse avec délai d'expiration strict (timeout)
  */
 function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMsg: string): Promise<T> {
   let timer: NodeJS.Timeout;
@@ -63,86 +83,16 @@ function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMsg:
 }
 
 /**
- * Exécute un appel Gemini avec résilience multi-modèles et timeouts stricts
+ * Exécute une opération Firestore avec un timeout court (1200ms) pour éviter tout blocage réseau gRPC
  */
-async function generateContentWithResilience(options: {
-  contents: any;
-  config?: any;
-  preferredModels?: string[];
-  singleAttemptTimeoutMs?: number;
-  totalTimeoutMs?: number;
-}): Promise<{ response: any; modelUsed: string }> {
-  const startTime = Date.now();
-  const singleTimeout = options.singleAttemptTimeoutMs || 15000;
-  const totalTimeout = options.totalTimeoutMs || 30000;
-
-  const models = options.preferredModels || DEFAULT_MODELS;
-  let lastError: any = null;
-
-  const providers: Array<'gemini' | 'gateway'> = [];
-  if (hasGeminiKey() && Date.now() >= geminiQuotaExhaustedUntil) providers.push('gemini');
-  if (hasGatewayCredentials() && Date.now() >= gatewayUnavailableUntil) providers.push('gateway');
-
-  if (providers.length === 0) {
-    throw new Error(
-      'Aucun fournisseur IA disponible : définissez GEMINI_API_KEY (ou activez Vercel AI Gateway).'
-    );
+async function withFirestoreTimeout<T>(operation: () => Promise<T>, timeoutMs = 1200): Promise<T | null> {
+  if (!firestoreInstance) return null;
+  try {
+    return await promiseWithTimeout(operation(), timeoutMs, 'Firestore admin timeout');
+  } catch (err: any) {
+    console.warn('[Firestore Admin] Opération ignorée ou délai dépassé :', err?.message);
+    return null;
   }
-
-  for (const provider of providers) {
-    for (const modelName of models) {
-      const elapsed = Date.now() - startTime;
-      if (elapsed >= totalTimeout) break;
-      const attemptTimeout = Math.min(singleTimeout, totalTimeout - elapsed);
-      const label = provider === 'gemini' ? modelName : `google/${modelName}`;
-
-      try {
-        console.log(`[AI Engine] ${provider} → "${label}" (timeout: ${attemptTimeout}ms)...`);
-        const call =
-          provider === 'gemini'
-            ? ai.models
-                .generateContent({ model: modelName, contents: options.contents, config: options.config })
-                .then((r) => ({ text: r?.text || '' }))
-            : generateViaGateway(label, options.contents, options.config);
-
-        const response = await promiseWithTimeout(
-          call,
-          attemptTimeout,
-          `Délai dépassé (${attemptTimeout}ms) pour le modèle ${label}`
-        );
-
-        if (response && response.text) {
-          console.log(`[AI Engine] Succès "${label}" via ${provider} en ${Date.now() - startTime}ms`);
-          return { response, modelUsed: `${provider}:${label}` };
-        }
-      } catch (err: any) {
-        lastError = err;
-        const errMsg = err?.message || String(err);
-        console.warn(`[AI Engine] ${provider} "${label}" a échoué : ${errMsg}`);
-
-        const isAuthOrQuota =
-          /quota|429|exhausted|API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
-        if (isAuthOrQuota) {
-          if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
-          else gatewayUnavailableUntil = Date.now() + 10 * 60 * 1000;
-          break;
-        }
-      }
-    }
-  }
-
-  throw lastError || new Error('Les modèles IA ont mis trop de temps ou sont indisponibles.');
-}
-
-const DEFAULT_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.5-flash'];
-let gatewayUnavailableUntil = 0;
-
-function hasGeminiKey(): boolean {
-  return !!process.env.GEMINI_API_KEY?.trim();
-}
-
-function hasGatewayCredentials(): boolean {
-  return !!(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
 }
 
 function geminiSchemaToJsonSchema(schema: any): any {
@@ -198,33 +148,109 @@ async function generateViaGateway(model: string, contents: any, config: any = {}
   return { text: result.text };
 }
 
+/**
+ * Exécute un appel Gemini avec résilience multi-modèles et timeouts stricts
+ */
+async function generateContentWithResilience(options: {
+  contents: any;
+  config?: any;
+  preferredModels?: string[];
+  singleAttemptTimeoutMs?: number;
+  totalTimeoutMs?: number;
+}): Promise<{ response: { text: string }; modelUsed: string }> {
+  const startTime = Date.now();
+  const singleTimeout = options.singleAttemptTimeoutMs || 15000;
+  const totalTimeout = options.totalTimeoutMs || 30000;
+
+  const models = options.preferredModels || DEFAULT_MODELS;
+  let lastError: any = null;
+
+  const providers: Array<'gemini' | 'gateway'> = [];
+  if (hasGeminiKey() && Date.now() >= geminiQuotaExhaustedUntil) providers.push('gemini');
+  if (hasGatewayCredentials() && Date.now() >= gatewayUnavailableUntil) providers.push('gateway');
+
+  if (providers.length === 0) {
+    throw new Error(
+      'Aucun fournisseur IA disponible : définissez GEMINI_API_KEY (ou activez Vercel AI Gateway).'
+    );
+  }
+
+  for (const provider of providers) {
+    for (const modelName of models) {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= totalTimeout) break;
+      const attemptTimeout = Math.min(singleTimeout, totalTimeout - elapsed);
+      const label = provider === 'gemini' ? modelName : `google/${modelName}`;
+
+      try {
+        console.log(`[AI Engine] ${provider} → "${label}" (timeout: ${attemptTimeout}ms)...`);
+        const call: Promise<{ text: string }> =
+          provider === 'gemini'
+            ? ai.models
+                .generateContent({ model: modelName, contents: options.contents, config: options.config })
+                .then((r) => ({ text: r?.text || '' }))
+            : generateViaGateway(label, options.contents, options.config);
+
+        const response = await promiseWithTimeout<{ text: string }>(
+          call,
+          attemptTimeout,
+          `Délai dépassé (${attemptTimeout}ms) pour le modèle ${label}`
+        );
+
+        if (response && response.text) {
+          console.log(`[AI Engine] Succès "${label}" via ${provider} en ${Date.now() - startTime}ms`);
+          return { response, modelUsed: `${provider}:${label}` };
+        }
+      } catch (err: any) {
+        lastError = err;
+        const errMsg = err?.message || String(err);
+        console.warn(`[AI Engine] ${provider} "${label}" a échoué : ${errMsg}`);
+
+        const isAuthOrQuota =
+          /quota|429|exhausted|API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
+        if (isAuthOrQuota) {
+          if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
+          else gatewayUnavailableUntil = Date.now() + 10 * 60 * 1000;
+          break;
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error('Les modèles IA ont mis trop de temps ou sont indisponibles.');
+}
+
 // Firebase Storage for shared/default projects (legacy support with memory fallback)
 const GLOBAL_PROJECTS_COLLECTION = 'global_projects';
 const inMemoryProjects = new Map<string, any>();
 
 async function readProjects(): Promise<any[]> {
-  try {
+  const result = await withFirestoreTimeout(async () => {
     const snapshot = await firestore.collection(GLOBAL_PROJECTS_COLLECTION).orderBy('createdAt', 'desc').limit(50).get();
-    const list = snapshot.docs.map((doc: any) => doc.data());
-    if (list.length > 0) return list;
-  } catch (err) {
-    // Non-blocking in environments without IAM ADC credentials
-  }
+    return snapshot.docs.map((doc: any) => doc.data());
+  }, 1200);
+
+  if (result && result.length > 0) return result;
+
   return Array.from(inMemoryProjects.values()).sort(
     (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
   );
 }
 
 async function saveProjectToFirestore(project: any): Promise<void> {
+  // Toujours enregistrer immédiatement dans la mémoire locale (instantané)
   inMemoryProjects.set(project.id, project);
-  try {
+  if (!firestoreInstance) return;
+
+  // Sauvegarde non bloquante vers Firestore Admin avec timeout de 1200ms
+  withFirestoreTimeout(async () => {
     await firestore.collection(GLOBAL_PROJECTS_COLLECTION).doc(project.id).set({
       ...project,
       updatedAt: new Date().toISOString()
     });
-  } catch (err) {
-    // Stored in inMemoryProjects fallback
-  }
+  }, 1200).catch((err) => {
+    console.warn('[Firestore Admin] Écriture différée ignorée :', err?.message);
+  });
 }
 
 app.get('/api/ai-status', async (req: express.Request, res: express.Response) => {
@@ -236,8 +262,8 @@ app.get('/api/ai-status', async (req: express.Request, res: express.Response) =>
     try {
       const { response, modelUsed } = await generateContentWithResilience({
         contents: 'Réponds uniquement par "OK".',
-        singleAttemptTimeoutMs: 15000,
-        totalTimeoutMs: 25000,
+        singleAttemptTimeoutMs: 8000,
+        totalTimeoutMs: 12000,
       });
       status.probe = { ok: true, modelUsed, reply: response.text.slice(0, 40) };
     } catch (err: any) {
@@ -255,15 +281,16 @@ app.get('/api/projects', async (req: express.Request, res: express.Response) => 
 
 app.get('/api/projects/:id', async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  try {
+  const docData = await withFirestoreTimeout(async () => {
     const doc = await firestore.collection(GLOBAL_PROJECTS_COLLECTION).doc(id).get();
-    if (doc.exists) {
-      res.json({ success: true, data: doc.data() });
-      return;
-    }
-  } catch (err: any) {
-    // Fallback to inMemoryProjects
+    return doc.exists ? doc.data() : null;
+  }, 1000);
+
+  if (docData) {
+    res.json({ success: true, data: docData });
+    return;
   }
+
   const item = inMemoryProjects.get(id);
   if (item) {
     res.json({ success: true, data: item });
@@ -285,7 +312,7 @@ app.post('/api/projects', async (req: express.Request, res: express.Response) =>
       createdAt: project.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    await saveProjectToFirestore(newProject);
+    saveProjectToFirestore(newProject);
     res.json({ success: true, data: newProject });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -298,12 +325,12 @@ app.put('/api/projects/:id', async (req: express.Request, res: express.Response)
     const updates = req.body;
     const existing = inMemoryProjects.get(id) || {};
     inMemoryProjects.set(id, { ...existing, ...updates, updatedAt: new Date().toISOString() });
-    try {
+    withFirestoreTimeout(async () => {
       await firestore.collection(GLOBAL_PROJECTS_COLLECTION).doc(id).update({
         ...updates,
         updatedAt: new Date().toISOString()
       });
-    } catch {}
+    }, 1000).catch(() => {});
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -314,9 +341,9 @@ app.delete('/api/projects/:id', async (req: express.Request, res: express.Respon
   try {
     const { id } = req.params;
     inMemoryProjects.delete(id);
-    try {
+    withFirestoreTimeout(async () => {
       await firestore.collection(GLOBAL_PROJECTS_COLLECTION).doc(id).delete();
-    } catch {}
+    }, 1000).catch(() => {});
     res.json({ success: true, message: 'Projet supprimé de l\'historique.' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -524,7 +551,7 @@ app.post('/api/analyze', async (req: express.Request, res: express.Response) => 
       };
 
       if (req.body.shouldSave) {
-        await saveProjectToFirestore(auditResult);
+        saveProjectToFirestore(auditResult);
       }
 
       res.json({ success: true, data: auditResult, cached: true });
@@ -609,9 +636,9 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
     try {
       const { response, modelUsed } = await generateContentWithResilience({
         contents: userPrompt,
-        preferredModels: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash'],
-        singleAttemptTimeoutMs: 30000,
-        totalTimeoutMs: 55000,
+        preferredModels: ['gemini-3.8-flash', 'gemini-3.1-flash-lite'],
+        singleAttemptTimeoutMs: 12000,
+        totalTimeoutMs: 20000,
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.1,
@@ -953,9 +980,9 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
       ...parsedData,
     };
 
-    // Auto-save to cloud history if authorized
+    // Auto-save to cloud history if authorized (non-blocking)
     if (req.body.shouldSave) {
-      await saveProjectToFirestore(auditResult);
+      saveProjectToFirestore(auditResult);
     }
 
     res.json({ success: true, data: auditResult });
@@ -1032,9 +1059,9 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
     try {
       const { response, modelUsed } = await generateContentWithResilience({
         contents,
-        preferredModels: ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
-        singleAttemptTimeoutMs: 20000,
-        totalTimeoutMs: 35000,
+        preferredModels: ['gemini-3.8-flash', 'gemini-3.1-flash-lite'],
+        singleAttemptTimeoutMs: 12000,
+        totalTimeoutMs: 20000,
         config: {
           systemInstruction,
           temperature: 0.7,

@@ -190,11 +190,20 @@ export default function App() {
         ? { ...originalFormData, answers, shouldSave: !!user }
         : { ...formData, shouldSave: !!user };
 
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const controller = new AbortController();
+      const abortTimeout = setTimeout(() => controller.abort(), 25000);
+
+      let res: Response;
+      try {
+        res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(abortTimeout);
+      }
 
       const rawText = await res.text();
       let result: any;
@@ -249,7 +258,9 @@ export default function App() {
     } catch (err: any) {
       console.error('Analysis error:', err);
       let msg = err?.message || "Échec de l'expertise environnementale.";
-      if (typeof msg === 'string' && (msg.includes('Unexpected token') || msg.includes('upstream'))) {
+      if (err?.name === 'AbortError' || err?.message?.includes('aborted')) {
+        msg = "Le délai d'attente maximal (25s) a été dépassé. Veuillez relancer le diagnostic.";
+      } else if (typeof msg === 'string' && (msg.includes('Unexpected token') || msg.includes('upstream'))) {
         msg = "Le serveur a mis trop de temps à répondre (délai d'attente réseau / timeout). L'analyse a été interrompue. Veuillez relancer.";
       } else if (
         typeof msg === 'string' &&
