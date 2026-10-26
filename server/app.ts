@@ -6,7 +6,6 @@ import { generateText, Output, jsonSchema, type ModelMessage } from 'ai';
 import path from 'path';
 import dotenv from 'dotenv';
 import mammoth from 'mammoth';
-import { PDFParse } from 'pdf-parse';
 import * as XLSX from 'xlsx';
 import { generateExpertAuditFallback } from '../src/utils/fallbackExpertAudit.ts';
 import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
@@ -324,6 +323,23 @@ app.delete('/api/projects/:id', async (req: express.Request, res: express.Respon
   }
 });
 
+// Chargement différé de pdf-parse : pdfjs-dist exige DOMMatrix/Path2D, absents de Node
+// en serverless. `pdf-parse/worker` les polyfille via @napi-rs/canvas et fournit le worker
+// en data URL ; l'import différé évite qu'un échec de chargement ne casse toute l'API.
+let pdfParsePromise: Promise<typeof import('pdf-parse').PDFParse> | null = null;
+function loadPDFParse() {
+  pdfParsePromise ??= (async () => {
+    const { getData } = await import('pdf-parse/worker');
+    const { PDFParse } = await import('pdf-parse');
+    PDFParse.setWorker(getData());
+    return PDFParse;
+  })().catch((err) => {
+    pdfParsePromise = null;
+    throw err;
+  });
+  return pdfParsePromise;
+}
+
 // Endpoint d'extraction de texte depuis des fichiers importés (PDF, DOCX, XLSX, TXT, etc.)
 app.post('/api/extract-file', async (req: express.Request, res: express.Response) => {
   try {
@@ -339,6 +355,7 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
 
     if (ext === '.pdf' || mimeType === 'application/pdf') {
       try {
+        const PDFParse = await loadPDFParse();
         const parser = new PDFParse({ data: buffer });
         const parsedResult = await parser.getText();
         extractedText = typeof parsedResult === 'string' ? parsedResult : (parsedResult?.text || '');
