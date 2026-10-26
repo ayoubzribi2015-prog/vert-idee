@@ -159,7 +159,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".pdf,.docx,.doc,.txt,.md,.rtf"
+            accept=".pdf,.docx,.doc,.xlsx,.xls,.txt,.md,.rtf"
             multiple
             className="hidden"
           />
@@ -168,7 +168,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             onClick={() => fileInputRef.current?.click()}
             disabled={isExtracting}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#edf5f0] hover:bg-[#e1ede6] text-[#063428] border border-[#0b4a3a]/30 transition-all cursor-pointer shadow-2xs active:scale-[0.98] disabled:opacity-50"
-            title="Importer un ou plusieurs fichiers PDF, Word ou Texte pour renseigner la description"
+            title="Importer un ou plusieurs fichiers PDF, Word, Excel ou Texte pour renseigner la description"
           >
             {isExtracting ? (
               <>
@@ -178,7 +178,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             ) : (
               <>
                 <UploadCloud className="w-3.5 h-3.5 text-[#10634e]" />
-                <span>Importer documents (PDF, Word, TXT)</span>
+                <span>Importer documents (PDF, Word, Excel, TXT)</span>
               </>
             )}
           </button>
@@ -283,7 +283,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
 
       {/* Format tip */}
       <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
-        <span>Sélectionnez ou glissez plusieurs fichiers simultanément (PDF, Word, TXT)</span>
+        <span>Sélectionnez ou glissez plusieurs fichiers simultanément (PDF, Word, Excel, TXT)</span>
         {value.length > 0 && (
           <span className="font-mono-numbers text-slate-400">
             {value.length} caractères

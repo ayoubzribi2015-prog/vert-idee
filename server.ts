@@ -10,6 +10,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
+import * as XLSX from 'xlsx';
 import { generateExpertAuditFallback } from './src/utils/fallbackExpertAudit.ts';
 
 dotenv.config({ path: ['.env.development.local', '.env.local', '.env'], quiet: true });
@@ -335,7 +336,7 @@ app.delete('/api/projects/:id', async (req: express.Request, res: express.Respon
   }
 });
 
-// Endpoint d'extraction de texte depuis des fichiers importés (PDF, DOCX, TXT, etc.)
+// Endpoint d'extraction de texte depuis des fichiers importés (PDF, DOCX, XLSX, TXT, etc.)
 app.post('/api/extract-file', async (req: express.Request, res: express.Response) => {
   try {
     const { filename, base64Data, mimeType } = req.body;
@@ -385,6 +386,14 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
     } else if (ext === '.docx' || ext === '.doc' || mimeType?.includes('word')) {
       const mammothResult = await mammoth.extractRawText({ buffer });
       extractedText = mammothResult.value || '';
+    } else if (ext === '.xlsx' || ext === '.xls' || mimeType?.includes('spreadsheet') || mimeType?.includes('excel')) {
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      extractedText = workbook.SheetNames
+        .map((sheetName) => {
+          const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName], { FS: '\t', RS: '\n' });
+          return `--- ${sheetName} ---\n${csv}`;
+        })
+        .join('\n\n');
     } else {
       // Plain text, markdown, csv, json, rtf
       extractedText = buffer.toString('utf-8');
