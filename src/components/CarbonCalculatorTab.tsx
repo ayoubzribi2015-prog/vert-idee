@@ -285,14 +285,14 @@ export const CarbonCalculatorTab: React.FC<CarbonCalculatorTabProps> = ({
         </div>
 
         {/* Volume slider */}
-        <div className="mt-5 p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="mt-5 p-3 sm:p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 text-xs">
           <div className="flex items-center gap-2">
             <Sliders className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="font-semibold text-slate-800">
               Simuler selon votre volume de production annuel :
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
             <input
               type="range"
               min="1000"
@@ -300,9 +300,9 @@ export const CarbonCalculatorTab: React.FC<CarbonCalculatorTabProps> = ({
               step="1000"
               value={annualVolume}
               onChange={(e) => setAnnualVolume(Number(e.target.value))}
-              className="w-36 sm:w-48 accent-emerald-600 cursor-pointer"
+              className="flex-1 sm:w-48 accent-emerald-600 cursor-pointer h-2 min-h-[32px]"
             />
-            <span className="font-bold text-slate-900 font-mono-numbers w-24 text-right">
+            <span className="font-bold text-slate-900 font-mono-numbers text-right shrink-0">
               {annualVolume.toLocaleString('fr-FR')} unités
             </span>
           </div>
@@ -572,14 +572,14 @@ export const CarbonCalculatorTab: React.FC<CarbonCalculatorTabProps> = ({
                 </div>
 
                 {/* Input box */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 self-end sm:self-auto">
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     value={stage.emissionKgCO2e}
                     onChange={(e) => handleStageEmissionChange(stage.id, parseFloat(e.target.value) || 0)}
-                    className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm font-bold font-mono-numbers text-slate-900 text-right bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 text-base sm:text-sm font-bold font-mono-numbers text-slate-900 text-right bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 min-h-[36px]"
                   />
                   <span className="text-xs text-slate-600 font-medium">kg CO2e</span>
                 </div>

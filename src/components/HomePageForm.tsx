@@ -94,12 +94,12 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
       {/* Hero Welcome Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#04211a] via-[#063428] to-[#0b4a3a] text-white rounded-2xl p-7 sm:p-9 shadow-sm border border-[#0b4a3a]/60">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#04211a] via-[#063428] to-[#0b4a3a] text-white rounded-2xl p-4 sm:p-7 sm:p-9 shadow-sm border border-[#0b4a3a]/60">
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#2d7a5e]/10 rounded-full blur-3xl pointer-events-none -z-0" />
 
-        <div className="relative z-10 space-y-3.5">
+        <div className="relative z-10 space-y-2.5 sm:space-y-3.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-white/10 text-emerald-200 border border-white/15">
               Diagnostic & Bilan Carbone
@@ -110,7 +110,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-black text-white font-serif-title tracking-tight leading-tight">
+          <h1 className="text-xl sm:text-3xl lg:text-4xl font-black text-white font-serif-title tracking-tight leading-tight">
             Évaluez l'impact écologique & l'empreinte carbone de votre projet vert
           </h1>
 
@@ -119,7 +119,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
           </p>
 
           {/* 3 Key Pillars preview */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-white/10 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 pt-3 sm:pt-4 border-t border-white/10 text-xs">
             <div className="flex items-center gap-2 text-stone-200">
               <Leaf className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>ACV & Éco-conception ISO 14040</span>
@@ -139,7 +139,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
       {/* Main Diagnostic Card with Empty Fields */}
       <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden">
         {/* Card Header */}
-        <div className="px-7 py-5 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="px-4 py-3.5 sm:px-7 sm:py-5 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
           <div>
             <h2 className="text-lg font-bold text-slate-900 font-heading">
               Nouveau Diagnostic Environnemental & Carbone
@@ -194,10 +194,10 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-7 space-y-6">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-7 space-y-4 sm:space-y-6">
             {/* Field 1: Titre du projet / Produit (starts empty) */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-1.5 sm:mb-2">
                 Titre du projet / Produit <span className="text-emerald-600">*</span>
               </label>
               <input
@@ -206,7 +206,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ex: BioCoat - Emballage barrière compostable à base de caséine de lait"
-                className="w-full px-4 py-3 rounded-2xl border border-slate-300 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-600 transition-all shadow-2xs"
+                className="w-full px-3.5 sm:px-4 py-3 rounded-2xl border border-slate-300 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-600 transition-all shadow-2xs min-h-[46px]"
               />
             </div>
 
@@ -222,7 +222,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
 
             {/* Field 3: Lieu d'implantation (starts empty) */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-1.5 sm:mb-2">
                 Lieu d'implantation
               </label>
               <div className="relative">
@@ -232,7 +232,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="Ex: Bretagne (France), Lyon (Auvergne-Rhône-Alpes), Marseille, Tunisie, Europe..."
-                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-300 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-600 transition-all shadow-2xs"
+                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-300 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-600 transition-all shadow-2xs min-h-[46px]"
                 />
               </div>
               <p className="text-[11px] text-slate-500 mt-1.5">
@@ -243,16 +243,16 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
             {/* Optional Presets Bar for Inspiration */}
             <div className="pt-2 border-t border-stone-100">
               <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600 mb-2">
-                <Lightbulb className="w-4 h-4 text-amber-600" />
+                <Lightbulb className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>Tester en un clic un cas réel d'éco-entreprise :</span>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {PRESET_EXAMPLES.map((preset, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => handleApplyPreset(preset)}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-stone-50 border border-stone-200 hover:border-[#10634e]/50 hover:bg-[#edf5f0] text-stone-700 hover:text-[#063428] font-medium transition-all"
+                    className="text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-stone-50 border border-stone-200 hover:border-[#10634e]/50 hover:bg-[#edf5f0] text-stone-700 hover:text-[#063428] font-medium transition-all min-h-[34px] touch-manipulation active:scale-[0.98]"
                   >
                     {preset.name}
                   </button>
@@ -261,15 +261,15 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
             </div>
 
             {/* Submit Action */}
-            <div className="pt-4 border-t border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <p className="text-xs text-stone-500">
+            <div className="pt-3 sm:pt-4 border-t border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-xs text-stone-500 order-2 sm:order-1">
                 Génération instantanée du rapport complet et calcul d'impact carbone.
               </p>
 
               <button
                 type="submit"
                 disabled={!title.trim() || !description.trim()}
-                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold bg-[#063428] hover:bg-[#0b4a3a] border border-[#04211a] active:scale-[0.99] text-white transition-all shadow-sm disabled:opacity-40 cursor-pointer"
+                className="order-1 sm:order-2 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold bg-[#063428] hover:bg-[#0b4a3a] border border-[#04211a] active:scale-[0.99] text-white transition-all shadow-sm disabled:opacity-40 cursor-pointer min-h-[48px] touch-manipulation"
               >
                 <Sparkles className="w-4 h-4 text-emerald-300" />
                 <span>Lancer le Diagnostic Expert</span>

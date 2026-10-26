@@ -93,11 +93,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Test connection on boot as requested by skill
 export async function testFirestoreConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000));
+    await Promise.race([
+      getDocFromServer(doc(db, 'test', 'connection')),
+      timeoutPromise,
+    ]);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore offline: vérifiez la configuration.');
-    }
+    // Fail silently in offline/unreachable environments to avoid 10s Firestore timeout logs
   }
 }
 

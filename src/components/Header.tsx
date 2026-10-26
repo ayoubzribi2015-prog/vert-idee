@@ -94,40 +94,50 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-30 bg-[#fafbf9]/95 backdrop-blur-md border-b border-stone-200/90 shadow-2xs">
       {/* 1ère Ligne : Marque, Logos Institutionnels Principaux (APII & RNPE) & Compte utilisateur */}
       <div className="transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20 gap-3 sm:gap-6">
-            <div className="flex items-center gap-3.5 shrink-0">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-18 lg:h-20 gap-2 sm:gap-6">
+            <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
               <div
                 className="relative group cursor-pointer"
                 onClick={onNewProject}
                 title="Page d'accueil - Nouveau Diagnostic"
               >
-                <div className="w-11 h-11 rounded-xl logo-eco-leaf bg-[#063428] flex items-center justify-center text-white shadow-md shadow-[#04211a]/20 group-hover:scale-105 transition-transform">
-                  <Leaf className="w-5 h-5 text-emerald-200" />
+                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl logo-eco-leaf bg-[#063428] flex items-center justify-center text-white shadow-md shadow-[#04211a]/20 group-hover:scale-105 transition-transform">
+                  <Leaf className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-200" />
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-white flex items-center justify-center">
-                  <span className="w-1.5 h-1.5 bg-[#04211a] rounded-full" />
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 bg-emerald-400 rounded-full border-2 border-white flex items-center justify-center">
+                  <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-[#04211a] rounded-full" />
                 </div>
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <span
                     onClick={onNewProject}
-                    className="text-2xl font-black tracking-tight text-[#063428] font-serif-title cursor-pointer hover:text-[#10634e] transition-colors"
+                    className="text-lg sm:text-2xl font-black tracking-tight text-[#063428] font-serif-title cursor-pointer hover:text-[#10634e] transition-colors"
                   >
                     Vert<span className="text-[#2d7a5e]">_</span>Idée
-  </span>
-  </div>
+                  </span>
+                </div>
                 <p className="text-[11px] text-stone-600 font-medium hidden md:block">
                   Transition Écologique & Empreinte Carbone
                 </p>
               </div>
             </div>
 
-            {/* Exploitation de la 1ère Ligne pour les Logos Institutionnels Principaux (Agrandis) */}
+            {/* Logos Institutionnels Principaux (Desktop grands, Mobile compacts) */}
             <div className="hidden lg:flex items-center gap-3 shrink-0">
               <LogoAPII />
               <LogoRNPE />
+            </div>
+
+            {/* Mobile compact partner badges */}
+            <div className="flex lg:hidden items-center gap-1.5 shrink-0" title="APII & RNPE Partenaires Officiels">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center p-0.5 shadow-2xs">
+                <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-full h-full object-contain" />
+              </div>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center p-0.5 shadow-2xs">
+                <img src="/assets/aistudio/logo_rnpe_page-0001_a99c9e81.jpg" alt="RNPE" className="w-full h-full object-contain" />
+              </div>
             </div>
 
             <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
@@ -250,8 +260,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
       
-      {/* 2ème Ligne : Historique & Assistant IA */}
-      <div className="bg-[#f4f6f2]/90 backdrop-blur-md border-b border-stone-200/80 py-2 shadow-2xs">
+      {/* 2ème Ligne : Historique & Assistant IA (Desktop & Tablette - sur mobile intégrés dans la barre inférieure native) */}
+      <div className="hidden sm:block bg-[#f4f6f2]/90 backdrop-blur-md border-b border-stone-200/80 py-2 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 py-0.5">
             <div className="flex items-center gap-2.5 shrink-0">

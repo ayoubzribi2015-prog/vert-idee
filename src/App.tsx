@@ -45,6 +45,8 @@ import { ImpactIndicatorsTab } from './components/ImpactIndicatorsTab';
 import { FinancingAndLabelsTab } from './components/FinancingAndLabelsTab';
 import { PriorityActionPlanTab } from './components/PriorityActionPlanTab';
 import { GreenAssistantTab } from './components/GreenAssistantTab';
+import { MobileSectionNav } from './components/MobileSectionNav';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { generateWordReport } from './utils/docxExport';
 import {
   auth,
@@ -443,6 +445,13 @@ export default function App() {
         </div>
       )}
 
+      {/* Mobile Sticky Horizontal Section Navigation Bar */}
+      <MobileSectionNav
+        activeTab={activeTab}
+        onNavigateTab={(k) => setActiveTab(k)}
+        hasActiveProject={Boolean(activeProject)}
+      />
+
       {/* Main Container */}
       <div className="flex flex-1">
         <Sidebar
@@ -451,11 +460,11 @@ export default function App() {
           hasActiveProject={Boolean(activeProject)}
           onNewProject={handleStartNewProject}
         />
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-24 lg:pb-8">
         {activeProject ? (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Project Hero Header Bar */}
-            <div className="relative overflow-hidden bg-white rounded-2xl border border-stone-200/90 p-6 sm:p-8 shadow-2xs">
+            <div className="relative overflow-hidden bg-white rounded-2xl border border-stone-200/90 p-4 sm:p-6 lg:p-8 shadow-2xs">
               <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-bl from-[#edf5f0] via-[#f7f9f6] to-transparent rounded-full blur-3xl -z-10 pointer-events-none" />
 
               <div className="space-y-5">
@@ -499,47 +508,47 @@ export default function App() {
                   </div>
 
                   {/* Top Right Quick Actions */}
-                  <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
                     <button
                       onClick={handleStartNewProject}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 transition-colors cursor-pointer min-h-[38px] active:scale-[0.98]"
                       title="Revenir au formulaire vierge d'accueil"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Nouveau Diagnostic</span>
+                      <span>Nouveau</span>
                     </button>
 
                     <button
                       onClick={() => setActiveTab('assistant')}
-                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#edf5f0] hover:bg-[#e1ede6] text-[#063428] border border-[#0b4a3a]/30 transition-all shadow-2xs cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold bg-[#edf5f0] hover:bg-[#e1ede6] text-[#063428] border border-[#0b4a3a]/30 transition-all shadow-2xs cursor-pointer min-h-[38px] active:scale-[0.98]"
                       title="Poser une question à l'Éco-Conseiller AI"
                     >
                       <Bot className="w-3.5 h-3.5 text-[#10634e]" />
-                      <span>Éco-Conseiller AI</span>
+                      <span>Conseiller IA</span>
                     </button>
 
                     <button
                       onClick={() => handleDownloadWord()}
                       disabled={isDownloading}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#063428] hover:bg-[#0b4a3a] text-white border border-[#04211a] transition-all shadow-2xs cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold bg-[#063428] hover:bg-[#0b4a3a] text-white border border-[#04211a] transition-all shadow-2xs cursor-pointer min-h-[38px] active:scale-[0.98]"
                     >
                       <Download className={`w-3.5 h-3.5 ${isDownloading ? 'animate-bounce' : ''}`} />
-                      <span>{isDownloading ? 'Génération...' : 'Export Word (.docx)'}</span>
+                      <span>{isDownloading ? 'Génération...' : 'Export Word'}</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Project Title & Pitch */}
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-black text-[#063428] font-serif-title tracking-tight leading-tight">
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#063428] font-serif-title tracking-tight leading-tight">
                     {activeProject.title}
                   </h1>
 
                   <div className="space-y-1">
-                    <p className={`text-xs sm:text-sm text-stone-700 max-w-5xl leading-relaxed ${!isDescExpanded ? 'line-clamp-5' : ''}`}>
+                    <p className={`text-xs sm:text-sm text-stone-700 max-w-5xl leading-relaxed ${!isDescExpanded ? 'line-clamp-4 sm:line-clamp-5' : ''}`}>
                       {activeProject.description}
                     </p>
-                    {activeProject.description && activeProject.description.length > 220 && (
+                    {activeProject.description && activeProject.description.length > 180 && (
                       <button
                         type="button"
                         onClick={() => setIsDescExpanded(!isDescExpanded)}
@@ -552,7 +561,7 @@ export default function App() {
                 </div>
 
                 {/* Executive Key Metric Strip */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-stone-200/80">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 pt-3 border-t border-stone-200/80">
                   <div className={`p-3.5 rounded-xl border space-y-1 ${
                     globalScore < 35 ? 'bg-rose-50/70 border-rose-200' : 'bg-[#fafbf9] border-stone-200/80'
                   }`}>
@@ -757,6 +766,21 @@ export default function App() {
           onLogin={handleLogin}
         />
       )}
+
+      {/* Mobile Smartphone Native Bottom Navigation Bar */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        onNavigateTab={(k) => setActiveTab(k)}
+        hasActiveProject={Boolean(activeProject)}
+        activeProject={activeProject}
+        onNewProject={handleStartNewProject}
+        onDownloadWord={() => handleDownloadWord()}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        isDownloading={isDownloading}
+        historyCount={projects.length}
+        user={user}
+        onLogin={handleLogin}
+      />
     </div>
   );
 }

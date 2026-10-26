@@ -332,7 +332,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
               Volume annuel de production simulé :
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
             <input
               type="range"
               min="1000"
@@ -340,9 +340,9 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
               step="1000"
               value={annualVolume}
               onChange={(e) => setAnnualVolume(Number(e.target.value))}
-              className="w-40 sm:w-52 accent-emerald-700 cursor-pointer"
+              className="flex-1 sm:w-52 accent-emerald-700 cursor-pointer h-2 min-h-[32px]"
             />
-            <span className="font-bold text-slate-900 font-mono-numbers w-24 text-right">
+            <span className="font-bold text-slate-900 font-mono-numbers text-right shrink-0">
               {annualVolume.toLocaleString('fr-FR')} u
             </span>
           </div>
@@ -555,7 +555,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                     min="0"
                     value={stage.emissionKgCO2e}
                     onChange={(e) => handleStageEmissionChange(stage.id, parseFloat(e.target.value) || 0)}
-                    className="w-20 px-2 py-1 rounded-lg border border-slate-300 text-xs font-bold font-mono-numbers text-slate-900 text-right bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                    className="w-20 px-2 py-1.5 rounded-lg border border-slate-300 text-base sm:text-xs font-bold font-mono-numbers text-slate-900 text-right bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 min-h-[36px]"
                   />
                   <span className="text-xs text-slate-500">kg</span>
                 </div>

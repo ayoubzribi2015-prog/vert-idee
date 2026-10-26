@@ -42,7 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       dir="ltr"
-      className="w-64 shrink-0 bg-[#fbfcf9] border-r border-stone-200/90 sticky top-[114px] self-start h-[calc(100vh-114px)] overflow-y-auto block z-20 text-left select-none"
+      className="w-64 shrink-0 bg-[#fbfcf9] border-r border-stone-200/90 sticky top-[114px] self-start h-[calc(100vh-114px)] overflow-y-auto hidden lg:block z-20 text-left select-none"
     >
       <div className="p-3.5 space-y-2 text-left">
         {/* Nouveau diagnostic action placed before Rubriques du Diagnostic */}
