@@ -324,27 +324,28 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
           </div>
         </div>
 
-        {/* Volume simulation slider */}
+        {/* Volume simulation input */}
         <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-emerald-700 shrink-0" />
+            <Package className="w-4 h-4 text-emerald-700 shrink-0" />
             <span className="font-semibold text-slate-800">
               Volume annuel de production simulé :
             </span>
           </div>
           <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
             <input
-              type="range"
-              min="1000"
-              max="200000"
-              step="1000"
+              type="number"
+              min="0"
               value={annualVolume}
-              onChange={(e) => setAnnualVolume(Number(e.target.value))}
-              className="flex-1 sm:w-52 accent-emerald-700 cursor-pointer h-2 min-h-[32px]"
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                if (!isNaN(val) && val >= 0) {
+                  setAnnualVolume(val);
+                }
+              }}
+              className="w-32 px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-bold font-mono-numbers text-slate-900 text-right bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700"
             />
-            <span className="font-bold text-slate-900 font-mono-numbers text-right shrink-0">
-              {annualVolume.toLocaleString('fr-FR')} u
-            </span>
+            <span className="font-bold text-slate-900 text-right shrink-0">u</span>
           </div>
         </div>
 

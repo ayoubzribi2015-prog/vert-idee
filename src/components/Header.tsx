@@ -7,6 +7,7 @@ import {
   LogOut,
   Loader2,
   Bot,
+  ExternalLink,
 } from 'lucide-react';
 import { ProjectAudit, TabKey } from '../types';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -14,41 +15,49 @@ import { User as FirebaseUser } from 'firebase/auth';
 export type { TabKey };
 
 export const LogoAPII: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <div
-    className={`flex items-center gap-3 px-3.5 py-1.5 rounded-xl bg-[#fafbf9] border border-stone-200/90 shadow-2xs hover:border-[#0b4a3a]/40 transition-all ${className}`}
-    title="APII - Agence de Promotion de l'Industrie et de l'Innovation"
+  <a
+    href="https://www.tunisieindustrie.nat.tn/fr/home.asp"
+    target="_blank"
+    rel="noopener noreferrer"
+    className={`group flex items-center gap-3 px-3.5 py-1.5 rounded-xl bg-[#fafbf9] border border-stone-200/90 shadow-2xs hover:border-[#0b4a3a]/60 hover:bg-white transition-all cursor-pointer no-underline ${className}`}
+    title="Accéder au portail officiel APII - Agence de Promotion de l'Industrie et de l'Innovation (ouvre dans un nouvel onglet)"
   >
-    <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center shrink-0 border border-stone-200 overflow-hidden p-0.5">
+    <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center shrink-0 border border-stone-200 overflow-hidden p-0.5 group-hover:scale-105 transition-transform">
       <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-full h-full object-contain" />
     </div>
     <div className="leading-tight text-left">
       <div className="flex items-center gap-1.5">
-        <span className="text-xs font-black tracking-tight text-[#063428] font-heading">APII</span>
+        <span className="text-xs font-black tracking-tight text-[#063428] font-heading group-hover:text-[#10634e] transition-colors">APII</span>
+        <ExternalLink className="w-3 h-3 text-stone-400 group-hover:text-[#10634e] transition-colors" />
       </div>
       <p className="text-[11px] font-medium text-stone-700 whitespace-nowrap">
         Industrie & Innovation
       </p>
     </div>
-  </div>
+  </a>
 );
 
 export const LogoRNPE: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <div
-    className={`flex items-center gap-3 px-3.5 py-1.5 rounded-xl bg-[#fafbf9] border border-stone-200/90 shadow-2xs hover:border-[#0b4a3a]/40 transition-all ${className}`}
-    title="RNPE - Réseau National des Pépinières d'Entreprises"
+  <a
+    href="https://www.tunisieindustrie.nat.tn/fr/pepinieres.asp"
+    target="_blank"
+    rel="noopener noreferrer"
+    className={`group flex items-center gap-3 px-3.5 py-1.5 rounded-xl bg-[#fafbf9] border border-stone-200/90 shadow-2xs hover:border-[#0b4a3a]/60 hover:bg-white transition-all cursor-pointer no-underline ${className}`}
+    title="Accéder au portail officiel RNPE - Réseau National des Pépinières d'Entreprises (ouvre dans un nouvel onglet)"
   >
-    <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center shrink-0 border border-stone-200 overflow-hidden p-0.5">
+    <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center shrink-0 border border-stone-200 overflow-hidden p-0.5 group-hover:scale-105 transition-transform">
       <img src="/assets/aistudio/logo_rnpe_page-0001_a99c9e81.jpg" alt="RNPE" className="w-full h-full object-contain" />
     </div>
     <div className="leading-tight text-left">
       <div className="flex items-center gap-1.5">
-        <span className="text-xs font-black tracking-tight text-[#063428] font-heading">RNPE</span>
+        <span className="text-xs font-black tracking-tight text-[#063428] font-heading group-hover:text-[#10634e] transition-colors">RNPE</span>
+        <ExternalLink className="w-3 h-3 text-stone-400 group-hover:text-[#10634e] transition-colors" />
       </div>
       <p className="text-[11px] font-medium text-stone-700 whitespace-nowrap">
         Pépinières d'Entreprises
       </p>
     </div>
-  </div>
+  </a>
 );
 
 interface HeaderProps {
@@ -132,12 +141,24 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Mobile compact partner badges */}
             <div className="flex lg:hidden items-center gap-1.5 shrink-0" title="APII & RNPE Partenaires Officiels">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center p-0.5 shadow-2xs">
+              <a
+                href="https://www.tunisieindustrie.nat.tn/fr/home.asp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-0.5 shadow-2xs transition-all cursor-pointer"
+                title="APII - Ouvrir dans un nouvel onglet"
+              >
                 <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-full h-full object-contain" />
-              </div>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center p-0.5 shadow-2xs">
+              </a>
+              <a
+                href="https://www.tunisieindustrie.nat.tn/fr/pepinieres.asp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-0.5 shadow-2xs transition-all cursor-pointer"
+                title="RNPE - Ouvrir dans un nouvel onglet"
+              >
                 <img src="/assets/aistudio/logo_rnpe_page-0001_a99c9e81.jpg" alt="RNPE" className="w-full h-full object-contain" />
-              </div>
+              </a>
             </div>
 
             <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
@@ -278,12 +299,24 @@ export const Header: React.FC<HeaderProps> = ({
               )}
               {/* Sur petits écrans, afficher aussi APII et RNPE sur la 2ème ligne */}
               <div className="flex lg:hidden items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center p-1" title="APII">
+                <a
+                  href="https://www.tunisieindustrie.nat.tn/fr/home.asp"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-8 h-8 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-1 transition-all cursor-pointer"
+                  title="APII - Ouvrir dans un nouvel onglet"
+                >
                   <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-full h-full object-contain" />
-                </div>
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center p-1" title="RNPE">
+                </a>
+                <a
+                  href="https://www.tunisieindustrie.nat.tn/fr/pepinieres.asp"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-8 h-8 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-1 transition-all cursor-pointer"
+                  title="RNPE - Ouvrir dans un nouvel onglet"
+                >
                   <img src="/assets/aistudio/logo_rnpe_page-0001_a99c9e81.jpg" alt="RNPE" className="w-full h-full object-contain" />
-                </div>
+                </a>
               </div>
             </div>
 
