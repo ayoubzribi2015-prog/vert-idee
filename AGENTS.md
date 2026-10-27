@@ -22,6 +22,16 @@ docker compose -f docker-compose.base44.yml logs -f web
 - **Package manager is Bun** (`bun.lock` is the only lockfile).
   `npm install` fails with `ERESOLVE` (`@vitejs/plugin-react` peer conflict
   against vite 8). Use `bun install --frozen-lockfile`.
+- **Keep `bun.lock` in sync with `package.json`.** The service boots with
+  `bun install --frozen-lockfile`, so the moment `package.json` lists a
+  dependency the lockfile no longer has, startup aborts with
+  `error: lockfile had changes, but lockfile is frozen` and the container
+  crash-loops (`docker compose ps` → `Restarting (1)`). Fix it by running
+  `bun install` (writes `bun.lock`, non-frozen) and committing the resulting
+  lockfile diff — never by dropping `--frozen-lockfile` from compose.
+  Commit 9907f97 rewrote the lockfile (v1 → v2) and silently dropped `ai`,
+  `serverless-http` and `xlsx` while `package.json` kept them; that mismatch
+  is what broke the app's boot, not the UI changes in that commit.
 - The compose service installs Bun on first start and then runs the repo's own
   `dev` script (`tsx server.ts`); dependencies land in the sandbox's
   `node_modules/`, so restarts are fast and `bun.lock` is never rewritten.
