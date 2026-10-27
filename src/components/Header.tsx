@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { ProjectAudit, TabKey } from '../types';
 import { User as FirebaseUser } from 'firebase/auth';
+import { VertIdeeLogo } from './VertIdeeLogo';
 
 export type { TabKey };
 
@@ -45,8 +46,8 @@ export const LogoRNPE: React.FC<{ className?: string }> = ({ className = '' }) =
     className={`group flex items-center gap-3 px-3.5 py-1.5 rounded-xl bg-[#fafbf9] border border-stone-200/90 shadow-2xs hover:border-[#0b4a3a]/60 hover:bg-white transition-all cursor-pointer no-underline ${className}`}
     title="Accéder au portail officiel RNPE - Réseau National des Pépinières d'Entreprises (ouvre dans un nouvel onglet)"
   >
-    <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center shrink-0 border border-stone-200 overflow-hidden p-0.5 group-hover:scale-105 transition-transform">
-      <img src="/assets/aistudio/logo_rnpe_page-0001_a99c9e81.jpg" alt="RNPE" className="w-full h-full object-contain" />
+    <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center shrink-0 border border-stone-200 overflow-hidden p-1 group-hover:scale-105 transition-transform">
+      <img src="/assets/aistudio/logo_rnpe_official.png" alt="RNPE" className="w-full h-full object-contain" />
     </div>
     <div className="leading-tight text-left">
       <div className="flex items-center gap-1.5">
@@ -107,16 +108,11 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center justify-between h-14 sm:h-18 lg:h-20 gap-2 sm:gap-6">
             <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
               <div
-                className="relative group cursor-pointer"
+                className="cursor-pointer"
                 onClick={onNewProject}
                 title="Page d'accueil - Nouveau Diagnostic"
               >
-                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl logo-eco-leaf bg-[#063428] flex items-center justify-center text-white shadow-md shadow-[#04211a]/20 group-hover:scale-105 transition-transform">
-                  <Leaf className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-200" />
-                </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 bg-emerald-400 rounded-full border-2 border-white flex items-center justify-center">
-                  <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-[#04211a] rounded-full" />
-                </div>
+                <VertIdeeLogo size="md" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -145,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
                 href="https://www.tunisieindustrie.nat.tn/fr/home.asp"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-0.5 shadow-2xs transition-all cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-1 shadow-2xs transition-all cursor-pointer"
                 title="APII - Ouvrir dans un nouvel onglet"
               >
                 <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-full h-full object-contain" />
@@ -154,10 +150,10 @@ export const Header: React.FC<HeaderProps> = ({
                 href="https://www.tunisieindustrie.nat.tn/fr/pepinieres.asp"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-0.5 shadow-2xs transition-all cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-1 shadow-2xs transition-all cursor-pointer"
                 title="RNPE - Ouvrir dans un nouvel onglet"
               >
-                <img src="/assets/aistudio/logo_rnpe_page-0001_a99c9e81.jpg" alt="RNPE" className="w-full h-full object-contain" />
+                <img src="/assets/aistudio/logo_rnpe_official.png" alt="RNPE" className="w-full h-full object-contain" />
               </a>
             </div>
 
@@ -303,19 +299,21 @@ export const Header: React.FC<HeaderProps> = ({
                   href="https://www.tunisieindustrie.nat.tn/fr/home.asp"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-8 h-8 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-1 transition-all cursor-pointer"
+                  className="h-8 px-2 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                   title="APII - Ouvrir dans un nouvel onglet"
                 >
-                  <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-full h-full object-contain" />
+                  <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-5 h-5 object-contain" />
+                  <span className="text-[11px] font-black text-[#063428] font-heading">APII</span>
                 </a>
                 <a
                   href="https://www.tunisieindustrie.nat.tn/fr/pepinieres.asp"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-8 h-8 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-1 transition-all cursor-pointer"
+                  className="h-8 px-2 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                   title="RNPE - Ouvrir dans un nouvel onglet"
                 >
-                  <img src="/assets/aistudio/logo_rnpe_page-0001_a99c9e81.jpg" alt="RNPE" className="w-full h-full object-contain" />
+                  <img src="/assets/aistudio/logo_rnpe_official.png" alt="RNPE" className="w-5 h-5 object-contain" />
+                  <span className="text-[11px] font-black text-[#063428] font-heading">RNPE</span>
                 </a>
               </div>
             </div>

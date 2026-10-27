@@ -115,7 +115,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
           </h1>
 
           <p className="text-xs sm:text-sm text-stone-200/90 max-w-2xl leading-relaxed font-light">
-            Communiquez votre idée de produit ou d'entreprise écologique. Le moteur d'audit environnemental génère votre diagnostic complet (ACV ISO 14040, RSE, modèles circulaires, ODD, financements et plan d'action) avec calcul interactif de l'empreinte carbone et export Word (.docx).
+            Présentez votre idée de produit ou d'entreprise écologique. Le moteur de diagnostique environnemental génère votre analyse complet (ACV ISO 14040, RSE, modèles circulaires, ODD, financements et plan d'action) avec calcul indicatif de l'empreinte carbone et export Word (.docx).
           </p>
 
           {/* 3 Key Pillars preview */}

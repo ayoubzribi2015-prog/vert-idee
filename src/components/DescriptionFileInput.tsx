@@ -57,38 +57,78 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
           continue;
         }
 
+        const isTextLike = /\.(txt|md|csv|tsv|json|rtf|log)$/i.test(file.name) || file.type.startsWith('text/');
+
+        let base64Data = '';
+        let localText = '';
+
+        if (isTextLike) {
+          try {
+            localText = await file.text();
+          } catch (e) {
+            console.warn('Local file text read failed:', e);
+          }
+        }
+
         const reader = new FileReader();
         const base64Promise = new Promise<string>((resolve, reject) => {
           reader.onload = () => {
             const result = reader.result as string;
-            const base64Data = result.split(',')[1] || result;
-            resolve(base64Data);
+            const b64 = result.split(',')[1] || result;
+            resolve(b64);
           };
           reader.onerror = reject;
         });
 
         reader.readAsDataURL(file);
-        const base64Data = await base64Promise;
+        base64Data = await base64Promise;
 
-        const res = await fetch('/api/extract-file', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filename: file.name,
-            mimeType: file.type,
-            base64Data,
-          }),
-        });
+        let fileExtracted = '';
+        let fileTitle = '';
 
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || `Erreur d'extraction pour ${file.name}`);
+        try {
+          const res = await fetch('/api/extract-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              mimeType: file.type || (isTextLike ? 'text/plain' : 'application/octet-stream'),
+              base64Data,
+            }),
+          });
+
+          const rawText = await res.text();
+          let data: any = null;
+          try {
+            data = JSON.parse(rawText);
+          } catch {
+            if (res.status === 413) {
+              throw new Error(`Le document "${file.name}" dépasse la taille maximale autorisée (15 Mo).`);
+            }
+            if (res.status === 504 || res.status === 502) {
+              throw new Error(`Le délai de lecture a expiré pour "${file.name}". Veuillez vérifier que le fichier n'est pas endommagé ou copiez directement le texte.`);
+            }
+            throw new Error(`Erreur réseau (${res.status}) lors de l'extraction de "${file.name}".`);
+          }
+
+          if (!res.ok || !data?.success) {
+            throw new Error(data?.error || `Impossible d'extraire le contenu de "${file.name}".`);
+          }
+
+          fileExtracted = data.extractedText || '';
+          fileTitle = data.suggestedTitle || '';
+        } catch (apiErr: any) {
+          // Si l'API échoue mais qu'il s'agit d'un fichier texte lisible localement, on bascule dessus
+          if (localText && localText.trim()) {
+            console.warn(`Extraction serveur échouée pour ${file.name}, bascule sur la lecture locale :`, apiErr?.message);
+            fileExtracted = localText.trim();
+          } else {
+            throw apiErr;
+          }
         }
 
-        let fileExtracted = data.extractedText || '';
-
-        if (!currentTitle?.trim() && data.suggestedTitle && onSuggestedTitle) {
-          onSuggestedTitle(data.suggestedTitle);
+        if (!currentTitle?.trim() && fileTitle && onSuggestedTitle) {
+          onSuggestedTitle(fileTitle);
         }
 
         if (fileExtracted) {
@@ -105,7 +145,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
       setImportedFiles((prev) => [...prev, ...newImported]);
     } catch (err: any) {
       console.error('Batch file import error:', err);
-      setErrorMsg(err.message || "Erreur lors de l'importation des fichiers.");
+      setErrorMsg(err.message || "Erreur lors de l'importation des documents.");
     } finally {
       setIsExtracting(false);
       setExtractionStatus('');

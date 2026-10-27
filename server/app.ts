@@ -43,7 +43,25 @@ const firestore = {
 
 const app = express();
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Middleware de gestion propre des erreurs de parsing JSON et de taille de payload
+app.use((err: any, req: Request, res: Response, next: any) => {
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({
+      success: false,
+      error: 'Le fichier envoyé est trop volumineux. La taille maximale autorisée est de 15 Mo.',
+    });
+  }
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({
+      success: false,
+      error: 'Format de requête JSON invalide.',
+    });
+  }
+  next(err);
+});
 
 let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
@@ -386,16 +404,16 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
         const parser = new PDFParse({ data: buffer });
         const parsedResult = await parser.getText();
         extractedText = typeof parsedResult === 'string' ? parsedResult : (parsedResult?.text || '');
-      } catch (pdfErr) {
-        console.warn('[File Extract] Erreur pdf-parse:', pdfErr);
+      } catch (pdfErr: any) {
+        console.warn('[File Extract] Erreur pdf-parse:', pdfErr?.message);
       }
 
-      // Si le texte extrait est très court (ex: scan d'image), tentative via Gemini vision/multimodal
+      // Si le texte extrait est très court (ex: scan d'image), tentative rapide via Gemini vision/multimodal
       if (!extractedText || extractedText.trim().length < 40) {
         try {
           const { response: aiRes } = await generateContentWithResilience({
-            singleAttemptTimeoutMs: 25000,
-            totalTimeoutMs: 40000,
+            singleAttemptTimeoutMs: 7000,
+            totalTimeoutMs: 10000,
             contents: [
               {
                 inlineData: {
@@ -411,24 +429,39 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
           if (aiRes && aiRes.text) {
             extractedText = aiRes.text;
           }
-        } catch (geminiPdfErr) {
-          console.warn('[File Extract] Gemini PDF fallback non disponible:', geminiPdfErr);
+        } catch (geminiPdfErr: any) {
+          console.warn('[File Extract] Gemini PDF fallback non disponible:', geminiPdfErr?.message);
         }
       }
     } else if (ext === '.docx' || ext === '.doc' || mimeType?.includes('word')) {
-      const mammothResult = await mammoth.extractRawText({ buffer });
-      extractedText = mammothResult.value || '';
+      try {
+        const mammothResult = await mammoth.extractRawText({ buffer });
+        extractedText = mammothResult.value || '';
+      } catch (wordErr: any) {
+        console.warn('[File Extract] Erreur extraction Word (mammoth):', wordErr?.message);
+        // Fallback sécurisé pour fichiers .doc ou formats binaires
+        extractedText = buffer.toString('utf-8').replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ');
+      }
     } else if (ext === '.xlsx' || ext === '.xls' || mimeType?.includes('spreadsheet') || mimeType?.includes('excel')) {
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      extractedText = workbook.SheetNames
-        .map((sheetName) => {
-          const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName], { FS: '\t', RS: '\n' });
-          return `--- ${sheetName} ---\n${csv}`;
-        })
-        .join('\n\n');
+      try {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        extractedText = workbook.SheetNames
+          .map((sheetName) => {
+            const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName], { FS: '\t', RS: '\n' });
+            return `--- ${sheetName} ---\n${csv}`;
+          })
+          .join('\n\n');
+      } catch (xlsxErr: any) {
+        console.warn('[File Extract] Erreur XLSX:', xlsxErr?.message);
+        extractedText = buffer.toString('utf-8');
+      }
     } else {
       // Plain text, markdown, csv, json, rtf
-      extractedText = buffer.toString('utf-8');
+      try {
+        extractedText = buffer.toString('utf-8');
+      } catch (txtErr: any) {
+        extractedText = buffer.toString('latin1');
+      }
     }
 
     // Normalisation du texte extrait
@@ -441,7 +474,7 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
     if (!extractedText) {
       res.status(400).json({
         success: false,
-        error: 'Impossible d\'extraire du texte de ce document. Assurez-vous qu\'il contient du texte lisible.',
+        error: 'Impossible d\'extraire du texte de ce document. Assurez-vous qu\'il contient du texte lisible ou copiez directement votre texte.',
       });
       return;
     }
@@ -456,21 +489,29 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
       }
     }
 
-    // Synthèse obligatoire en 7 lignes max contenants les informations les plus pertinentes pour bien décrire l'idée de projet
+    // Synthèse concise (7 lignes max) des informations du document
     let finalDescription = extractedText;
-    try {
-      const { response: summaryRes } = await generateContentWithResilience({
-        contents: `À partir du contenu du document importé ci-dessous, rédige une description concise et percutante de l'idée de projet et de sa proposition de valeur, STRICTEMENT LIMITÉE À 7 LIGNES MAXIMUM. Cette description doit condenser les informations les plus pertinentes (problème résolu, solution technique, intrants/procédés et proposition de valeur écologique) pour renseigner le champ de diagnostic.
+    if (extractedText.length > 250) {
+      try {
+        const { response: summaryRes } = await generateContentWithResilience({
+          contents: `À partir du contenu du document importé ci-dessous, rédige une description concise et percutante de l'idée de projet et de sa proposition de valeur, STRICTEMENT LIMITÉE À 7 LIGNES MAXIMUM. Cette description doit condenser les informations les plus pertinentes (problème résolu, solution technique, intrants/procédés et proposition de valeur écologique) pour renseigner le champ de diagnostic.
 
 Document source :
-${extractedText.slice(0, 15000)}`,
-      });
-      if (summaryRes && summaryRes.text) {
-        finalDescription = summaryRes.text.trim();
+${extractedText.slice(0, 10000)}`,
+          singleAttemptTimeoutMs: 5000,
+          totalTimeoutMs: 7000,
+        });
+        if (summaryRes && summaryRes.text) {
+          finalDescription = summaryRes.text.trim();
+        }
+      } catch (sumErr: any) {
+        console.warn('[File Extract] Synthèse IA non disponible ou délai dépassé (utilisation directe de l\'extrait):', sumErr?.message);
+        const nonBlankLines = extractedText
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0 && !l.startsWith('---'));
+        finalDescription = nonBlankLines.slice(0, 7).join('\n');
       }
-    } catch (sumErr) {
-      console.warn('[File Extract] Erreur de synthèse IA, utilisation des 7 premières lignes:', sumErr);
-      finalDescription = extractedText.split('\n').slice(0, 7).join('\n');
     }
 
     res.json({
