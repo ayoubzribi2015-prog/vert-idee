@@ -7,9 +7,14 @@ export async function onRequest(context) {
   const upstreamUrl = RENDER_API + incoming.pathname + incoming.search;
 
   try {
+    const headers = new Headers(context.request.headers);
+    headers.delete('cookie');
+    headers.delete('host');
+    headers.delete('content-length');
+
     const response = await fetch(upstreamUrl, {
       method: context.request.method,
-      headers: context.request.headers,
+      headers,
       body: ['GET', 'HEAD'].includes(context.request.method) ? undefined : context.request.body,
       redirect: 'manual',
     });
