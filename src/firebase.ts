@@ -32,14 +32,14 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 // Initialize Auth
 export const auth = getAuth(app);
 
-// Initialize Firestore targeting the specific database ID with auto-detect long polling
-// to prevent 10s streaming timeouts in iframe/proxy environments
+// Initialize Firestore targeting the specific database ID with forced long polling
+// to guarantee connectivity in sandbox/iframe/proxy environments
 function getOrInitFirestore() {
   const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
   try {
     return initializeFirestore(
       app,
-      { experimentalAutoDetectLongPolling: true },
+      { experimentalForceLongPolling: true },
       dbId !== '(default)' ? dbId : undefined
     );
   } catch {
