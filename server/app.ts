@@ -67,7 +67,7 @@ let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
 
 // Valid model names per Gemini API SDK guidelines
-const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+const DEFAULT_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
 
 function hasGeminiKey(): boolean {
   return !!process.env.GEMINI_API_KEY?.trim();
@@ -227,9 +227,12 @@ async function generateContentWithResilience(options: {
         const isAuthOrQuota =
           /quota|429|exhausted|API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
         if (isAuthOrQuota) {
-          if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
-          else gatewayUnavailableUntil = Date.now() + 10 * 60 * 1000;
-          break;
+          if (modelName === models[models.length - 1]) {
+            if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
+            else gatewayUnavailableUntil = Date.now() + 5 * 60 * 1000;
+            break;
+          }
+          continue;
         }
       }
     }
@@ -385,31 +388,128 @@ function loadPDFParse() {
   return pdfParsePromise;
 }
 
-// Endpoint d'extraction de texte depuis des fichiers importés (PDF, DOCX, XLSX, TXT, etc.)
-app.post('/api/extract-file', async (req: express.Request, res: express.Response) => {
-  try {
-    const { filename, base64Data, mimeType } = req.body;
-    if (!base64Data) {
-      res.status(400).json({ success: false, error: 'Données de fichier manquantes.' });
-      return;
+/**
+ * Analyse sémantique locale de secours garantissant des phrases complètes,
+ * explicites et rigoureusement articulées sans coupure en milieu d'idée.
+ */
+function extractRichDescriptionFallback(rawText: string, filename: string): {
+  richDescription: string;
+  suggestedTitle: string;
+  suggestedLocation: string;
+} {
+  // Normalisation du texte : suppression des césures de mots et fusion des lignes d'un même paragraphe
+  const normalizedText = rawText
+    .replace(/\r\n/g, '\n')
+    .replace(/(\w+)-\n(\w+)/g, '$1$2')
+    .replace(/\n(?!\n)/g, ' ')
+    .replace(/[ \t]+/g, ' ');
+
+  // Découpage strict sur les frontières de phrases réelles (. ! ?)
+  const rawSentences = normalizedText.split(/(?<=[.!?])\s+/);
+  const cleanSentences = rawSentences
+    .map((s) => s.trim())
+    .filter((s) => {
+      if (s.length < 20) return false;
+      // Élimination des numéros de page, mentions légales ou titres de sommaire isolés
+      if (/^(page\s+\d+|p\.\s*\d+|[-=_*]{3,}|\d+\s*\/\s*\d+|copyright|tous droits réservés|confidentialité)/i.test(s)) {
+        return false;
+      }
+      return true;
+    });
+
+  // Détection du lieu (villes et gouvernorats tunisiens prioritaires + international)
+  const locationRegex = /\b(Tunisie|Tunis|Sfax|Sousse|Bizerte|Nabeul|Monastir|Kairouan|Gabès|Médenine|Gafsa|Jendouba|Béja|Kasserine|Sidi Bouzid|Mahdia|Siliana|Zaghouan|Tozeur|Kébili|Tataouine|France|Paris|Lyon|Marseille|Bretagne)\b/i;
+  let suggestedLocation = '';
+  const locMatch = rawText.match(locationRegex);
+  if (locMatch) {
+    suggestedLocation = locMatch[1];
+    if (
+      locMatch[1].toLowerCase() !== 'tunisie' &&
+      /tunis|sfax|sousse|bizerte|nabeul|monastir|kairouan|gabès|médenine|gafsa|kasserine|jendouba|béja|sidi bouzid|mahdia/i.test(locMatch[1])
+    ) {
+      suggestedLocation = `${suggestedLocation}, Tunisie`;
+    }
+  }
+
+  // Détection d'un titre explicite
+  let suggestedTitle = '';
+  for (const s of cleanSentences) {
+    const clean = s.replace(/^(projet|titre|rapport|sujet|intitulé|nom du projet)\s*[:\-]\s*/i, '').trim();
+    if (clean.length >= 5 && clean.length <= 90 && !/sommaire|table des matières|introduction|abstract|résumé/i.test(clean)) {
+      suggestedTitle = clean.replace(/[.:;]$/, '');
+      break;
+    }
+  }
+  if (!suggestedTitle) {
+    suggestedTitle = filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+  }
+
+  // Regroupement sémantique par phrases complètes
+  const visionSentences: string[] = [];
+  const techSentences: string[] = [];
+  const valueSentences: string[] = [];
+  const generalSentences: string[] = [];
+
+  for (const s of cleanSentences) {
+    const lower = s.toLowerCase();
+    if (/problématique|contexte|défi|besoin|enjeu|pollution|déchet|gaspillage|objectif|développe|conçoit|consiste à|solution visant|mission/.test(lower)) {
+      visionSentences.push(s);
+    } else if (/technique|procédé|fonctionnement|technologie|brevet|matière|intrant|composant|matériau|ressource|fabrication|machine|scooter|camionnette|application|flotte/.test(lower)) {
+      techSentences.push(s);
+    } else if (/valeur|avantage|bénéfice|client|partenaire|marché|économique|tarif|prix|abonnement|dt|coût|durabilit|rentabilit|modèle/.test(lower)) {
+      valueSentences.push(s);
+    } else {
+      generalSentences.push(s);
+    }
+  }
+
+  // Assemblage de paragraphes rédigés avec des phrases complètes
+  const p1 = [...visionSentences, ...generalSentences.slice(0, 1)].slice(0, 3).join(' ');
+  const p2 = [...techSentences, ...generalSentences.slice(1, 2)].slice(0, 3).join(' ');
+  const p3 = [...valueSentences, ...generalSentences.slice(2, 3)].slice(0, 3).join(' ');
+
+  const sections: string[] = [];
+  if (p1) {
+    sections.push(`■ 1. Vue d'ensemble du projet & Problématique adressée : concept clé, secteur d'activité, dysfonctionnement ou pollution résolu.\n${p1}`);
+  }
+  if (p2) {
+    sections.push(`■ 2. Solution technique, intrants & Procédés sobres : fonctionnement concret, matières biosourcées/recyclées, sobriété énergétique et hydrique, chimie verte.\n${p2}`);
+  }
+  if (p3) {
+    sections.push(`■ 3. Proposition de valeur & Modèle circulaire : gains économiques et opérationnels pour les clients, éco-conception, réemploi, réparabilité, symbiose industrielle.\n${p3}`);
+  }
+
+  let richDescription = sections.join('\n\n');
+  if (richDescription.length < 100) {
+    richDescription = cleanSentences.slice(0, 6).join(' ');
+  }
+
+  return {
+    richDescription,
+    suggestedTitle,
+    suggestedLocation,
+  };
+}
+
+/**
+ * Extrait le texte brut depuis un fichier (PDF, DOCX, XLSX, TXT)
+ */
+async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType?: string, base64Data?: string): Promise<string> {
+  const ext = path.extname(filename || '').toLowerCase();
+  let extractedText = '';
+
+  if (ext === '.pdf' || mimeType === 'application/pdf') {
+    try {
+      const PDFParse = await loadPDFParse();
+      const parser = new PDFParse({ data: buffer });
+      const parsedResult = await parser.getText();
+      extractedText = typeof parsedResult === 'string' ? parsedResult : (parsedResult?.text || '');
+    } catch (pdfErr: any) {
+      console.warn('[File Extract] Erreur pdf-parse:', pdfErr?.message);
     }
 
-    const buffer = Buffer.from(base64Data, 'base64');
-    const ext = path.extname(filename || '').toLowerCase();
-    let extractedText = '';
-
-    if (ext === '.pdf' || mimeType === 'application/pdf') {
-      try {
-        const PDFParse = await loadPDFParse();
-        const parser = new PDFParse({ data: buffer });
-        const parsedResult = await parser.getText();
-        extractedText = typeof parsedResult === 'string' ? parsedResult : (parsedResult?.text || '');
-      } catch (pdfErr: any) {
-        console.warn('[File Extract] Erreur pdf-parse:', pdfErr?.message);
-      }
-
-      // Si le texte extrait est très court (ex: scan d'image), tentative rapide via Gemini vision/multimodal
-      if (!extractedText || extractedText.trim().length < 40) {
+    if (!extractedText || extractedText.trim().length < 40) {
+      if (base64Data) {
         try {
           const { response: aiRes } = await generateContentWithResilience({
             singleAttemptTimeoutMs: 7000,
@@ -422,7 +522,7 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
                 },
               },
               {
-                text: 'Extrais et transcris fidèlement le contenu descriptif de ce projet (problème résolu, solution technique, intrants, procédés, proposition de valeur et aspects environnementaux). Restitue un texte clair et bien structuré adapté pour renseigner la description d\'un audit écologique.',
+                text: 'Extrais et transcris fidèlement le contenu descriptif de ce projet (problème résolu, solution technique, intrants, procédés, proposition de valeur et aspects environnementaux).',
               },
             ],
           });
@@ -433,92 +533,203 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
           console.warn('[File Extract] Gemini PDF fallback non disponible:', geminiPdfErr?.message);
         }
       }
-    } else if (ext === '.docx' || ext === '.doc' || mimeType?.includes('word')) {
-      try {
-        const mammothResult = await mammoth.extractRawText({ buffer });
-        extractedText = mammothResult.value || '';
-      } catch (wordErr: any) {
-        console.warn('[File Extract] Erreur extraction Word (mammoth):', wordErr?.message);
-        // Fallback sécurisé pour fichiers .doc ou formats binaires
-        extractedText = buffer.toString('utf-8').replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ');
-      }
-    } else if (ext === '.xlsx' || ext === '.xls' || mimeType?.includes('spreadsheet') || mimeType?.includes('excel')) {
-      try {
-        const workbook = XLSX.read(buffer, { type: 'buffer' });
-        extractedText = workbook.SheetNames
-          .map((sheetName) => {
-            const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName], { FS: '\t', RS: '\n' });
-            return `--- ${sheetName} ---\n${csv}`;
-          })
-          .join('\n\n');
-      } catch (xlsxErr: any) {
-        console.warn('[File Extract] Erreur XLSX:', xlsxErr?.message);
-        extractedText = buffer.toString('utf-8');
-      }
-    } else {
-      // Plain text, markdown, csv, json, rtf
-      try {
-        extractedText = buffer.toString('utf-8');
-      } catch (txtErr: any) {
-        extractedText = buffer.toString('latin1');
+    }
+  } else if (ext === '.docx' || ext === '.doc' || mimeType?.includes('word')) {
+    try {
+      const mammothResult = await mammoth.extractRawText({ buffer });
+      extractedText = mammothResult.value || '';
+    } catch (wordErr: any) {
+      console.warn('[File Extract] Erreur extraction Word (mammoth):', wordErr?.message);
+      extractedText = buffer.toString('utf-8').replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ');
+    }
+  } else if (ext === '.xlsx' || ext === '.xls' || mimeType?.includes('spreadsheet') || mimeType?.includes('excel')) {
+    try {
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      extractedText = workbook.SheetNames
+        .map((sheetName) => {
+          const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName], { FS: '\t', RS: '\n' });
+          return `--- Feuille: ${sheetName} ---\n${csv}`;
+        })
+        .join('\n\n');
+    } catch (xlsxErr: any) {
+      console.warn('[File Extract] Erreur XLSX:', xlsxErr?.message);
+      extractedText = buffer.toString('utf-8');
+    }
+  } else {
+    try {
+      extractedText = buffer.toString('utf-8');
+    } catch {
+      extractedText = buffer.toString('latin1');
+    }
+  }
+
+  return extractedText
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// Endpoint d'extraction et de synthèse selon les 3 piliers méthodologiques
+app.post('/api/extract-file', async (req: express.Request, res: express.Response) => {
+  try {
+    const rawFiles = Array.isArray(req.body.files) && req.body.files.length > 0
+      ? req.body.files
+      : req.body.base64Data
+      ? [{ filename: req.body.filename, base64Data: req.body.base64Data, mimeType: req.body.mimeType }]
+      : [];
+
+    if (rawFiles.length === 0) {
+      res.status(400).json({ success: false, error: 'Données de fichier manquantes.' });
+      return;
+    }
+
+    const extractedFiles: Array<{ filename: string; text: string }> = [];
+
+    for (const item of rawFiles) {
+      if (!item.base64Data) continue;
+      const buffer = Buffer.from(item.base64Data, 'base64');
+      const text = await extractRawTextFromFile(buffer, item.filename, item.mimeType, item.base64Data);
+      if (text && text.trim().length > 0) {
+        extractedFiles.push({ filename: item.filename || 'Document', text: text.trim() });
       }
     }
 
-    // Normalisation du texte extrait
-    extractedText = extractedText
-      .replace(/\r\n/g, '\n')
-      .replace(/[ \t]+/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-
-    if (!extractedText) {
+    if (extractedFiles.length === 0) {
       res.status(400).json({
         success: false,
-        error: 'Impossible d\'extraire du texte de ce document. Assurez-vous qu\'il contient du texte lisible ou copiez directement votre texte.',
+        error: 'Impossible d\'extraire du texte de ce(s) document(s). Assurez-vous qu\'ils contiennent du texte lisible ou copiez directement votre description.',
       });
       return;
     }
 
-    // Détection d'un titre potentiel
-    let suggestedTitle = '';
-    const lines = extractedText.split('\n').map((l) => l.trim()).filter(Boolean);
-    if (lines.length > 0) {
-      const firstLine = lines[0].replace(/^#+\s*/, '');
-      if (firstLine.length >= 3 && firstLine.length <= 80) {
-        suggestedTitle = firstLine;
-      }
+    // Agrégation textuelle propre de tous les documents importés
+    const fileLabels = extractedFiles.map((f) => f.filename).join(', ');
+    const combinedSourceText = extractedFiles.length === 1
+      ? extractedFiles[0].text
+      : extractedFiles
+          .map((f, i) => `=== DOCUMENT ${i + 1} SUR ${extractedFiles.length} : ${f.filename} ===\n${f.text}`)
+          .join('\n\n');
+
+    // Analyse locale heuristique de référence (secours immédiat garanti)
+    const fallbackData = extractRichDescriptionFallback(combinedSourceText, extractedFiles[0].filename);
+    let finalDescription = fallbackData.richDescription;
+    let suggestedTitle = fallbackData.suggestedTitle;
+    let suggestedLocation = fallbackData.suggestedLocation;
+    let isAIEnhanced = false;
+
+    // Préparation pour l'IA (jusqu'à 35 000 caractères)
+    let preparedSource = combinedSourceText;
+    if (combinedSourceText.length > 35000) {
+      const head = combinedSourceText.slice(0, 16000);
+      const midStart = Math.floor(combinedSourceText.length * 0.4);
+      const middle = combinedSourceText.slice(midStart, midStart + 12000);
+      const tail = combinedSourceText.slice(-7000);
+      preparedSource = `[Synthèse amont & Contexte] :\n${head}\n\n[Procédés & Données techniques] :\n${middle}\n\n[Résultats & Conclusions] :\n${tail}`;
     }
 
-    // Synthèse concise (7 lignes max) des informations du document
-    let finalDescription = extractedText;
-    if (extractedText.length > 250) {
+    if (combinedSourceText.length > 50) {
       try {
-        const { response: summaryRes } = await generateContentWithResilience({
-          contents: `À partir du contenu du document importé ci-dessous, rédige une description concise et percutante de l'idée de projet et de sa proposition de valeur, STRICTEMENT LIMITÉE À 7 LIGNES MAXIMUM. Cette description doit condenser les informations les plus pertinentes (problème résolu, solution technique, intrants/procédés et proposition de valeur écologique) pour renseigner le champ de diagnostic.
+        const prompt = `Tu es un analyste de projets chargé de restituer de manière explicite, complète et fidèle la description du projet et sa proposition de valeur.
 
-Document source :
-${extractedText.slice(0, 10000)}`,
-          singleAttemptTimeoutMs: 5000,
-          totalTimeoutMs: 7000,
+MISSION :
+À partir des documents sources importés (${fileLabels}), rédige une description EXPLICITE, PARFAITEMENT ARTICULÉE ET COMPLÈTE de l'idée de projet et de sa proposition de valeur, en te basant rigoureusement sur le contenu des documents.
+
+EXIGENCES FONDAMENTALES DE QUALITÉ RÉDACTIONNELLE :
+1. DESCRIPTION EXPLICITE ET CLAIRE DE L'IDÉE : Le texte doit expliquer avec une clarté totale et sans ambiguïté :
+   - Quelle est la nature exacte du produit, service, procédé ou équipement proposé par le porteur de projet.
+   - À quel problème, besoin ou dysfonctionnement concret (économique, technique, environnemental ou sociétal) il répond.
+   - Comment il fonctionne concrètement et avec quelles matières, ressources, équipements ou technologies.
+   - Quelle est sa proposition de valeur pour ses clients et partenaires, ainsi que son modèle économique.
+2. PHRASES COMPLÈTES ET NATURELLES (OBLIGATION ABSOLUE) :
+   - Rédige UNIQUEMENT avec des phrases complètes (Sujet, Verbe, Complément), soignées et bien ponctuées.
+   - STRICTEMENT AUCUNE phrase incomplète, AUCUN mot tronqué, AUCUNE idée coupée en milieu de réflexion, AUCUN style télégraphique haché.
+   - Chaque paragraphe doit former un ensemble explicatif cohérent et fluide.
+3. FIDÉLITÉ FACTUELLE AUX DOCUMENTS :
+   - Repose-toi fidèlement sur les faits, chiffres, intrants, prix, véhicules, procédés et données techniques décrits dans les documents importés.
+   - N'invente pas d'allégations écologiques imaginaires si l'auteur n'en parle pas : décris fidèlement ce que le projet réalise réellement, mais avec une rédaction explicite, valorisante et aboutie.
+
+STRUCTURE OBLIGATOIRE EN 3 PILIERS :
+
+■ 1. Vue d'ensemble du projet & Problématique adressée :
+(Rédige un paragraphe explicite en phrases complètes présentant la nature du projet, son concept fondateur, son secteur d'activité, le problème concret qu'il résout et son implantation si mentionnée).
+
+■ 2. Solution technique, intrants & Procédés sobres :
+(Rédige un paragraphe explicite en phrases complètes décrivant le fonctionnement opérationnel, les matières premières ou intrants mobilisés, les équipements et les technologies employés).
+
+■ 3. Proposition de valeur & Modèle circulaire :
+(Rédige un paragraphe explicite en phrases complètes détaillant la valeur apportée aux clients, les tarifs/modèle économique et les éventuels aspects de durabilité ou circularité décrits).
+
+FORMAT DE RÉPONSE STRICT (JSON valide) :
+{
+  "suggestedTitle": "Titre clair et explicite du projet",
+  "suggestedLocation": "Lieu ou région explicitement mentionné dans le document (ou chaîne vide si non précisé)",
+  "richDescription": "Texte complet structuré avec les 3 rubriques ci-dessus, rédigé avec des phrases complètes et soignées..."
+}
+
+DOCUMENTS SOURCES IMPORTÉS :
+${preparedSource}`;
+
+        const { response: aiRes } = await generateContentWithResilience({
+          contents: prompt,
+          config: {
+            temperature: 0.0,
+            responseMimeType: 'application/json',
+          },
+          singleAttemptTimeoutMs: 18000,
+          totalTimeoutMs: 28000,
         });
-        if (summaryRes && summaryRes.text) {
-          finalDescription = summaryRes.text.trim();
+
+        if (aiRes && aiRes.text) {
+          try {
+            const parsed = JSON.parse(aiRes.text);
+            if (parsed.richDescription && parsed.richDescription.trim().length > 60) {
+              finalDescription = parsed.richDescription.trim();
+              isAIEnhanced = true;
+            }
+            if (parsed.suggestedTitle && parsed.suggestedTitle.trim()) {
+              suggestedTitle = parsed.suggestedTitle.trim();
+            }
+            if (parsed.suggestedLocation && parsed.suggestedLocation.trim()) {
+              suggestedLocation = parsed.suggestedLocation.trim();
+            }
+          } catch (jsonErr) {
+            const cleanText = aiRes.text.replace(/^```json\s*|\s*```$/g, '').trim();
+            try {
+              const retryParsed = JSON.parse(cleanText);
+              if (retryParsed.richDescription) {
+                finalDescription = retryParsed.richDescription.trim();
+                isAIEnhanced = true;
+              }
+              if (retryParsed.suggestedTitle) suggestedTitle = retryParsed.suggestedTitle.trim();
+              if (retryParsed.suggestedLocation) suggestedLocation = retryParsed.suggestedLocation.trim();
+            } catch {
+              if (cleanText.length > 80) {
+                finalDescription = cleanText;
+                isAIEnhanced = true;
+              }
+            }
+          }
         }
       } catch (sumErr: any) {
-        console.warn('[File Extract] Synthèse IA non disponible ou délai dépassé (utilisation directe de l\'extrait):', sumErr?.message);
-        const nonBlankLines = extractedText
-          .split('\n')
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0 && !l.startsWith('---'));
-        finalDescription = nonBlankLines.slice(0, 7).join('\n');
+        console.warn('[File Extract] Synthèse IA non disponible ou délai dépassé, utilisation de l\'analyse sémantique locale:', sumErr?.message);
       }
     }
+
+    // Mise en forme claire et aérée avec double saut de ligne entre les 3 piliers
+    finalDescription = finalDescription
+      .replace(/\s*(■\s*[123]\.)/g, '\n\n$1')
+      .replace(/^\n+/, '')
+      .trim();
 
     res.json({
       success: true,
-      filename,
+      filename: fileLabels,
       extractedText: finalDescription,
       suggestedTitle,
+      suggestedLocation,
+      isAIEnhanced,
+      processedFilesCount: extractedFiles.length,
       charCount: finalDescription.length,
     });
   } catch (err: any) {

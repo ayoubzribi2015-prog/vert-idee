@@ -189,6 +189,9 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
               onSuggestedTitle={(suggested) => {
                 if (!title.trim()) setTitle(suggested);
               }}
+              onSuggestedLocation={(suggestedLoc) => {
+                if (!location.trim()) setLocation(suggestedLoc);
+              }}
               currentTitle={title}
             />
 

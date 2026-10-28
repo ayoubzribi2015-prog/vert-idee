@@ -10,6 +10,7 @@ interface DescriptionFileInputProps {
   value: string;
   onChange: (newValue: string) => void;
   onSuggestedTitle?: (title: string) => void;
+  onSuggestedLocation?: (location: string) => void;
   currentTitle?: string;
   placeholder?: string;
   required?: boolean;
@@ -20,15 +21,17 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
   value,
   onChange,
   onSuggestedTitle,
+  onSuggestedLocation,
   currentTitle,
   placeholder = "Détaillez le fonctionnement de votre produit ou service : quel problème résout-il ? En quoi l'approche est-elle écologique ? Quels sont les matériaux, procédés durables ou innovations circulaires envisagés ?",
   required = true,
-  rows = 5,
+  rows = 7,
 }) => {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionStatus, setExtractionStatus] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
   const [importedFiles, setImportedFiles] = useState<ImportedFileItem[]>([]);
+  const [aiEnhancedCount, setAiEnhancedCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,106 +46,109 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
+    const validFiles = fileArray.filter((f) => f.size <= 15 * 1024 * 1024);
+    if (validFiles.length === 0) {
+      setErrorMsg('Les fichiers sélectionnés dépassent la taille maximale autorisée (15 Mo).');
+      return;
+    }
+
+    if (fileArray.length > validFiles.length) {
+      setErrorMsg(`${fileArray.length - validFiles.length} fichier(s) dépassent 15 Mo et ont été ignorés.`);
+    }
+
     setIsExtracting(true);
-    let accumulatedText = value;
-    const newImported: ImportedFileItem[] = [];
+    setExtractionStatus(
+      validFiles.length > 1
+        ? `Lecture et résumé fidèle de ${validFiles.length} documents importés...`
+        : `Lecture et résumé fidèle de ${validFiles[0].name}...`
+    );
 
     try {
-      for (let i = 0; i < fileArray.length; i++) {
-        const file = fileArray[i];
-        setExtractionStatus(`Traitement du fichier ${i + 1} sur ${fileArray.length} (${file.name})...`);
-
-        if (file.size > 15 * 1024 * 1024) {
-          setErrorMsg(`Le fichier "${file.name}" est trop volumineux (max 15 Mo) et a été ignoré.`);
-          continue;
-        }
-
-        const isTextLike = /\.(txt|md|csv|tsv|json|rtf|log)$/i.test(file.name) || file.type.startsWith('text/');
-
-        let base64Data = '';
-        let localText = '';
-
-        if (isTextLike) {
-          try {
-            localText = await file.text();
-          } catch (e) {
-            console.warn('Local file text read failed:', e);
+      // Préparation et conversion Base64 de l'ensemble des fichiers
+      const payloadFiles = await Promise.all(
+        validFiles.map(async (file) => {
+          const isTextLike = /\.(txt|md|csv|tsv|json|rtf|log)$/i.test(file.name) || file.type.startsWith('text/');
+          let localText = '';
+          if (isTextLike) {
+            try {
+              localText = await file.text();
+            } catch (e) {
+              console.warn('Local file text read failed:', e);
+            }
           }
-        }
 
-        const reader = new FileReader();
-        const base64Promise = new Promise<string>((resolve, reject) => {
-          reader.onload = () => {
-            const result = reader.result as string;
-            const b64 = result.split(',')[1] || result;
-            resolve(b64);
-          };
-          reader.onerror = reject;
-        });
-
-        reader.readAsDataURL(file);
-        base64Data = await base64Promise;
-
-        let fileExtracted = '';
-        let fileTitle = '';
-
-        try {
-          const res = await fetch('/api/extract-file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              filename: file.name,
-              mimeType: file.type || (isTextLike ? 'text/plain' : 'application/octet-stream'),
-              base64Data,
-            }),
+          const reader = new FileReader();
+          const base64 = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const result = reader.result as string;
+              resolve(result.split(',')[1] || result);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
           });
 
-          const rawText = await res.text();
-          let data: any = null;
-          try {
-            data = JSON.parse(rawText);
-          } catch {
-            if (res.status === 413) {
-              throw new Error(`Le document "${file.name}" dépasse la taille maximale autorisée (15 Mo).`);
-            }
-            if (res.status === 504 || res.status === 502) {
-              throw new Error(`Le délai de lecture a expiré pour "${file.name}". Veuillez vérifier que le fichier n'est pas endommagé ou copiez directement le texte.`);
-            }
-            throw new Error(`Erreur réseau (${res.status}) lors de l'extraction de "${file.name}".`);
-          }
+          return {
+            filename: file.name,
+            mimeType: file.type || (isTextLike ? 'text/plain' : 'application/octet-stream'),
+            base64Data: base64,
+            localText,
+            size: file.size,
+          };
+        })
+      );
 
-          if (!res.ok || !data?.success) {
-            throw new Error(data?.error || `Impossible d'extraire le contenu de "${file.name}".`);
-          }
+      // Appel de l'API de synthèse collective selon les 3 piliers méthodologiques
+      const res = await fetch('/api/extract-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: payloadFiles.map(({ filename, mimeType, base64Data }) => ({ filename, mimeType, base64Data })),
+        }),
+      });
 
-          fileExtracted = data.extractedText || '';
-          fileTitle = data.suggestedTitle || '';
-        } catch (apiErr: any) {
-          // Si l'API échoue mais qu'il s'agit d'un fichier texte lisible localement, on bascule dessus
-          if (localText && localText.trim()) {
-            console.warn(`Extraction serveur échouée pour ${file.name}, bascule sur la lecture locale :`, apiErr?.message);
-            fileExtracted = localText.trim();
-          } else {
-            throw apiErr;
-          }
+      const rawText = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        if (res.status === 413) {
+          throw new Error('Les documents dépassent la taille maximale autorisée (15 Mo).');
         }
-
-        if (!currentTitle?.trim() && fileTitle && onSuggestedTitle) {
-          onSuggestedTitle(fileTitle);
+        if (res.status === 504 || res.status === 502) {
+          throw new Error('Le délai de lecture a expiré. Veuillez vérifier que les fichiers ne sont pas corrompus.');
         }
-
-        if (fileExtracted) {
-          if (!accumulatedText.trim()) {
-            accumulatedText = fileExtracted;
-          } else {
-            accumulatedText = `${accumulatedText}\n\n[Document importé : ${file.name}] :\n${fileExtracted}`;
-          }
-          newImported.push({ name: file.name, size: formatFileSize(file.size) });
-        }
+        throw new Error(`Erreur réseau (${res.status}) lors de l'extraction des documents.`);
       }
 
-      onChange(accumulatedText);
-      setImportedFiles((prev) => [...prev, ...newImported]);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Impossible d'extraire le contenu des documents.");
+      }
+
+      const synthesizedText = data.extractedText || '';
+      const suggestedTitle = data.suggestedTitle || '';
+      const suggestedLocation = data.suggestedLocation || '';
+
+      if (synthesizedText) {
+        onChange(synthesizedText);
+      }
+
+      if (!currentTitle?.trim() && suggestedTitle && onSuggestedTitle) {
+        onSuggestedTitle(suggestedTitle);
+      }
+
+      if (suggestedLocation && onSuggestedLocation) {
+        onSuggestedLocation(suggestedLocation);
+      }
+
+      if (data.isAIEnhanced) {
+        setAiEnhancedCount((prev) => prev + 1);
+      }
+
+      const newChips: ImportedFileItem[] = validFiles.map((f) => ({
+        name: f.name,
+        size: formatFileSize(f.size),
+      }));
+      setImportedFiles((prev) => [...prev, ...newChips]);
     } catch (err: any) {
       console.error('Batch file import error:', err);
       setErrorMsg(err.message || "Erreur lors de l'importation des documents.");
@@ -276,6 +282,19 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
           </div>
         )}
       </div>
+
+      {/* AI Enhanced success badge */}
+      {aiEnhancedCount > 0 && !isExtracting && (
+        <div className="flex items-center gap-2 p-2.5 px-3 rounded-xl bg-gradient-to-r from-[#edf5f0] to-[#e1ede6] border border-[#10634e]/30 text-xs text-[#063428] shadow-2xs animate-in fade-in">
+          <Sparkles className="w-4 h-4 text-[#10634e] shrink-0" />
+          <div className="leading-snug">
+            <span className="font-bold">Résumé fidèle extrait des documents importés :</span>{' '}
+            <span className="text-stone-700">
+              Description brève structurée selon les termes exacts de vos documents (sans interprétation ni ajout extérieur).
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Imported Files Success Chips */}
       {importedFiles.length > 0 && !isExtracting && (

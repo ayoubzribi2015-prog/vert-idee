@@ -217,6 +217,9 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
               onSuggestedTitle={(suggested) => {
                 if (!title.trim()) setTitle(suggested);
               }}
+              onSuggestedLocation={(suggestedLoc) => {
+                if (!location.trim()) setLocation(suggestedLoc);
+              }}
               currentTitle={title}
             />
 
