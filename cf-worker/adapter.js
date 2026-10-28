@@ -84,4 +84,22 @@ export async function expressHandler(app, request) {
     setTimeout(done, 30000);
   });
 
-  const responseBody = chunks.length > 0 ? Buffer.concat(chunks) : Buffer.al
+  const responseBody = chunks.length > 0 ? Buffer.concat(chunks) : Buffer.alloc(0);
+  const headers = new Headers();
+
+  const headerNames =
+    typeof res.getHeaderNames === 'function'
+      ? res.getHeaderNames()
+      : Object.keys(res.getHeaders ? res.getHeaders() : {});
+  for (const name of headerNames) {
+    const value = res.getHeader(name);
+    if (value !== undefined && value !== null) {
+      headers.set(name, String(value));
+    }
+  }
+
+  return new Response(responseBody, {
+    status: res.statusCode || 200,
+    headers,
+  });
+}
