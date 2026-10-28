@@ -630,41 +630,21 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
 
     if (combinedSourceText.length > 50) {
       try {
-        const prompt = `Tu es un analyste de projets chargé de restituer de manière explicite, complète et fidèle la description du projet et sa proposition de valeur.
+        const prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de rédiger un simple résumé fidèle aux termes et faits présentés dans les documents importés (${fileLabels}), SANS AUCUNE INTERPRÉTATION, SANS AJOUT D'ARGUMENT ÉCOLOGIQUE FICTIF ET SANS EFFORT D'AMÉLIORATION DE L'IDÉE. 
 
-MISSION :
-À partir des documents sources importés (${fileLabels}), rédige une description EXPLICITE, PARFAITEMENT ARTICULÉE ET COMPLÈTE de l'idée de projet et de sa proposition de valeur, en te basant rigoureusement sur le contenu des documents.
-
-EXIGENCES FONDAMENTALES DE QUALITÉ RÉDACTIONNELLE :
-1. DESCRIPTION EXPLICITE ET CLAIRE DE L'IDÉE : Le texte doit expliquer avec une clarté totale et sans ambiguïté :
-   - Quelle est la nature exacte du produit, service, procédé ou équipement proposé par le porteur de projet.
-   - À quel problème, besoin ou dysfonctionnement concret (économique, technique, environnemental ou sociétal) il répond.
-   - Comment il fonctionne concrètement et avec quelles matières, ressources, équipements ou technologies.
-   - Quelle est sa proposition de valeur pour ses clients et partenaires, ainsi que son modèle économique.
-2. PHRASES COMPLÈTES ET NATURELLES (OBLIGATION ABSOLUE) :
-   - Rédige UNIQUEMENT avec des phrases complètes (Sujet, Verbe, Complément), soignées et bien ponctuées.
-   - STRICTEMENT AUCUNE phrase incomplète, AUCUN mot tronqué, AUCUNE idée coupée en milieu de réflexion, AUCUN style télégraphique haché.
-   - Chaque paragraphe doit former un ensemble explicatif cohérent et fluide.
-3. FIDÉLITÉ FACTUELLE AUX DOCUMENTS :
-   - Repose-toi fidèlement sur les faits, chiffres, intrants, prix, véhicules, procédés et données techniques décrits dans les documents importés.
-   - N'invente pas d'allégations écologiques imaginaires si l'auteur n'en parle pas : décris fidèlement ce que le projet réalise réellement, mais avec une rédaction explicite, valorisante et aboutie.
-
-STRUCTURE OBLIGATOIRE EN 3 PILIERS :
-
-■ 1. Vue d'ensemble du projet & Problématique adressée :
-(Rédige un paragraphe explicite en phrases complètes présentant la nature du projet, son concept fondateur, son secteur d'activité, le problème concret qu'il résout et son implantation si mentionnée).
-
-■ 2. Solution technique, intrants & Procédés sobres :
-(Rédige un paragraphe explicite en phrases complètes décrivant le fonctionnement opérationnel, les matières premières ou intrants mobilisés, les équipements et les technologies employés).
-
-■ 3. Proposition de valeur & Modèle circulaire :
-(Rédige un paragraphe explicite en phrases complètes détaillant la valeur apportée aux clients, les tarifs/modèle économique et les éventuels aspects de durabilité ou circularité décrits).
+RÈGLES STRICTES DE FIDÉLITÉ :
+1. RESTRICTION ABSOLUE AUX TERMES ET FAITS DES DOCUMENTS : Utilise uniquement les données, faits, chiffres et termes mentionnés dans le texte source. N'extrapole pas, n'invente aucun avantage écologique non explicité par l'auteur, et ne formule aucune recommandation ou amélioration personnelle.
+2. PHRASES COMPLÈTES ET COHÉRENTES : Rédige des phrases grammaticalement complètes (Sujet, Verbe, Complément), claires, bien ponctuées et parfaitement explicites pour décrire exactement la réalité du projet (zéro idée incomplète ou phrase coupée).
+3. STRUCTURE EN 3 PILIERS MÉTHODOLOGIQUES :
+   - ■ 1. Vue d'ensemble du projet & Problématique adressée : concept clé, secteur d'activité, dysfonctionnement ou pollution résolu tel que présenté dans les documents.
+   - ■ 2. Solution technique, intrants & Procédés sobres : fonctionnement concret, matières, intrants et équipements décrits dans le texte source.
+   - ■ 3. Proposition de valeur & Modèle circulaire : gains économiques, fonctionnement opérationnel et aspects de circularité explicitement mentionnés.
 
 FORMAT DE RÉPONSE STRICT (JSON valide) :
 {
   "suggestedTitle": "Titre clair et explicite du projet",
   "suggestedLocation": "Lieu ou région explicitement mentionné dans le document (ou chaîne vide si non précisé)",
-  "richDescription": "Texte complet structuré avec les 3 rubriques ci-dessus, rédigé avec des phrases complètes et soignées..."
+  "richDescription": "Texte complet structuré avec les 3 rubriques ci-dessus, rédigé avec des phrases complètes, fidèles et sans aucune interprétation..."
 }
 
 DOCUMENTS SOURCES IMPORTÉS :
