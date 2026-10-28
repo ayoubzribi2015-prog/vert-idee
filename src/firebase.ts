@@ -10,6 +10,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
+  initializeFirestore,
   getFirestore,
   doc,
   getDoc,
@@ -31,10 +32,22 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 // Initialize Auth
 export const auth = getAuth(app);
 
-// Initialize Firestore targeting the specific database ID if specified
-export const db = firebaseConfig.firestoreDatabaseId
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+// Initialize Firestore targeting the specific database ID with auto-detect long polling
+// to prevent 10s streaming timeouts in iframe/proxy environments
+function getOrInitFirestore() {
+  const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+  try {
+    return initializeFirestore(
+      app,
+      { experimentalAutoDetectLongPolling: true },
+      dbId !== '(default)' ? dbId : undefined
+    );
+  } catch {
+    return dbId !== '(default)' ? getFirestore(app, dbId) : getFirestore(app);
+  }
+}
+
+export const db = getOrInitFirestore();
 
 // Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
@@ -93,13 +106,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Test connection on boot as requested by skill
 export async function testFirestoreConnection() {
   try {
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000));
-    await Promise.race([
-      getDocFromServer(doc(db, 'test', 'connection')),
-      timeoutPromise,
-    ]);
+    await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
-    // Fail silently in offline/unreachable environments to avoid 10s Firestore timeout logs
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Mode hors-ligne Firestore actif. Veuillez vérifier la connexion Firebase.');
+    }
   }
 }
 
