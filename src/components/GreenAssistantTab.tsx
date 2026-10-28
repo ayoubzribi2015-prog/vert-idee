@@ -34,10 +34,21 @@ export const GreenAssistantTab: React.FC<GreenAssistantTabProps> = ({ project })
         }),
       });
 
-      const data = await res.json();
-      
+      // Cloudflare may return an empty body, HTML or a 404 when the API
+      // function is not deployed. Never parse those responses blindly.
+      const raw = await res.text();
+      let data: any;
+      try {
+        data = raw.trim() ? JSON.parse(raw) : null;
+      } catch {
+        throw new Error(`Réponse non JSON de /api/chat (HTTP ${res.status}). Vérifiez le déploiement de l'API Cloudflare.`);
+      }
+
+      if (!data) {
+        throw new Error(`Réponse vide de /api/chat (HTTP ${res.status}). Vérifiez les fonctions serveur et les variables IA.`);
+      }
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Erreur lors de la conversation');
+        throw new Error(data.error || `Erreur de conversation (HTTP ${res.status})`);
       }
 
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
