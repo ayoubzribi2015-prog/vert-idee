@@ -8,7 +8,7 @@ import dotenv from 'dotenv';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import { generateExpertAuditFallback } from '../src/utils/fallbackExpertAudit.ts';
-import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
+import firebaseConfig from '../firebase-applet-config.json';
 
 dotenv.config({ path: ['.env.development.local', '.env.local', '.env'], quiet: true });
 
