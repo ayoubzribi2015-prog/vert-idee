@@ -630,39 +630,57 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
 
     if (combinedSourceText.length > 50) {
       try {
-        const prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de rédiger un simple résumé fidèle aux termes et faits présentés dans les documents importés (${fileLabels}), SANS AUCUNE INTERPRÉTATION, SANS AJOUT D'ARGUMENT ÉCOLOGIQUE FICTIF ET SANS EFFORT D'AMÉLIORATION DE L'IDÉE. 
+        // --- PREMIÈRE PASSE : Extraction brute et factuelle ---
+        const pass1Prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de lire les documents importés (${fileLabels}) et d'extraire de façon exhaustive tous les faits, chiffres, intrants, procédés, lieux et propositions de valeur décrits, SANS AUCUNE INTERPRÉTATION NI AJOUT EXTÉRIEUR.
 
-RÈGLES STRICTES DE FIDÉLITÉ :
-1. RESTRICTION ABSOLUE AUX TERMES ET FAITS DES DOCUMENTS : Utilise uniquement les données, faits, chiffres et termes mentionnés dans le texte source. N'extrapole pas, n'invente aucun avantage écologique non explicité par l'auteur, et ne formule aucune recommandation ou amélioration personnelle.
-2. PHRASES COMPLÈTES ET COHÉRENTES : Rédige des phrases grammaticalement complètes (Sujet, Verbe, Complément), claires, bien ponctuées et parfaitement explicites pour décrire exactement la réalité du projet (zéro idée incomplète ou phrase coupée).
-3. STRUCTURE EN 3 PILIERS MÉTHODOLOGIQUES :
-   - ■ 1. Vue d'ensemble du projet & Problématique adressée : concept clé, secteur d'activité, dysfonctionnement ou pollution résolu tel que présenté dans les documents.
-   - ■ 2. Solution technique, intrants & Procédés sobres : fonctionnement concret, matières, intrants et équipements décrits dans le texte source.
-   - ■ 3. Proposition de valeur & Modèle circulaire : gains économiques, fonctionnement opérationnel et aspects de circularité explicitement mentionnés.
+DOCUMENTS SOURCES IMPORTÉS :
+${preparedSource}`;
+
+        const { response: pass1Res } = await generateContentWithResilience({
+          contents: pass1Prompt,
+          config: {
+            temperature: 0.0,
+          },
+          singleAttemptTimeoutMs: 15000,
+          totalTimeoutMs: 22000,
+        });
+
+        const rawExtractedFacts = pass1Res?.text || combinedSourceText;
+
+        // --- DEUXIÈME PASSE : Relecture, polissage et structuration rigoureuse en 3 piliers ---
+        const pass2Prompt = `Tu es un éditeur et relecteur expert en projets industriels et écologiques. À partir des éléments factuels extraits des documents, rédige une description claire, fluide, parfaitement articulée et formalisée strictement selon les 3 rubriques ci-dessous.
+
+CONSIGNES STRICTES POUR LA SECONDE LECTURE :
+1. RESPECT ABSOLUE DES 3 RUBRIQUES (les libellés exacts doivent être conservés) :
+   - ■ 1. Vue d'ensemble du projet & Problématique adressée
+   - ■ 2. Solution technique, intrants & Procédés sobres
+   - ■ 3. Proposition de valeur & Modèle circulaire
+2. QUALITÉ RÉDACTIONNELLE (ZÉRO PHRASE INCOMPLÈTE) : Rédige chaque section avec des phrases complètes (Sujet, Verbe, Complément), bien ponctuées et soignées. Élimine toute phrase coupée, tout style télégraphique et toute approximation.
+3. FIDÉLITÉ FACTUELLE TOTALE : Interdiction totale d'inventer des allégations écologiques, des chiffres ou des labels non présents dans les données sources. Restitue fidèlement la réalité exacte du projet.
+
+ÉLÉMENTS FACTUELS À STRUCTURER :
+${rawExtractedFacts}
 
 FORMAT DE RÉPONSE STRICT (JSON valide) :
 {
   "suggestedTitle": "Titre clair et explicite du projet",
   "suggestedLocation": "Lieu ou région explicitement mentionné dans le document (ou chaîne vide si non précisé)",
-  "richDescription": "Texte complet structuré avec les 3 rubriques ci-dessus, rédigé avec des phrases complètes, fidèles et sans aucune interprétation..."
-}
+  "richDescription": "Texte complet structuré avec les 3 rubriques exactes..."
+}`;
 
-DOCUMENTS SOURCES IMPORTÉS :
-${preparedSource}`;
-
-        const { response: aiRes } = await generateContentWithResilience({
-          contents: prompt,
+        const { response: pass2Res } = await generateContentWithResilience({
+          contents: pass2Prompt,
           config: {
             temperature: 0.0,
             responseMimeType: 'application/json',
           },
           singleAttemptTimeoutMs: 18000,
-          totalTimeoutMs: 28000,
+          totalTimeoutMs: 25000,
         });
 
-        if (aiRes && aiRes.text) {
+        if (pass2Res && pass2Res.text) {
           try {
-            const parsed = JSON.parse(aiRes.text);
+            const parsed = JSON.parse(pass2Res.text);
             if (parsed.richDescription && parsed.richDescription.trim().length > 60) {
               finalDescription = parsed.richDescription.trim();
               isAIEnhanced = true;
@@ -674,7 +692,7 @@ ${preparedSource}`;
               suggestedLocation = parsed.suggestedLocation.trim();
             }
           } catch (jsonErr) {
-            const cleanText = aiRes.text.replace(/^```json\s*|\s*```$/g, '').trim();
+            const cleanText = pass2Res.text.replace(/^```json\s*|\s*```$/g, '').trim();
             try {
               const retryParsed = JSON.parse(cleanText);
               if (retryParsed.richDescription) {
@@ -692,7 +710,7 @@ ${preparedSource}`;
           }
         }
       } catch (sumErr: any) {
-        console.warn('[File Extract] Synthèse IA non disponible ou délai dépassé, utilisation de l\'analyse sémantique locale:', sumErr?.message);
+        console.warn('[File Extract] Synthèse IA (double lecture) non disponible, utilisation de l\'analyse sémantique locale:', sumErr?.message);
       }
     }
 
