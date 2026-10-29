@@ -630,8 +630,10 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
 
     if (combinedSourceText.length > 50) {
       try {
-        // --- PREMIÈRE PASSE : Extraction brute et factuelle ---
-        const pass1Prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de lire les documents importés (${fileLabels}) et d'extraire de façon exhaustive tous les faits, chiffres, intrants, procédés, lieux et propositions de valeur décrits, SANS AUCUNE INTERPRÉTATION NI AJOUT EXTÉRIEUR.
+        // --- PREMIÈRE PASSE : Extraction brute et factuelle en ignorant tables des matières, en-têtes et pieds de page ---
+        const pass1Prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de lire les documents importés (${fileLabels}) et d'extraire de façon exhaustive tous les faits, chiffres, intrants, procédés, lieux et propositions de valeur décrits.
+
+CONSIGNE CRITIQUE : Ignore et écarte totalement les tables des matières (sommaires), les en-têtes de page répétés, les numéros de page et les pieds de page. Ne retiens que le contenu textuel et informatif du corps du texte. N'effectue aucune interprétation ni ajout extérieur.
 
 DOCUMENTS SOURCES IMPORTÉS :
 ${preparedSource}`;
