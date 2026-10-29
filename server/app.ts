@@ -630,12 +630,15 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
 
     if (combinedSourceText.length > 50) {
       try {
-        // --- PREMIÈRE PASSE : Extraction brute et factuelle en ignorant tables des matières, en-têtes et pieds de page ---
-        const pass1Prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de lire les documents importés (${fileLabels}) et d'extraire de façon exhaustive tous les faits, chiffres, intrants, procédés, lieux et propositions de valeur décrits.
+        // --- PREMIÈRE PASSE : Extraction brute et factuelle en éliminant tout bruit structurel ---
+        const pass1Prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de lire les documents importés (${fileLabels}) et d'extraire uniquement le contenu rédactionnel et informatif utile du projet.
 
-CONSIGNE CRITIQUE : Ignore et écarte totalement les tables des matières (sommaires), les en-têtes de page répétés, les numéros de page et les pieds de page. Ne retiens que le contenu textuel et informatif du corps du texte. N'effectue aucune interprétation ni ajout extérieur.
+CONSIGNES STRICTES DE FILTRAGE :
+1. EXCLUSION TOTALE DES SOMMAIRES ET TABLES DES MATIÈRES : Ignore et jette toutes les lignes de tables des matières, listes de chapitres, index, titres de rubriques isolés (ex: "Table des matières", "6 Besoins prioritaires...", "4 Proposition de valeur...", "1 / 15", "Plan d'affaires Confidentiel").
+2. EXCLUSION DES EN-TÊTES ET PIEDS DE PAGE : Ignore les en-têtes de pages, numéros de page (ex: "2 / 15", "3 / 15"), mentions de copyright et métadonnées de document.
+3. CONSERVATION UNIQUEMENT DU CORPS DU TEXTE : Extrais uniquement les phrases explicatives du fond du projet (problématique, description de la solution, fonctionnalités, public cible, modèle économique, intrants).
 
-DOCUMENTS SOURCES IMPORTÉS :
+TEXTE BRUT DES DOCUMENTS À FILTRER :
 ${preparedSource}`;
 
         const { response: pass1Res } = await generateContentWithResilience({
