@@ -224,7 +224,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             ) : (
               <>
                 <UploadCloud className="w-3.5 h-3.5 text-[#10634e]" />
-                <span>Importer documents (PDF, Word, Images JPG/PNG)</span>
+                <span>Importer documents (PDF, Word, Excel, JPG, PNG)</span>
               </>
             )}
           </button>
