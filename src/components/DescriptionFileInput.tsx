@@ -205,7 +205,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".pdf,.docx,.doc,.xlsx,.xls,.txt,.md,.rtf"
+            accept=".pdf,.docx,.doc,.xlsx,.xls,.txt,.md,.rtf,.jpg,.jpeg,.png,.webp"
             multiple
             className="hidden"
           />
@@ -214,7 +214,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             onClick={() => fileInputRef.current?.click()}
             disabled={isExtracting}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#edf5f0] hover:bg-[#e1ede6] text-[#063428] border border-[#0b4a3a]/30 transition-all cursor-pointer shadow-2xs active:scale-[0.98] disabled:opacity-50"
-            title="Importer un ou plusieurs fichiers PDF, Word, Excel ou Texte pour renseigner la description"
+            title="Importer un ou plusieurs fichiers PDF, Word, Excel, Texte ou Images (JPG, PNG) pour renseigner la description"
           >
             {isExtracting ? (
               <>
@@ -224,7 +224,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             ) : (
               <>
                 <UploadCloud className="w-3.5 h-3.5 text-[#10634e]" />
-                <span>Importer documents (PDF, Word, Excel, TXT)</span>
+                <span>Importer documents (PDF, Word, Images JPG/PNG)</span>
               </>
             )}
           </button>

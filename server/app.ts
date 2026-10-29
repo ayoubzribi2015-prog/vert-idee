@@ -555,6 +555,33 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
       console.warn('[File Extract] Erreur XLSX:', xlsxErr?.message);
       extractedText = buffer.toString('utf-8');
     }
+  } else if (ext === '.jpg' || ext === '.jpeg' || ext === '.png' || ext === '.webp' || mimeType?.startsWith('image/')) {
+    if (base64Data) {
+      try {
+        const cleanMime = mimeType && mimeType.startsWith('image/') ? mimeType : (ext === '.png' ? 'image/png' : 'image/jpeg');
+        const { response: aiRes } = await generateContentWithResilience({
+          singleAttemptTimeoutMs: 15000,
+          totalTimeoutMs: 20000,
+          contents: [
+            {
+              inlineData: {
+                mimeType: cleanMime,
+                data: base64Data,
+              },
+            },
+            {
+              text: 'Extrais et transcris fidèlement tout le texte, les données, le titre, la problématique et la description du projet figurant sur cette image, sans interprétation.',
+            },
+          ],
+        });
+        if (aiRes && aiRes.text) {
+          extractedText = aiRes.text;
+        }
+      } catch (imgErr: any) {
+        console.warn('[File Extract] OCR Image via Gemini non disponible:', imgErr?.message);
+        extractedText = `[Image importée : ${filename}]`;
+      }
+    }
   } else {
     try {
       extractedText = buffer.toString('utf-8');
@@ -866,7 +893,7 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
 2. Aspects & impacts environnementaux : Analyse approfondie des aspects et impacts environnementaux (directs et indirects, positifs et négatifs) sur les écosystèmes, l'air, l'eau, le climat, les sols et la biodiversité. Évaluation normée des AES selon la matrice ISO 14001 (F, G, S, M), quantification des impacts par phase du cycle de vie (ACV ISO 14040/14044), écotoxicité (ERA), flux de matière (MFA) et leviers d'atténuation d'impacts.
 3. Aspects & impacts sociaux et sociétaux : Analyse approfondie des impacts sociaux et sociétaux directs et indirects : santé et sécurité des travailleurs, santé publique et riverains (exposition poussières PM, produits toxiques, bruit), création d'emplois locaux pérennes, retombées communautaires, gouvernance partagée éthique (ISO 26000) et accompagnement vers une transition juste.
 4. Intégration de l'entrepreneuriat vert : Analyse économique critique, modèles de rupture technologique nécessaires (ex: recyclage d'eau fermé ZLD, filtres-presses, solaire dédié).
-5. Alignement ODD (Objectifs de Développement Durable - ONU) : Analyse rigoureuse et détaillée des contributions directes et indirectes du projet aux ODD pertinents (ex: ODD 3 Bonne santé et bien-être, ODD 4 Éducation de qualité, ODD 6 Eau propre, ODD 8 Travail décent, ODD 9 Industrie et innovation, ODD 12 Consommation responsable, ODD 13 Action climatique, ODD 15 Vie terrestre). Pour chaque ODD identifié, explicite précisément les sous-cibles de l'ONU concernées, la contribution opérationnelle concrète du projet sur le terrain, et signale le cas échéant les risques d'impacts négatifs (trade-offs) si le projet présente des externalités polluantes.
+5. Alignement ODD (Objectifs de Développement Durable - ONU & Pacte Mondial Réseau France) : RÈGLE IMPÉRATIVE POUR LES PROJETS EDTECH / ÉDUCATION : Pour tout projet relevant de l'éducation, de la formation, de l'EdTech, de l'inclusion (ex: enfants TSA, DYS) ou de la pédagogie, tu DOIS obligatoirement inclure l'**ODD 4 (Éducation de qualité)** en premier et en position centrale (avec les cibles 4.1, 4.2, 4.5 et 4.7 sur l'accès équitable, l'inclusion des personnes vulnérables et l'éducation adaptée), complété par les autres ODD pertinents (ex: ODD 3, ODD 8, ODD 9, ODD 10, ODD 12). Pour chaque ODD identifié, explicite précisément les sous-cibles de l'ONU concernées et la contribution opérationnelle concrète du projet sur le terrain.
 6. Indicateurs d'impact : Bilan carbone normé selon ISO 14067:2018 (par unité fonctionnelle) et ISO 14064-1:2018 (Catégories 1 à 6). Analyse de cycle de vie étape par étape (Approvisionnement Cat 4, Fabrication Cat 1-2, Conditionnement Cat 4, Transport Cat 3, Utilisation Cat 5, Fin de vie Cat 5) avec exclusion stricte de toute compensation carbone fictive. Pour benchmarkComparison : si le projet appartient à une industrie lourde ou polluante, totalCarbonKgCO2e DOIT être STRICTEMENT SUPÉRIEUR à industryAverageKgCO2e (+20% à +60% de sur-émissions) ; si éco-innovation vertueuse, totalCarbonKgCO2e DOIT être INFÉRIEUR (-20% à -65%). Actions de décarbonation quantifiées (P1/P2/P3), intensité eau chiffrée.
 7. Financements et labels verts : Statut d'éligibilité réel (exclusion formelle des labels verts si activité polluante), fonds de mise en conformité et dépollution (FODEP, BERD Climat).
 8. Plan d'action prioritaire : Actions concrètes d'urgence (0-12 mois) priorisées avec livrables opérationnels pour la neutralisation des AES.
