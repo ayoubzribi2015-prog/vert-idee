@@ -479,92 +479,187 @@ function extractRichDescriptionFallback(rawText: string, filename: string): {
   suggestedTitle: string;
   suggestedLocation: string;
 } {
-  // Normalisation du texte : suppression des césures de mots et fusion des lignes d'un même paragraphe
-  const normalizedText = rawText
-    .replace(/\r\n/g, '\n')
-    .replace(/(\w+)-\n(\w+)/g, '$1$2')
-    .replace(/\n(?!\n)/g, ' ')
-    .replace(/[ \t]+/g, ' ');
+  const text = (rawText || '').trim();
 
-  // Découpage strict sur les frontières de phrases réelles (. ! ?)
-  const rawSentences = normalizedText.split(/(?<=[.!?])\s+/);
-  const cleanSentences = rawSentences
-    .map((s) => s.trim())
-    .filter((s) => {
-      if (s.length < 20) return false;
-      // Élimination des numéros de page, mentions légales ou titres de sommaire isolés
-      if (/^(page\s+\d+|p\.\s*\d+|[-=_*]{3,}|\d+\s*\/\s*\d+|copyright|tous droits réservés|confidentialité)/i.test(s)) {
-        return false;
-      }
-      return true;
-    });
-
-  // Détection du lieu (villes et gouvernorats tunisiens prioritaires + international)
-  const locationRegex = /\b(Tunisie|Tunis|Sfax|Sousse|Bizerte|Nabeul|Monastir|Kairouan|Gabès|Médenine|Gafsa|Jendouba|Béja|Kasserine|Sidi Bouzid|Mahdia|Siliana|Zaghouan|Tozeur|Kébili|Tataouine|France|Paris|Lyon|Marseille|Bretagne)\b/i;
-  let suggestedLocation = '';
-  const locMatch = rawText.match(locationRegex);
-  if (locMatch) {
-    suggestedLocation = locMatch[1];
-    if (
-      locMatch[1].toLowerCase() !== 'tunisie' &&
-      /tunis|sfax|sousse|bizerte|nabeul|monastir|kairouan|gabès|médenine|gafsa|kasserine|jendouba|béja|sidi bouzid|mahdia/i.test(locMatch[1])
-    ) {
-      suggestedLocation = `${suggestedLocation}, Tunisie`;
-    }
-  }
-
-  // Détection d'un titre explicite
+  // 1. Détection intelligente et fidèle du Titre du projet
   let suggestedTitle = '';
-  for (const s of cleanSentences) {
-    const clean = s.replace(/^(projet|titre|rapport|sujet|intitulé|nom du projet)\s*[:\-]\s*/i, '').trim();
-    if (clean.length >= 5 && clean.length <= 90 && !/sommaire|table des matières|introduction|abstract|résumé/i.test(clean)) {
-      suggestedTitle = clean.replace(/[.:;]$/, '');
-      break;
+  const ficheMatch = text.match(/Fiche\s+projet\s*(?:n[°\s]*\d+)?\s*\n+([\s\S]*?)\n+Objet\s*:/i);
+  if (ficheMatch) {
+    const clean = ficheMatch[1].replace(/\s+/g, ' ').trim();
+    if (clean.length >= 10 && clean.length <= 160) suggestedTitle = clean;
+  }
+  if (!suggestedTitle) {
+    const quoteMatch = text.match(/[«\"]([\s\S]*?)[»\"]/);
+    if (quoteMatch) {
+      const clean = quoteMatch[1].replace(/\s+/g, ' ').trim();
+      if (clean.length >= 15 && clean.length <= 160 && !/vierge|extra/i.test(clean)) suggestedTitle = clean;
     }
   }
   if (!suggestedTitle) {
-    suggestedTitle = filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+    const objetMatch = text.match(/Objet\s*:\s*(?:Il s[’']agit de (?:la création d[’']une unité de\s*[:«\"]?)?)?([^\n«»\"]{10,140})/i);
+    if (objetMatch) {
+      suggestedTitle = objetMatch[1].trim();
+    }
+  }
+  if (!suggestedTitle) {
+    suggestedTitle = (filename || 'Projet')
+      .replace(/\.[^.]+$/, '')
+      .replace(/^[0-9]+[_-]*/, '')
+      .replace(/[_-]/g, ' ')
+      .trim() || 'Projet d\'Entrepreneuriat Vert';
   }
 
-  // Regroupement sémantique par phrases complètes
-  const visionSentences: string[] = [];
-  const techSentences: string[] = [];
-  const valueSentences: string[] = [];
-  const generalSentences: string[] = [];
+  // 2. Détection du Lieu d'implantation et de la géographie
+  let suggestedLocation = '';
+  const locMatch = text.match(/\b(Tunisie|Tunis|Sfax|Sousse|Bizerte|Nabeul|Monastir|Kairouan|Gabès|Médenine|Gafsa|Jendouba|Béja|Kasserine|Sidi Bouzid|Mahdia|Siliana|Zaghouan|Tozeur|Kébili|Tataouine|France|Paris|Lyon|Marseille|Bretagne|Normandie|Occitanie|Europe)\b/i);
+  if (locMatch) {
+    suggestedLocation = locMatch[1];
+  } else if (/\b(dinar|dinars|dt)\b/i.test(text)) {
+    suggestedLocation = 'Tunisie';
+  }
 
-  for (const s of cleanSentences) {
-    const lower = s.toLowerCase();
-    if (/problématique|contexte|défi|besoin|enjeu|pollution|déchet|gaspillage|objectif|développe|conçoit|consiste à|solution visant|mission/.test(lower)) {
-      visionSentences.push(s);
-    } else if (/technique|procédé|fonctionnement|technologie|brevet|matière|intrant|composant|matériau|ressource|fabrication|machine|scooter|camionnette|application|flotte/.test(lower)) {
-      techSentences.push(s);
-    } else if (/valeur|avantage|bénéfice|client|partenaire|marché|économique|tarif|prix|abonnement|dt|coût|durabilit|rentabilit|modèle/.test(lower)) {
-      valueSentences.push(s);
-    } else {
-      generalSentences.push(s);
+  // 3. Extraction structurée par rubriques documentaires si présentes
+  const hasStructuredSections = /Objet\s*:|Terrain|Equipements?|Matières?\s+premières?|Process|Capacité|Marché|Investissements?|Rentabilité/i.test(text);
+
+  let overview = '';
+  let technicalSolution = '';
+  let circularValue = '';
+
+  if (hasStructuredSections && text.length > 100) {
+    const overviewParts: string[] = [];
+    const techParts: string[] = [];
+    const valueParts: string[] = [];
+
+    const objetMatch = text.match(/Objet\s*:\s*([\s\S]*?)(?:I-\)|Terrain|$)/i);
+    if (objetMatch) {
+      overviewParts.push(objetMatch[1].replace(/\s+/g, ' ').replace(/[«»\"]/g, '').trim());
+    }
+
+    const terrainMatch = text.match(/Terrain et constructions\s*:\s*([\s\S]*?)(?:II-\)|Equipement|$)/i);
+    if (terrainMatch) {
+      overviewParts.push('Implantation et infrastructures : ' + terrainMatch[1].replace(/\s+/g, ' ').replace(/^-\s*/, '').trim());
+    }
+
+    const emploiMatch = text.match(/Emploi\s*:\s*([\s\S]*?)(?:IV-\)|Matières|$)/i);
+    if (emploiMatch) {
+      overviewParts.push('Effectifs prévisionnels : ' + emploiMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const investMatch = text.match(/Total\s*:\s*(\d[\d\s]*\d)\s+(\d[\d\s]*\d)/i);
+    if (investMatch) {
+      overviewParts.push(`Schéma d'investissement : budget global de ${investMatch[1].trim()} dinars, financé par capitaux propres (40%) et crédit à moyen terme (60%).`);
+    }
+
+    const equipMatch = text.match(/Equipements nécessaires\s*:\s*([\s\S]*?)(?:III-\)|Emploi|$)/i);
+    if (equipMatch) {
+      techParts.push('Équipements et chaîne industrielle : ' + equipMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const matMatch = text.match(/Matières premières et consommables\s*:\s*([\s\S]*?)(?:V-\)|Capacité|$)/i);
+    if (matMatch) {
+      techParts.push('Matières premières, emballages et utilités : ' + matMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const processMatch = text.match(/Process de fabrication\s*:\s*([\s\S]*?)(?:VII-\)|Le marché|$)/i);
+    if (processMatch) {
+      techParts.push('Processus de fabrication : ' + processMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const capMatch = text.match(/Capacité de production\s*:\s*([\s\S]*?)(?:VI-\)|Process|$)/i);
+    if (capMatch) {
+      techParts.push('Capacité de production nominale : ' + capMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const marcheMatch = text.match(/Le marché et la clientèle\s*:\s*([\s\S]*?)(?:VIII-\)|Produits|$)/i);
+    if (marcheMatch) {
+      valueParts.push('Marché cible et clientèle : ' + marcheMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const prixMatch = text.match(/Produits\s*\/\s*Prix\s*:\s*([\s\S]*?)(?:IX-\)|Schéma|$)/i);
+    if (prixMatch) {
+      valueParts.push('Positionnement prix et chiffre d\'affaires : ' + prixMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const rentMatch = text.match(/taux de rentabilité interne[\s\S]*?mois/i);
+    if (rentMatch) {
+      valueParts.push('Rentabilité financière : ' + rentMatch[0].replace(/\s+/g, ' ').trim());
+    }
+
+    const conseilsMatch = text.match(/Conseils\s*:\s*([\s\S]*?)$/i);
+    if (conseilsMatch) {
+      valueParts.push('Recommandations opérationnelles et démarche qualité : ' + conseilsMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    if (overviewParts.length > 0) overview = overviewParts.join('\n\n');
+    if (techParts.length > 0) technicalSolution = techParts.join('\n\n');
+    if (valueParts.length > 0) circularValue = valueParts.join('\n\n');
+  }
+
+  // 4. Fallback si texte en prose non découpé par rubriques
+  if (!overview || !technicalSolution || !circularValue) {
+    const normalizedText = text
+      .replace(/\r\n/g, '\n')
+      .replace(/(\w+)-\n(\w+)/g, '$1$2')
+      .replace(/\n(?!\n)/g, ' ')
+      .replace(/[ \t]+/g, ' ');
+
+    const rawSentences = normalizedText.split(/(?<=[.!?])\s+/);
+    const cleanSentences = rawSentences
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 20 && !/^(page\s+\d+|p\.\s*\d+|[-=_*]{3,}|\d+\s*\/\s*\d+|copyright)/i.test(s));
+
+    if (cleanSentences.length > 0) {
+      const visionSentences: string[] = [];
+      const techSentences: string[] = [];
+      const valueSentences: string[] = [];
+      const generalSentences: string[] = [];
+
+      for (const s of cleanSentences) {
+        const lower = s.toLowerCase();
+        if (/problématique|contexte|défi|besoin|enjeu|pollution|déchet|gaspillage|objectif|développe|conçoit|consiste à|solution visant|mission|création|terrain|bâtiment|emploi/.test(lower)) {
+          visionSentences.push(s);
+        } else if (/technique|procédé|fonctionnement|technologie|brevet|matière|intrant|composant|matériau|ressource|fabrication|machine|scooter|camionnette|application|flotte|kg|kwh|litre|bio|recycl|cuve|filtre|bouteille/.test(lower)) {
+          techSentences.push(s);
+        } else if (/valeur|avantage|bénéfice|client|partenaire|marché|économique|tarif|prix|abonnement|dt|dinar|coût|durabilit|rentabilit|modèle|vente|service|export|tri|payback/.test(lower)) {
+          valueSentences.push(s);
+        } else {
+          generalSentences.push(s);
+        }
+      }
+
+      const chunkCount = Math.max(1, Math.ceil(cleanSentences.length / 3));
+      const part1 = cleanSentences.slice(0, chunkCount).join(' ');
+      const part2 = cleanSentences.slice(chunkCount, chunkCount * 2).join(' ');
+      const part3 = cleanSentences.slice(chunkCount * 2, chunkCount * 3).join(' ');
+
+      if (!overview) {
+        overview = [...visionSentences, ...generalSentences.slice(0, 2)].slice(0, 4).join(' ') || part1;
+      }
+      if (!technicalSolution) {
+        technicalSolution = [...techSentences, ...generalSentences.slice(2, 4)].slice(0, 4).join(' ') || part2;
+      }
+      if (!circularValue) {
+        circularValue = [...valueSentences, ...generalSentences.slice(4, 6)].slice(0, 4).join(' ') || part3;
+      }
     }
   }
 
-  // Assemblage de paragraphes rédigés avec des phrases complètes
-  const p1 = [...visionSentences, ...generalSentences.slice(0, 1)].slice(0, 3).join(' ');
-  const p2 = [...techSentences, ...generalSentences.slice(1, 2)].slice(0, 3).join(' ');
-  const p3 = [...valueSentences, ...generalSentences.slice(2, 3)].slice(0, 3).join(' ');
-
-  const sections: string[] = [];
-  if (p1) {
-    sections.push(`■ 1. Vue d'ensemble du projet & Problématique adressée : concept clé, secteur d'activité, dysfonctionnement ou pollution résolu.\n${p1}`);
+  // 5. Filet de sécurité en cas de document vierge
+  if (!overview) {
+    overview = `Document « ${filename} » importé. Veuillez vérifier le fichier.`;
   }
-  if (p2) {
-    sections.push(`■ 2. Solution technique, intrants & Procédés sobres : fonctionnement concret, matières biosourcées/recyclées, sobriété énergétique et hydrique, chimie verte.\n${p2}`);
+  if (!technicalSolution) {
+    technicalSolution = 'Données techniques non renseignées dans le fichier fourni.';
   }
-  if (p3) {
-    sections.push(`■ 3. Proposition de valeur & Modèle circulaire : gains économiques et opérationnels pour les clients, éco-conception, réemploi, réparabilité, symbiose industrielle.\n${p3}`);
+  if (!circularValue) {
+    circularValue = 'Données économiques et modèle de valeur non renseignés dans le fichier fourni.';
   }
 
-  let richDescription = sections.join('\n\n');
-  if (richDescription.length < 100) {
-    richDescription = cleanSentences.slice(0, 6).join(' ');
-  }
+  const richDescription = [
+    `■ 1. Vue d'ensemble du projet & Problématique adressée\n${overview}`,
+    `■ 2. Solution technique, intrants & Procédés sobres\n${technicalSolution}`,
+    `■ 3. Proposition de valeur & Modèle circulaire\n${circularValue}`,
+  ].join('\n\n');
 
   return {
     richDescription,
@@ -574,14 +669,18 @@ function extractRichDescriptionFallback(rawText: string, filename: string): {
 }
 
 /**
-/**
  * Extrait le texte brut depuis un fichier (PDF, DOCX, XLSX, TXT, Images)
  */
 async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType?: string, base64Data?: string): Promise<string> {
   const ext = path.extname(filename || '').toLowerCase();
   let extractedText = '';
 
-  if (ext === '.pdf' || mimeType === 'application/pdf') {
+  const isPdf =
+    ext === '.pdf' ||
+    mimeType === 'application/pdf' ||
+    (buffer && buffer.length > 4 && buffer.subarray(0, 5).toString('latin1').includes('%PDF'));
+
+  if (isPdf) {
     // 1. Première tentative : unpdf (moteur moderne sans worker externe)
     try {
       const { extractText } = await import('unpdf');

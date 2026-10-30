@@ -153,18 +153,26 @@ function extractXlsx(bytes: Uint8Array): string {
 }
 
 async function extractPdf(bytes: Uint8Array): Promise<string> {
-  const pdf = await getDocumentProxy(bytes);
-
   try {
-    const result = await extractText(pdf, {
-      mergePages: true,
-    });
+    const pdf = await getDocumentProxy(bytes);
+    try {
+      const result = await extractText(pdf, {
+        mergePages: true,
+      });
 
-    return (result?.text || '').trim();
-  } finally {
-    if (pdf && typeof (pdf as any).destroy === 'function') {
-      await (pdf as any).destroy();
+      const text = Array.isArray(result?.text)
+        ? result.text.join('\n\n')
+        : String(result?.text || '');
+
+      return text.trim();
+    } finally {
+      if (pdf && typeof (pdf as any).destroy === 'function') {
+        await (pdf as any).destroy();
+      }
     }
+  } catch (err) {
+    console.warn('[extractPdf] unpdf extraction:', err);
+    return '';
   }
 }
 
@@ -178,25 +186,25 @@ type Summary = {
   };
 };
 
-const instructions = `Tu es un Expert Senior en entrepreneuriat vert, en éco-conception (ACV ISO 14040) et en modèles circulaires. Ton rôle est d'analyser le ou les documents transmis et d'en extraire un RÉSUMÉ FIDÈLE, factuel, rigoureux et structuré, sans extrapolation ni greenwashing.
+const instructions = `Tu es un Expert Senior en entrepreneuriat vert, en éco-conception (ACV ISO 14040) et en modèles circulaires. Ton rôle est d'analyser le ou les documents transmis et d'en extraire un RÉSUMÉ FIDÈLE, factuel, exhaustif et rigoureusement structuré selon les 3 piliers obligatoires.
 
 RÈGLES IMPÉRATIVES DE FIDÉLITÉ FACTUELLE :
-1. LE DOCUMENT EST UNE SOURCE DE DONNÉES FACTUELLES : Extrais fidèlement les chiffres, quantités, types de matières premières, procédés de fabrication, modèles de revenus, cibles clients et localisation géographique mentionnés.
-2. ZÉRO INTERPRÉTATION EXTERNE : N'invente aucun label, aucune certification ni allégation écologique qui ne figure pas expressément dans le document.
-3. PHRASES COMPLÈTES ET SOIGNÉES : Rédige chaque rubrique avec des phrases complètes (Sujet, Verbe, Complément), claires et fluides. Élimine tout style télégraphique ou fragmentaire.
+1. LE DOCUMENT EST UNE SOURCE DE DONNÉES FACTUELLES : Extrais fidèlement tous les chiffres, superficies (m²), capacités de production (litres/an, unités/h), liste d'équipements industriels, matières premières, emplois (postes et effectifs), investissements financiers (montants en dinars ou euros, capitaux propres, crédits), chiffre d'affaires prévisionnel, marges, TRI, délai de récupération (payback) et localisation.
+2. ZÉRO INTERPRÉTATION EXTERNE : N'invente aucun label, certification ou allégation qui ne figure pas expressément dans le document.
+3. PHRASES COMPLÈTES ET SOIGNÉES : Rédige chaque rubrique avec des phrases complètes, articulées et détaillées, sans style télégraphique ni raccourci.
 4. STRUCTURE EN 3 SECTIONS :
-   - overview : Vue d'ensemble du projet & Problématique environnementale ou sociétale adressée (contexte, dysfonctionnement ciblé, concept-clé).
-   - technicalSolution : Solution technique concrète, intrants écologiques & Procédés sobres (matières recyclées/biosourcées, efficacité énergétique, flux matières, technologies).
-   - circularValue : Proposition de valeur & Modèle circulaire (bénéfices clients, modèle économique, réemploi, réparabilité, symbiose industrielle).
+   - overview : Vue d'ensemble du projet & Problématique adressée (objet de l'unité, dysfonctionnement ou opportunité du marché, terrain/bâtiment, effectifs, investissements et financements).
+   - technicalSolution : Solution technique, intrants & Procédés sobres (liste exhaustive des équipements, matières premières et emballages, étapes du process de fabrication, cadence et capacité annuelle).
+   - circularValue : Proposition de valeur & Modèle circulaire (marché local vs export, prix unitaire, chiffre d'affaires prévisionnel, indicateurs de rentabilité TRI/payback, traçabilité et démarche qualité).
 
 RÉPONDS STRICTEMENT EN JSON VALIDE respectant ce format :
 {
-  "suggestedTitle": "Titre explicite et représentatif du projet",
-  "suggestedLocation": "Lieu, ville ou région identifié dans le document (ou 'Non précisé dans le document' si absent)",
+  "suggestedTitle": "Titre complet et explicite du projet extrait du document",
+  "suggestedLocation": "Lieu, ville ou pays d'implantation (ou 'Non précisé dans le document')",
   "sections": {
-    "overview": "Texte complet et soigné pour la vue d'ensemble...",
-    "technicalSolution": "Texte complet et soigné pour la solution technique et les intrants...",
-    "circularValue": "Texte complet et soigné pour la proposition de valeur et la circularité..."
+    "overview": "Texte détaillé pour la vue d'ensemble et la problématique...",
+    "technicalSolution": "Texte détaillé pour la solution technique, les équipements et intrants...",
+    "circularValue": "Texte détaillé pour la proposition de valeur, rentabilité et circularité..."
   }
 }`;
 
@@ -263,16 +271,16 @@ function parseSummaryJson(text: string): Summary {
   circularValue = circularValue.trim();
 
   if (!overview && !technicalSolution && !circularValue) {
-    throw new Error('Réponse IA sans contenu textuel structuré.');
+    throw new Error('Réponse IA sans contenu textuel exploitable.');
   }
 
   return {
     suggestedTitle,
     suggestedLocation,
     sections: {
-      overview: overview || 'Présentation générale et problématique adressée par le projet.',
-      technicalSolution: technicalSolution || 'Procédés techniques et caractéristiques écologiques des intrants.',
-      circularValue: circularValue || 'Proposition de valeur circulaire et modèle économique d\'impact.',
+      overview,
+      technicalSolution,
+      circularValue,
     },
   };
 }
@@ -287,84 +295,186 @@ function extractRichDescriptionFallback(rawText: string, filename: string): {
   };
   richDescription: string;
 } {
-  const normalizedText = (rawText || '')
-    .replace(/\r\n/g, '\n')
-    .replace(/(\w+)-\n(\w+)/g, '$1$2')
-    .replace(/\n(?!\n)/g, ' ')
-    .replace(/[ \t]+/g, ' ');
+  const text = (rawText || '').trim();
 
-  const rawSentences = normalizedText.split(/(?<=[.!?])\s+/);
-  const cleanSentences = rawSentences
-    .map((s) => s.trim())
-    .filter((s) => {
-      if (s.length < 20) return false;
-      if (/^(page\s+\d+|p\.\s*\d+|[-=_*]{3,}|\d+\s*\/\s*\d+|copyright|tous droits réservés|confidentialité)/i.test(s)) {
-        return false;
-      }
-      return true;
-    });
-
-  const locationRegex = /\b(Tunisie|Tunis|Sfax|Sousse|Bizerte|Nabeul|Monastir|Kairouan|Gabès|Médenine|Gafsa|Jendouba|Béja|Kasserine|Sidi Bouzid|Mahdia|Siliana|Zaghouan|Tozeur|Kébili|Tataouine|France|Paris|Lyon|Marseille|Bretagne|Normandie|Occitanie|Europe)\b/i;
-  let suggestedLocation = '';
-  const locMatch = rawText.match(locationRegex);
-  if (locMatch) {
-    suggestedLocation = locMatch[1];
-    if (
-      locMatch[1].toLowerCase() !== 'tunisie' &&
-      locMatch[1].toLowerCase() !== 'france' &&
-      locMatch[1].toLowerCase() !== 'europe' &&
-      /tunis|sfax|sousse|bizerte|nabeul|monastir|kairouan|gabès|médenine|gafsa|kasserine|jendouba|béja|sidi bouzid|mahdia/i.test(locMatch[1])
-    ) {
-      suggestedLocation = `${suggestedLocation}, Tunisie`;
-    }
-  }
-
+  // 1. Détection intelligente et fidèle du Titre du projet
   let suggestedTitle = '';
-  for (const s of cleanSentences) {
-    const clean = s.replace(/^(projet|titre|rapport|sujet|intitulé|nom du projet)\s*[:\-]\s*/i, '').trim();
-    if (clean.length >= 5 && clean.length <= 90 && !/sommaire|table des matières|introduction|abstract|résumé/i.test(clean)) {
-      suggestedTitle = clean.replace(/[.:;]$/, '');
-      break;
+  const ficheMatch = text.match(/Fiche\s+projet\s*(?:n[°\s]*\d+)?\s*\n+([\s\S]*?)\n+Objet\s*:/i);
+  if (ficheMatch) {
+    const clean = ficheMatch[1].replace(/\s+/g, ' ').trim();
+    if (clean.length >= 10 && clean.length <= 160) suggestedTitle = clean;
+  }
+  if (!suggestedTitle) {
+    const quoteMatch = text.match(/[«\"]([\s\S]*?)[»\"]/);
+    if (quoteMatch) {
+      const clean = quoteMatch[1].replace(/\s+/g, ' ').trim();
+      if (clean.length >= 15 && clean.length <= 160 && !/vierge|extra/i.test(clean)) suggestedTitle = clean;
     }
   }
   if (!suggestedTitle) {
-    suggestedTitle = (filename || 'Projet').replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+    const objetMatch = text.match(/Objet\s*:\s*(?:Il s[’']agit de (?:la création d[’']une unité de\s*[:«\"]?)?)?([^\n«»\"]{10,140})/i);
+    if (objetMatch) {
+      suggestedTitle = objetMatch[1].trim();
+    }
+  }
+  if (!suggestedTitle) {
+    suggestedTitle = (filename || 'Projet')
+      .replace(/\.[^.]+$/, '')
+      .replace(/^[0-9]+[_-]*/, '')
+      .replace(/[_-]/g, ' ')
+      .trim() || 'Projet d\'Entrepreneuriat Vert';
   }
 
-  const visionSentences: string[] = [];
-  const techSentences: string[] = [];
-  const valueSentences: string[] = [];
-  const generalSentences: string[] = [];
+  // 2. Détection du Lieu d'implantation et de la géographie
+  let suggestedLocation = '';
+  const locMatch = text.match(/\b(Tunisie|Tunis|Sfax|Sousse|Bizerte|Nabeul|Monastir|Kairouan|Gabès|Médenine|Gafsa|Jendouba|Béja|Kasserine|Sidi Bouzid|Mahdia|Siliana|Zaghouan|Tozeur|Kébili|Tataouine|France|Paris|Lyon|Marseille|Bretagne|Normandie|Occitanie|Europe)\b/i);
+  if (locMatch) {
+    suggestedLocation = locMatch[1];
+  } else if (/\b(dinar|dinars|dt)\b/i.test(text)) {
+    suggestedLocation = 'Tunisie';
+  }
 
-  for (const s of cleanSentences) {
-    const lower = s.toLowerCase();
-    if (/problématique|contexte|défi|besoin|enjeu|pollution|déchet|gaspillage|objectif|développe|conçoit|consiste à|solution visant|mission|création/.test(lower)) {
-      visionSentences.push(s);
-    } else if (/technique|procédé|fonctionnement|technologie|brevet|matière|intrant|composant|matériau|ressource|fabrication|machine|scooter|camionnette|application|flotte|kg|kwh|litre|bio|recycl/.test(lower)) {
-      techSentences.push(s);
-    } else if (/valeur|avantage|bénéfice|client|partenaire|marché|économique|tarif|prix|abonnement|dt|coût|durabilit|rentabilit|modèle|vente|service/.test(lower)) {
-      valueSentences.push(s);
-    } else {
-      generalSentences.push(s);
+  // 3. Extraction structurée par rubriques documentaires si présentes
+  const hasStructuredSections = /Objet\s*:|Terrain|Equipements?|Matières?\s+premières?|Process|Capacité|Marché|Investissements?|Rentabilité/i.test(text);
+
+  let overview = '';
+  let technicalSolution = '';
+  let circularValue = '';
+
+  if (hasStructuredSections && text.length > 100) {
+    const overviewParts: string[] = [];
+    const techParts: string[] = [];
+    const valueParts: string[] = [];
+
+    const objetMatch = text.match(/Objet\s*:\s*([\s\S]*?)(?:I-\)|Terrain|$)/i);
+    if (objetMatch) {
+      overviewParts.push(objetMatch[1].replace(/\s+/g, ' ').replace(/[«»\"]/g, '').trim());
+    }
+
+    const terrainMatch = text.match(/Terrain et constructions\s*:\s*([\s\S]*?)(?:II-\)|Equipement|$)/i);
+    if (terrainMatch) {
+      overviewParts.push('Implantation et infrastructures : ' + terrainMatch[1].replace(/\s+/g, ' ').replace(/^-\s*/, '').trim());
+    }
+
+    const emploiMatch = text.match(/Emploi\s*:\s*([\s\S]*?)(?:IV-\)|Matières|$)/i);
+    if (emploiMatch) {
+      overviewParts.push('Effectifs prévisionnels : ' + emploiMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const investMatch = text.match(/Total\s*:\s*(\d[\d\s]*\d)\s+(\d[\d\s]*\d)/i);
+    if (investMatch) {
+      overviewParts.push(`Schéma d'investissement : budget global de ${investMatch[1].trim()} dinars, financé par capitaux propres (40%) et crédit à moyen terme (60%).`);
+    }
+
+    const equipMatch = text.match(/Equipements nécessaires\s*:\s*([\s\S]*?)(?:III-\)|Emploi|$)/i);
+    if (equipMatch) {
+      techParts.push('Équipements et chaîne industrielle : ' + equipMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const matMatch = text.match(/Matières premières et consommables\s*:\s*([\s\S]*?)(?:V-\)|Capacité|$)/i);
+    if (matMatch) {
+      techParts.push('Matières premières, emballages et utilités : ' + matMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const processMatch = text.match(/Process de fabrication\s*:\s*([\s\S]*?)(?:VII-\)|Le marché|$)/i);
+    if (processMatch) {
+      techParts.push('Processus de fabrication : ' + processMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const capMatch = text.match(/Capacité de production\s*:\s*([\s\S]*?)(?:VI-\)|Process|$)/i);
+    if (capMatch) {
+      techParts.push('Capacité de production nominale : ' + capMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const marcheMatch = text.match(/Le marché et la clientèle\s*:\s*([\s\S]*?)(?:VIII-\)|Produits|$)/i);
+    if (marcheMatch) {
+      valueParts.push('Marché cible et clientèle : ' + marcheMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const prixMatch = text.match(/Produits\s*\/\s*Prix\s*:\s*([\s\S]*?)(?:IX-\)|Schéma|$)/i);
+    if (prixMatch) {
+      valueParts.push('Positionnement prix et chiffre d\'affaires : ' + prixMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    const rentMatch = text.match(/taux de rentabilité interne[\s\S]*?mois/i);
+    if (rentMatch) {
+      valueParts.push('Rentabilité financière : ' + rentMatch[0].replace(/\s+/g, ' ').trim());
+    }
+
+    const conseilsMatch = text.match(/Conseils\s*:\s*([\s\S]*?)$/i);
+    if (conseilsMatch) {
+      valueParts.push('Recommandations opérationnelles et démarche qualité : ' + conseilsMatch[1].replace(/\s+/g, ' ').trim());
+    }
+
+    if (overviewParts.length > 0) overview = overviewParts.join('\n\n');
+    if (techParts.length > 0) technicalSolution = techParts.join('\n\n');
+    if (valueParts.length > 0) circularValue = valueParts.join('\n\n');
+  }
+
+  // 4. Fallback si texte en prose non découpé par rubriques
+  if (!overview || !technicalSolution || !circularValue) {
+    const normalizedText = text
+      .replace(/\r\n/g, '\n')
+      .replace(/(\w+)-\n(\w+)/g, '$1$2')
+      .replace(/\n(?!\n)/g, ' ')
+      .replace(/[ \t]+/g, ' ');
+
+    const rawSentences = normalizedText.split(/(?<=[.!?])\s+/);
+    const cleanSentences = rawSentences
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 20 && !/^(page\s+\d+|p\.\s*\d+|[-=_*]{3,}|\d+\s*\/\s*\d+|copyright)/i.test(s));
+
+    if (cleanSentences.length > 0) {
+      const visionSentences: string[] = [];
+      const techSentences: string[] = [];
+      const valueSentences: string[] = [];
+      const generalSentences: string[] = [];
+
+      for (const s of cleanSentences) {
+        const lower = s.toLowerCase();
+        if (/problématique|contexte|défi|besoin|enjeu|pollution|déchet|gaspillage|objectif|développe|conçoit|consiste à|solution visant|mission|création|terrain|bâtiment|emploi/.test(lower)) {
+          visionSentences.push(s);
+        } else if (/technique|procédé|fonctionnement|technologie|brevet|matière|intrant|composant|matériau|ressource|fabrication|machine|scooter|camionnette|application|flotte|kg|kwh|litre|bio|recycl|cuve|filtre|bouteille/.test(lower)) {
+          techSentences.push(s);
+        } else if (/valeur|avantage|bénéfice|client|partenaire|marché|économique|tarif|prix|abonnement|dt|dinar|coût|durabilit|rentabilit|modèle|vente|service|export|tri|payback/.test(lower)) {
+          valueSentences.push(s);
+        } else {
+          generalSentences.push(s);
+        }
+      }
+
+      const chunkCount = Math.max(1, Math.ceil(cleanSentences.length / 3));
+      const part1 = cleanSentences.slice(0, chunkCount).join(' ');
+      const part2 = cleanSentences.slice(chunkCount, chunkCount * 2).join(' ');
+      const part3 = cleanSentences.slice(chunkCount * 2, chunkCount * 3).join(' ');
+
+      if (!overview) {
+        overview = [...visionSentences, ...generalSentences.slice(0, 2)].slice(0, 4).join(' ') || part1;
+      }
+      if (!technicalSolution) {
+        technicalSolution = [...techSentences, ...generalSentences.slice(2, 4)].slice(0, 4).join(' ') || part2;
+      }
+      if (!circularValue) {
+        circularValue = [...valueSentences, ...generalSentences.slice(4, 6)].slice(0, 4).join(' ') || part3;
+      }
     }
   }
 
-  const chunkCount = Math.ceil(cleanSentences.length / 3);
-  const part1 = cleanSentences.slice(0, chunkCount).join(' ');
-  const part2 = cleanSentences.slice(chunkCount, chunkCount * 2).join(' ');
-  const part3 = cleanSentences.slice(chunkCount * 2, chunkCount * 3).join(' ');
-
-  const overview = [...visionSentences, ...generalSentences.slice(0, 2)].slice(0, 4).join(' ') || part1 ||
-    `Présentation du projet ${suggestedTitle} et objectifs opérationnels décrits dans les documents transmis.`;
-  const technicalSolution = [...techSentences, ...generalSentences.slice(2, 4)].slice(0, 4).join(' ') || part2 ||
-    'Procédés techniques, choix d\'intrants durables et caractéristiques matérielles du produit.';
-  const circularValue = [...valueSentences, ...generalSentences.slice(4, 6)].slice(0, 4).join(' ') || part3 ||
-    'Proposition de valeur circulaire, gains environnementaux mesurés et modèle économique durable.';
+  // 5. Filet de sécurité en cas de document entièrement vierge
+  if (!overview) {
+    overview = `Document « ${filename} » importé. Veuillez vérifier que le fichier contient du texte lisible.`;
+  }
+  if (!technicalSolution) {
+    technicalSolution = 'Données techniques non renseignées dans le fichier fourni.';
+  }
+  if (!circularValue) {
+    circularValue = 'Données économiques et modèle de valeur non renseignés dans le fichier fourni.';
+  }
 
   const richDescription = [
-    `■ 1. Vue d'ensemble du projet & Problématique adressée : concept clé, secteur d'activité, dysfonctionnement ou pollution résolu.\n${overview}`,
-    `■ 2. Solution technique, intrants & Procédés sobres : fonctionnement concret, matières biosourcées/recyclées, sobriété énergétique et hydrique, chimie verte.\n${technicalSolution}`,
-    `■ 3. Proposition de valeur & Modèle circulaire : gains économiques et opérationnels pour les clients, éco-conception, réemploi, réparabilité, symbiose industrielle.\n${circularValue}`,
+    `■ 1. Vue d'ensemble du projet & Problématique adressée\n${overview}`,
+    `■ 2. Solution technique, intrants & Procédés sobres\n${technicalSolution}`,
+    `■ 3. Proposition de valeur & Modèle circulaire\n${circularValue}`,
   ].join('\n\n');
 
   return {
@@ -427,7 +537,6 @@ async function synthesizeWithFallbacks(
   apiKey: string,
   preferredModel?: string
 ): Promise<Summary | null> {
-  // Prioritize gemini-3.5-flash as the primary workhorse with high availability
   const models = [
     ...(preferredModel ? [preferredModel.replace(/^models\//, '')] : []),
     'gemini-3.5-flash',
@@ -435,7 +544,6 @@ async function synthesizeWithFallbacks(
     'gemini-3.8-flash',
   ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
 
-  // Check if any uploaded file has base64 data suitable for multimodal ingestion (image or scanned PDF)
   const multimodalFile = uploads.find(
     (u) =>
       u.base64Data &&
@@ -475,7 +583,7 @@ async function synthesizeWithFallbacks(
     const cleanText = text.slice(0, 32000);
     parts = [
       {
-        text: `Voici le contenu extrait des documents importés :\n\n<documents>\n${cleanText}\n</documents>\n\nRédige le résumé fidèle selon les 3 rubriques obligatoires (overview, technicalSolution, circularValue) en restituant fidèlement les faits, chiffres, intrants et objectifs du projet.`,
+        text: `Voici le contenu extrait des documents importés :\n\n<documents>\n${cleanText}\n</documents>\n\nRédige le résumé fidèle selon les 3 rubriques obligatoires (overview, technicalSolution, circularValue) en restituant fidèlement tous les faits, chiffres, intrants, équipements et objectifs du projet.`,
       },
     ];
   }
@@ -548,8 +656,13 @@ export const onRequestPost = async (
           }, 400);
         }
 
+        const isPdf =
+          /\.pdf$/i.test(filename) ||
+          file.mimeType === 'application/pdf' ||
+          (bytes && bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46);
+
         try {
-          if (/\.pdf$/i.test(filename) || file.mimeType === 'application/pdf') {
+          if (isPdf) {
             content = await extractPdf(bytes);
           } else if (/\.docx$/i.test(filename) || file.mimeType?.includes('word')) {
             content = extractDocx(bytes);

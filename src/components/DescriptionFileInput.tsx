@@ -78,6 +78,17 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             } catch (e) {
               console.warn('Local file text read failed:', e);
             }
+          } else if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+            try {
+              const { extractText } = await import('unpdf');
+              const buf = await file.arrayBuffer();
+              const res = await extractText(new Uint8Array(buf));
+              if (res && res.text) {
+                localText = Array.isArray(res.text) ? res.text.join('\n\n') : String(res.text);
+              }
+            } catch (pdfErr) {
+              console.warn('Client-side PDF text extraction skipped:', pdfErr);
+            }
           }
 
           const reader = new FileReader();
