@@ -67,7 +67,41 @@ let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
 
 // Valid model names per Gemini API SDK guidelines
-const DEFAULT_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+const DEFAULT_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+let discoveredGeminiModels: string[] = [];
+let geminiModelsExpiresAt = 0;
+
+async function getAvailableGeminiModels(): Promise<string[]> {
+  if (Date.now() < geminiModelsExpiresAt && discoveredGeminiModels.length) return discoveredGeminiModels;
+  const key = process.env.GEMINI_API_KEY?.trim();
+  if (!key) throw new Error('GEMINI_API_KEY non configurée.');
+  const available: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models');
+    url.searchParams.set('pageSize', '1000');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const response = await fetch(url, {
+      headers: { 'x-goog-api-key': key },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) {
+      const details = (await response.text()).slice(0, 300);
+      throw new Error(`Impossible de consulter les modèles Gemini (HTTP ${response.status}) : ${details}`);
+    }
+    const data: any = await response.json();
+    for (const model of data.models || []) {
+      if (model.supportedGenerationMethods?.includes('generateContent')) {
+        available.push(String(model.name).replace(/^models\//, ''));
+      }
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  if (!available.length) throw new Error('Aucun modèle compatible generateContent accessible à cette clé API.');
+  discoveredGeminiModels = available;
+  geminiModelsExpiresAt = Date.now() + 10 * 60 * 1000;
+  return available;
+}
 
 function hasGeminiKey(): boolean {
   return !!process.env.GEMINI_API_KEY?.trim();
@@ -194,7 +228,21 @@ async function generateContentWithResilience(options: {
   }
 
   for (const provider of providers) {
-    for (const modelName of models) {
+    let providerModels = models;
+    if (provider === 'gemini') {
+      try {
+        const available = await promiseWithTimeout(getAvailableGeminiModels(), 10000, 'Délai de découverte Gemini dépassé');
+        const preferred = models.filter((name) => available.includes(name));
+        providerModels = preferred.length ? preferred : available.filter((name) => /flash/i.test(name));
+        if (!providerModels.length) providerModels = available;
+        providerModels = providerModels.slice(0, 3);
+      } catch (err: any) {
+        lastError = err;
+        console.warn('[AI Engine] Découverte des modèles impossible :', err?.message);
+        continue;
+      }
+    }
+    for (const modelName of providerModels) {
       const elapsed = Date.now() - startTime;
       if (elapsed >= totalTimeout) break;
       const attemptTimeout = Math.min(singleTimeout, totalTimeout - elapsed);
@@ -227,7 +275,7 @@ async function generateContentWithResilience(options: {
         const isAuthOrQuota =
           /quota|429|exhausted|API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
         if (isAuthOrQuota) {
-          if (modelName === models[models.length - 1]) {
+          if (modelName === providerModels[providerModels.length - 1]) {
             if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
             else gatewayUnavailableUntil = Date.now() + 5 * 60 * 1000;
             break;
@@ -1018,7 +1066,7 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
     try {
       const { response, modelUsed } = await generateContentWithResilience({
         contents: userPrompt,
-        preferredModels: ['gemini-3.8-flash', 'gemini-3.1-flash-lite'],
+        preferredModels: DEFAULT_MODELS,
         singleAttemptTimeoutMs: 12000,
         totalTimeoutMs: 20000,
         config: {
@@ -1441,7 +1489,7 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
     try {
       const { response, modelUsed } = await generateContentWithResilience({
         contents,
-        preferredModels: ['gemini-3.8-flash', 'gemini-3.1-flash-lite'],
+        preferredModels: DEFAULT_MODELS,
         singleAttemptTimeoutMs: 12000,
         totalTimeoutMs: 20000,
         config: {
