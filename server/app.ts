@@ -1031,7 +1031,12 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
 2. Aspects & impacts environnementaux : Analyse approfondie des aspects et impacts environnementaux (directs et indirects, positifs et négatifs) sur les écosystèmes, l'air, l'eau, le climat, les sols et la biodiversité. Évaluation normée des AES selon la matrice ISO 14001 (F, G, S, M), quantification des impacts par phase du cycle de vie (ACV ISO 14040/14044), écotoxicité (ERA), flux de matière (MFA) et leviers d'atténuation d'impacts.
 3. Aspects & impacts sociaux et sociétaux : Analyse approfondie des impacts sociaux et sociétaux directs et indirects : santé et sécurité des travailleurs, santé publique et riverains (exposition poussières PM, produits toxiques, bruit), création d'emplois locaux pérennes, retombées communautaires, gouvernance partagée éthique (ISO 26000) et accompagnement vers une transition juste.
 4. Intégration de l'entrepreneuriat vert : Analyse économique critique, modèles de rupture technologique nécessaires (ex: recyclage d'eau fermé ZLD, filtres-presses, solaire dédié).
-5. Alignement ODD (Objectifs de Développement Durable - ONU & Pacte Mondial Réseau France) : RÈGLE IMPÉRATIVE POUR LES PROJETS EDTECH / ÉDUCATION : Pour tout projet relevant de l'éducation, de la formation, de l'EdTech, de l'inclusion (ex: enfants TSA, DYS) ou de la pédagogie, tu DOIS obligatoirement inclure l'**ODD 4 (Éducation de qualité)** en premier et en position centrale (avec les cibles 4.1, 4.2, 4.5 et 4.7 sur l'accès équitable, l'inclusion des personnes vulnérables et l'éducation adaptée), complété par les autres ODD pertinents (ex: ODD 3, ODD 8, ODD 9, ODD 10, ODD 12). Pour chaque ODD identifié, explicite précisément les sous-cibles de l'ONU concernées et la contribution opérationnelle concrète du projet sur le terrain.
+5. Alignement ODD (Objectifs de Développement Durable - Méthodologie normée SDG Compass, ONU Agenda 2030, GRI & CSRD/ESRS) :
+   - RÈGLE DE MATÉRIALITÉ & NIVEAU DE CONTRIBUTION : Distinguer rigoureusement les contributions 'Majeur' (cœur de métier / impact direct mesurable) des contributions 'Secondaire' (impact indirect / mesures transversales). Éviter le saupoudrage non justifié (tolérance zéro au SDG-washing).
+   - CODES OFFICIELS ET INDICATEURS DE L'ONU : Pour chaque ODD retenu, renseigner impérativement les sous-cibles officielles (ex: 12.5, 13.2, 4.4, 6.4), les libellés de l'Agenda 2030, ainsi que l'indicateur officiel ONU associé (ex: 'Indicateur ONU 12.5.1 (Taux de valorisation matière)').
+   - PRINCIPE DNSH (Do No Significant Harm / Non-nuisance importante) : Fournir pour chaque ODD une analyse DNSH garantissant que l'atteinte de cette cible ne cause aucun dommage disproportionné sur les autres écosystèmes (ex: consommation énergétique d'un service digital, recyclage batterie solaire, etc.).
+   - KPI DE SUIVI ET STANDARDS GRI / CSRD : Spécifier au moins 1 KPI d'impact chiffrable et les liens normatifs pertinents (ex: GRI 302, GRI 303, GRI 305, GRI 306, ESRS E1, ESRS E5, ESRS S1).
+   - RÈGLE IMPÉRATIVE POUR LES PROJETS EDTECH / ÉDUCATION : Pour tout projet relevant de l'éducation, de la formation, de l'EdTech, de l'inclusion (ex: enfants TSA, DYS) ou de la pédagogie, tu DOIS obligatoirement inclure l'**ODD 4 (Éducation de qualité)** en premier et au niveau 'Majeur' (avec les sous-cibles 4.1, 4.4, 4.5 et 4.7), complété par les ODD 10, 8 et 12.
 6. Indicateurs d'impact : Bilan carbone normé selon ISO 14067:2018 (par unité fonctionnelle) et ISO 14064-1:2018 (Catégories 1 à 6). Analyse de cycle de vie étape par étape (Approvisionnement Cat 4, Fabrication Cat 1-2, Conditionnement Cat 4, Transport Cat 3, Utilisation Cat 5, Fin de vie Cat 5) avec exclusion stricte de toute compensation carbone fictive. Pour benchmarkComparison : si le projet appartient à une industrie lourde ou polluante, totalCarbonKgCO2e DOIT être STRICTEMENT SUPÉRIEUR à industryAverageKgCO2e (+20% à +60% de sur-émissions) ; si éco-innovation vertueuse, totalCarbonKgCO2e DOIT être INFÉRIEUR (-20% à -65%). Actions de décarbonation quantifiées (P1/P2/P3), intensité eau chiffrée.
 7. Financements et labels verts : Statut d'éligibilité réel (exclusion formelle des labels verts si activité polluante), fonds de mise en conformité et dépollution (FODEP, BERD Climat).
 8. Plan d'action prioritaire : Actions concrètes d'urgence (0-12 mois) priorisées avec livrables opérationnels pour la neutralisation des AES.
@@ -1190,8 +1195,27 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
                 properties: {
                   oddNumber: { type: Type.INTEGER, description: 'Numéro de l\'ODD (ex: 12)' },
                   title: { type: Type.STRING, description: 'Titre de l\'ODD' },
-                  contribution: { type: Type.STRING, description: 'Contribution concrète du projet' },
-                  targets: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Sous-cibles ODD' },
+                  level: { type: Type.STRING, enum: ['Majeur', 'Secondaire'], description: 'Niveau de contribution : Majeur (cœur de métier / direct) ou Secondaire (transverse)' },
+                  contribution: { type: Type.STRING, description: 'Contribution concrète et opérationnelle du projet' },
+                  targets: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Sous-cibles ODD succinctes' },
+                  targetsDetail: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        code: { type: Type.STRING, description: 'Code de la sous-cible ONU (ex: 12.5)' },
+                        title: { type: Type.STRING, description: 'Intitulé officiel de la sous-cible' },
+                        indicator: { type: Type.STRING, description: 'Indicateur officiel ONU (ex: Indicateur ONU 12.5.1)' },
+                        targetKpi: { type: Type.STRING, description: 'Objectif chiffré / KPI cible' },
+                      },
+                      required: ['code', 'title'],
+                    },
+                    description: 'Détail technique des sous-cibles ONU',
+                  },
+                  kpis: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Indicateurs clés de performance suivis' },
+                  dnshAssessment: { type: Type.STRING, description: 'Analyse Do No Significant Harm (Absence de préjudice important sur les autres ODD)' },
+                  griStandards: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Correspondance standards GRI' },
+                  csrdEsrs: { type: Type.STRING, description: 'Norme CSRD/ESRS associée' },
                 },
                 required: ['oddNumber', 'title', 'contribution', 'targets'],
               },

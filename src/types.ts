@@ -47,11 +47,24 @@ export interface GreenEntrepreneurshipIntegration {
   circularValueProposition: string;
 }
 
+export interface SdgTargetDetail {
+  code: string;
+  title: string;
+  indicator?: string;
+  targetKpi?: string;
+}
+
 export interface SdgAlignmentItem {
   oddNumber: number;
   title: string;
   contribution: string;
   targets: string[];
+  level?: 'Majeur' | 'Secondaire';
+  targetsDetail?: SdgTargetDetail[];
+  kpis?: string[];
+  dnshAssessment?: string;
+  griStandards?: string[];
+  csrdEsrs?: string;
 }
 
 export interface LifecycleStageCarbon {

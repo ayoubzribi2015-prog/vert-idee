@@ -338,23 +338,32 @@ export async function generateWordReport(project: ProjectAudit): Promise<Blob> {
             rows: [
               new TableRow({
                 children: [
-                  createHeaderCell('ODD Cible'),
+                  createHeaderCell('ODD & Niveau'),
                   createHeaderCell('Intitulé de l\'Objectif'),
-                  createHeaderCell('Contribution concrète du projet'),
-                  createHeaderCell('Sous-cibles adressées'),
+                  createHeaderCell('Contribution concrète & KPIs'),
+                  createHeaderCell('Sous-cibles ONU & Garantie DNSH'),
                 ],
               }),
-              ...project.sdgAlignment.map(
-                (odd) =>
-                  new TableRow({
-                    children: [
-                      createDataCell(`ODD ${odd.oddNumber}`, true),
-                      createDataCell(odd.title, true),
-                      createDataCell(odd.contribution),
-                      createDataCell(odd.targets.join(', ')),
-                    ],
-                  })
-              ),
+              ...project.sdgAlignment.map((odd) => {
+                const kpisText = odd.kpis && odd.kpis.length > 0 ? `\n\nKPIs suivis :\n• ${odd.kpis.join('\n• ')}` : '';
+                const targetsDetailText =
+                  odd.targetsDetail && odd.targetsDetail.length > 0
+                    ? odd.targetsDetail
+                        .map((td) => `• Cible ${td.code} : ${td.title}${td.indicator ? ` [${td.indicator}]` : ''}${td.targetKpi ? ` → Objectif : ${td.targetKpi}` : ''}`)
+                        .join('\n')
+                    : odd.targets.join(', ');
+                const dnshText = odd.dnshAssessment ? `\n\nAnalyse DNSH (Non-nuisance) :\n${odd.dnshAssessment}` : '';
+                const standardsText = [odd.griStandards?.join(', '), odd.csrdEsrs].filter(Boolean).join(' | ');
+
+                return new TableRow({
+                  children: [
+                    createDataCell(`ODD ${odd.oddNumber}\n[${odd.level || 'Direct'}]${standardsText ? `\n(${standardsText})` : ''}`, true),
+                    createDataCell(odd.title, true),
+                    createDataCell(`${odd.contribution}${kpisText}`),
+                    createDataCell(`${targetsDetailText}${dnshText}`),
+                  ],
+                });
+              }),
             ],
           }),
 
