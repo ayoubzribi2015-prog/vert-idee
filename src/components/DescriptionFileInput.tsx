@@ -124,7 +124,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
         if (res.status === 504 || res.status === 502) {
           throw new Error('Le délai de lecture a expiré. Veuillez vérifier que les fichiers ne sont pas corrompus.');
         }
-        throw new Error(`Erreur réseau (${res.status}) lors de l'extraction des documents.`);
+        throw new Error(res.status === 404 ? "Service d'extraction introuvable (404). Vérifiez le déploiement de l'API sur Render et le proxy Cloudflare Pages." : `Erreur réseau (${res.status}) lors de l'extraction des documents.`);
       }
 
       if (!res.ok || !data?.success) {
