@@ -1,67 +1,22 @@
-import express, { type Request, type Response } from 'express';
-import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { createApp, type Request, type Response } from './express-compat.ts';
 import { GoogleGenAI, Type } from '@google/genai';
 import { generateText, Output, jsonSchema, type ModelMessage } from 'ai';
-import path from 'path';
-import dotenv from 'dotenv';
+import { getDocumentProxy, extractText } from 'unpdf';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import { generateExpertAuditFallback } from '../src/utils/fallbackExpertAudit.ts';
-import firebaseConfig from '../firebase-applet-config.json';
 
-dotenv.config({ path: ['.env.development.local', '.env.local', '.env'], quiet: true });
-
-// Firebase Admin needs Application Default Credentials; without them the gRPC client
-// throws asynchronously and kills the process, so only enable it when credentials exist.
-const hasAdminCredentials = !!(
-  process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-  process.env.K_SERVICE ||
-  process.env.GOOGLE_CLOUD_PROJECT ||
-  process.env.FUNCTION_TARGET
-);
-
-let firestoreInstance: any = null;
-if (hasAdminCredentials) {
-  try {
-    if (!getApps().length) {
-      initializeApp({ projectId: firebaseConfig.projectId });
-    }
-    firestoreInstance = getFirestore(firebaseConfig.firestoreDatabaseId);
-  } catch (err: any) {
-    console.warn('[Firebase Admin] Initialisation ignorée (pas de credentials valides):', err?.message);
-    firestoreInstance = null;
-  }
-}
+// Cloudflare Workers : pas d'accès Firestore Admin (gRPC/Node). Les projets globaux sont
+// conservés en mémoire (les projets utilisateur sont persistés côté client via le SDK Firebase).
+const firestoreInstance: any = null;
 
 const firestore = {
-  collection(name: string) {
-    if (!firestoreInstance) throw new Error('Firestore Admin indisponible (pas de credentials).');
-    return firestoreInstance.collection(name);
+  collection(_name: string): any {
+    throw new Error('Firestore Admin indisponible sur Cloudflare Workers.');
   },
 };
 
-const app = express();
-
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Middleware de gestion propre des erreurs de parsing JSON et de taille de payload
-app.use((err: any, req: Request, res: Response, next: any) => {
-  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
-    return res.status(413).json({
-      success: false,
-      error: 'Le fichier envoyé est trop volumineux. La taille maximale autorisée est de 15 Mo.',
-    });
-  }
-  if (err instanceof SyntaxError && 'body' in err) {
-    return res.status(400).json({
-      success: false,
-      error: 'Format de requête JSON invalide.',
-    });
-  }
-  next(err);
-});
+const app = createApp();
 
 let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
@@ -91,7 +46,7 @@ const ai = new GoogleGenAI({
  * Promesse avec délai d'expiration strict (timeout)
  */
 function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMsg: string): Promise<T> {
-  let timer: NodeJS.Timeout;
+  let timer: ReturnType<typeof setTimeout>;
   const timeoutPromise = new Promise<T>((_, reject) => {
     timer = setTimeout(() => reject(new Error(errorMsg)), timeoutMs);
   });
@@ -274,7 +229,7 @@ async function saveProjectToFirestore(project: any): Promise<void> {
   });
 }
 
-app.get('/api/ai-status', async (req: express.Request, res: express.Response) => {
+app.get('/api/ai-status', async (req: Request, res: Response) => {
   const status: Record<string, any> = {
     geminiKeyConfigured: hasGeminiKey(),
     gatewayConfigured: hasGatewayCredentials(),
@@ -295,12 +250,12 @@ app.get('/api/ai-status', async (req: express.Request, res: express.Response) =>
 });
 
 // REST API for Cloud History
-app.get('/api/projects', async (req: express.Request, res: express.Response) => {
+app.get('/api/projects', async (req: Request, res: Response) => {
   const list = await readProjects();
   res.json({ success: true, data: list });
 });
 
-app.get('/api/projects/:id', async (req: express.Request, res: express.Response) => {
+app.get('/api/projects/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const docData = await withFirestoreTimeout(async () => {
     const doc = await firestore.collection(GLOBAL_PROJECTS_COLLECTION).doc(id).get();
@@ -320,7 +275,7 @@ app.get('/api/projects/:id', async (req: express.Request, res: express.Response)
   res.status(404).json({ success: false, error: 'Projet introuvable.' });
 });
 
-app.post('/api/projects', async (req: express.Request, res: express.Response) => {
+app.post('/api/projects', async (req: Request, res: Response) => {
   try {
     const project = req.body;
     if (!project || !project.title) {
@@ -340,7 +295,7 @@ app.post('/api/projects', async (req: express.Request, res: express.Response) =>
   }
 });
 
-app.put('/api/projects/:id', async (req: express.Request, res: express.Response) => {
+app.put('/api/projects/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -358,7 +313,7 @@ app.put('/api/projects/:id', async (req: express.Request, res: express.Response)
   }
 });
 
-app.delete('/api/projects/:id', async (req: express.Request, res: express.Response) => {
+app.delete('/api/projects/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     inMemoryProjects.delete(id);
@@ -370,23 +325,6 @@ app.delete('/api/projects/:id', async (req: express.Request, res: express.Respon
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
-// Chargement différé de pdf-parse : pdfjs-dist exige DOMMatrix/Path2D, absents de Node
-// en serverless. `pdf-parse/worker` les polyfille via @napi-rs/canvas et fournit le worker
-// en data URL ; l'import différé évite qu'un échec de chargement ne casse toute l'API.
-let pdfParsePromise: Promise<typeof import('pdf-parse').PDFParse> | null = null;
-function loadPDFParse() {
-  pdfParsePromise ??= (async () => {
-    const { getData } = await import('pdf-parse/worker');
-    const { PDFParse } = await import('pdf-parse');
-    PDFParse.setWorker(getData());
-    return PDFParse;
-  })().catch((err) => {
-    pdfParsePromise = null;
-    throw err;
-  });
-  return pdfParsePromise;
-}
 
 /**
  * Analyse sémantique locale de secours garantissant des phrases complètes,
@@ -495,17 +433,17 @@ function extractRichDescriptionFallback(rawText: string, filename: string): {
  * Extrait le texte brut depuis un fichier (PDF, DOCX, XLSX, TXT)
  */
 async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType?: string, base64Data?: string): Promise<string> {
-  const ext = path.extname(filename || '').toLowerCase();
+  const dot = (filename || '').lastIndexOf('.');
+  const ext = dot >= 0 ? (filename || '').slice(dot).toLowerCase() : '';
   let extractedText = '';
 
   if (ext === '.pdf' || mimeType === 'application/pdf') {
     try {
-      const PDFParse = await loadPDFParse();
-      const parser = new PDFParse({ data: buffer });
-      const parsedResult = await parser.getText();
-      extractedText = typeof parsedResult === 'string' ? parsedResult : (parsedResult?.text || '');
+      const pdf = await getDocumentProxy(new Uint8Array(buffer));
+      const { text } = await extractText(pdf, { mergePages: true });
+      extractedText = String(text || '');
     } catch (pdfErr: any) {
-      console.warn('[File Extract] Erreur pdf-parse:', pdfErr?.message);
+      console.warn('[File Extract] Erreur unpdf:', pdfErr?.message);
     }
 
     if (!extractedText || extractedText.trim().length < 40) {
@@ -598,7 +536,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
 }
 
 // Endpoint d'extraction et de synthèse selon les 3 piliers méthodologiques
-app.post('/api/extract-file', async (req: express.Request, res: express.Response) => {
+app.post('/api/extract-file', async (req: Request, res: Response) => {
   try {
     const rawFiles = Array.isArray(req.body.files) && req.body.files.length > 0
       ? req.body.files
@@ -797,7 +735,7 @@ function normalizeDescriptionKey(desc: string, loc: string, answers?: any, fullD
 }
 
 // Expert Ecological Analysis API with EXACTLY the 8 required sections
-app.post('/api/analyze', async (req: express.Request, res: express.Response) => {
+app.post('/api/analyze', async (req: Request, res: Response) => {
   try {
     const { title, description, location, sector, targetAudience, businessModel, lifeCycleDetails, fullDocumentContent } = req.body;
 
@@ -1293,7 +1231,7 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
 });
 
 // Specialized Green Entrepreneurship AI Assistant Endpoint
-app.post('/api/chat', async (req: express.Request, res: express.Response) => {
+app.post('/api/chat', async (req: Request, res: Response) => {
   try {
     const { message, history, projectContext } = req.body;
 
