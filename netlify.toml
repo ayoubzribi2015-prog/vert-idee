@@ -1,0 +1,17 @@
+[build]
+  command = "bun run build"
+  publish = "dist"
+
+[functions]
+  node_bundler = "esbuild"
+  # Packages with native/worker files or dynamic requires are shipped as-is instead of bundled.
+  external_node_modules = ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas", "firebase-admin", "mammoth", "xlsx"]
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[dev]
+  command = "vite --port 5173"
+  targetPort = 5173

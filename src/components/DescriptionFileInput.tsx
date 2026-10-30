@@ -115,10 +115,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
           throw new Error('Les documents dépassent la taille maximale autorisée (15 Mo).');
         }
         if (res.status === 504 || res.status === 502) {
-          throw new Error('Le délai de lecture a expiré. Veuillez réessayer.');
-        }
-        if (res.status === 405) {
-          throw new Error("L'API backend est en cours de redéploiement. Veuillez rafraîchir la page et réessayer.");
+          throw new Error('Le délai de lecture a expiré. Veuillez vérifier que les fichiers ne sont pas corrompus.');
         }
         throw new Error(`Erreur réseau (${res.status}) lors de l'extraction des documents.`);
       }
