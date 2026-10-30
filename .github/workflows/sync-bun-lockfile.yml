@@ -3,6 +3,9 @@ name: Synchronize Bun lockfile and verify build
 on:
   push:
     branches:
+      - main
+      - master
+      - 'fix/**'
       - fix/bun-lockfile-cloudflare-20261030
   workflow_dispatch:
 
