@@ -110,10 +110,16 @@ async function callGemini(input: string, apiKey: string, model: string): Promise
       }),
       signal: controller.signal
     });
-    if (!response.ok) throw new Error(`Gemini HTTP ${response.status}`);
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({})) as any;
+      console.error('Gemini API error', { status: response.status, code: details?.error?.status, model });
+      throw new Error('GEMINI_HTTP_' + response.status);
+    }
     const result: any = await response.json();
     const text = (result.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || '').join('');
-    const parsed = JSON.parse(text);
+    if (!text.trim()) throw new Error('GEMINI_EMPTY_RESPONSE_' + (result.candidates?.[0]?.finishReason || 'UNKNOWN'));
+    let parsed: any;
+    try { parsed = JSON.parse(text); } catch { throw new Error('GEMINI_INVALID_JSON'); }
     if (typeof parsed.suggestedTitle !== 'string' || typeof parsed.suggestedLocation !== 'string' ||
         !parsed.sections || !['overview', 'technicalSolution', 'circularValue'].every(k => typeof parsed.sections[k] === 'string' && parsed.sections[k].trim())) {
       throw new Error('Invalid AI response');
@@ -122,15 +128,9 @@ async function callGemini(input: string, apiKey: string, model: string): Promise
   } finally { clearTimeout(timeout); }
 }
 async function synthesize(text: string, apiKey: string, model: string): Promise<Summary> {
-  const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += 11000) chunks.push(text.slice(i, i + 11000));
-  if (chunks.length > 30) throw new Error('Document too long');
-  const summaries: Summary[] = [];
-  for (const [index, chunk] of chunks.entries()) {
-    summaries.push(await callGemini(`Segment ${index + 1}/${chunks.length}. Résume uniquement les faits pertinents :\\n<document>\\n${chunk}\\n</document>`, apiKey, model));
-  }
-  if (summaries.length === 1) return summaries[0];
-  return callGemini('Fusionne les résumés partiels en une seule synthèse cohérente, sans doublons ni invention :\\n' + JSON.stringify(summaries), apiKey, model);
+  if (text.length > 350000) throw new Error('DOCUMENT_TOO_LONG');
+  // Gemini supports long context; one request avoids serial calls and repeated timeouts.
+  return callGemini('Analyse ce document et produis une synthèse unique, concise et sans répétitions.\\n<document>\\n' + text + '\\n</document>', apiKey, model);
 }
 
 export const onRequestPost = async (
@@ -261,7 +261,19 @@ export const onRequestPost = async (
       });
     } catch (error) {
       console.error('Gemini synthesis failed', error);
-      return respond({ success: false, code: 'AI_SUMMARIZATION_FAILED', error: 'La synthèse IA a échoué. Vérifiez Gemini et réessayez.' }, 502);
+      const reason = error instanceof Error ? error.message : 'UNKNOWN';
+      const messages: Record<string, string> = {
+        GEMINI_HTTP_400: 'Requête Gemini refusée (400). Vérifiez le modèle et la configuration.',
+        GEMINI_HTTP_401: 'Clé API Gemini non autorisée (401).',
+        GEMINI_HTTP_403: 'Accès Gemini refusé (403). Vérifiez les restrictions de la clé et le projet Google.',
+        GEMINI_HTTP_404: 'Modèle Gemini introuvable (404). Vérifiez GEMINI_MODEL.',
+        GEMINI_HTTP_429: 'Quota Gemini atteint (429). Réessayez plus tard ou vérifiez votre quota.',
+        GEMINI_HTTP_503: 'Service Gemini temporairement indisponible (503).',
+        GEMINI_INVALID_JSON: 'Gemini a renvoyé une réponse JSON invalide.',
+        DOCUMENT_TOO_LONG: 'Document trop volumineux pour cette synthèse.',
+      };
+      const diagnostic = /^GEMINI_HTTP_\\d+$/.test(reason) ? reason : (reason === 'AbortError' ? 'GEMINI_TIMEOUT' : reason);
+      return respond({ success: false, code: 'AI_SUMMARIZATION_FAILED', diagnostic, error: messages[diagnostic] || 'La synthèse IA a échoué. Consultez les journaux Cloudflare.' }, 502);
     }
   } catch (error) {
     console.error('Document processing error:', error);
