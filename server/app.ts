@@ -474,7 +474,9 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
     }
   } else if (ext === '.docx' || ext === '.doc' || mimeType?.includes('word')) {
     try {
-      const mammothResult = await mammoth.extractRawText({ buffer });
+      const mammothResult = await mammoth.extractRawText({
+        arrayBuffer: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+      });
       extractedText = mammothResult.value || '';
     } catch (wordErr: any) {
       console.warn('[File Extract] Erreur extraction Word (mammoth):', wordErr?.message);
