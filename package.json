@@ -37,7 +37,8 @@
     "typescript": "^7.0.2",
     "unpdf": "^1.9.1",
     "vite": "^8.3.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
