@@ -104,7 +104,12 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          files: payloadFiles.map(({ filename, mimeType, base64Data }) => ({ filename, mimeType, base64Data })),
+          files: payloadFiles.map(({ filename, mimeType, base64Data, localText }) => ({
+            filename,
+            mimeType,
+            base64Data,
+            localText,
+          })),
         }),
       });
 

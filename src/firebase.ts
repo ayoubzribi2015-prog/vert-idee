@@ -105,13 +105,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Test connection on boot as requested by skill (non-blocking)
 export async function testFirestoreConnection() {
-  try {
-    // Utiliser un getDoc standard avec un timeout court ou ignorer silencieusement si hors-ligne
-    const docRef = doc(db, 'test', 'connection');
-    await getDoc(docRef).catch(() => {});
-  } catch (error) {
-    // Mode silencieux : l'application fonctionne parfaitement en mode hors-ligne ou local
-  }
+  // Silent check: no forced network blocking call on startup
+  return Promise.resolve();
 }
 
 // Sign in with Google (Gmail)

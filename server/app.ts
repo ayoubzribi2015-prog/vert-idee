@@ -1,22 +1,67 @@
-import { createApp, type Request, type Response } from './express-compat.ts';
+import express, { type Request, type Response } from 'express';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import { GoogleGenAI, Type } from '@google/genai';
 import { generateText, Output, jsonSchema, type ModelMessage } from 'ai';
-import { getDocumentProxy, extractText } from 'unpdf';
+import path from 'path';
+import dotenv from 'dotenv';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import { generateExpertAuditFallback } from '../src/utils/fallbackExpertAudit.ts';
+import firebaseConfig from '../firebase-applet-config.json';
 
-// Cloudflare Workers : pas d'accès Firestore Admin (gRPC/Node). Les projets globaux sont
-// conservés en mémoire (les projets utilisateur sont persistés côté client via le SDK Firebase).
-const firestoreInstance: any = null;
+dotenv.config({ path: ['.env.development.local', '.env.local', '.env'], quiet: true });
+
+// Firebase Admin needs Application Default Credentials; without them the gRPC client
+// throws asynchronously and kills the process, so only enable it when credentials exist.
+const hasAdminCredentials = !!(
+  process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+  process.env.K_SERVICE ||
+  process.env.GOOGLE_CLOUD_PROJECT ||
+  process.env.FUNCTION_TARGET
+);
+
+let firestoreInstance: any = null;
+if (hasAdminCredentials) {
+  try {
+    if (!getApps().length) {
+      initializeApp({ projectId: firebaseConfig.projectId });
+    }
+    firestoreInstance = getFirestore(firebaseConfig.firestoreDatabaseId);
+  } catch (err: any) {
+    console.warn('[Firebase Admin] Initialisation ignorée (pas de credentials valides):', err?.message);
+    firestoreInstance = null;
+  }
+}
 
 const firestore = {
-  collection(_name: string): any {
-    throw new Error('Firestore Admin indisponible sur Cloudflare Workers.');
+  collection(name: string) {
+    if (!firestoreInstance) throw new Error('Firestore Admin indisponible (pas de credentials).');
+    return firestoreInstance.collection(name);
   },
 };
 
-const app = createApp();
+const app = express();
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Middleware de gestion propre des erreurs de parsing JSON et de taille de payload
+app.use((err: any, req: Request, res: Response, next: any) => {
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({
+      success: false,
+      error: 'Le fichier envoyé est trop volumineux. La taille maximale autorisée est de 15 Mo.',
+    });
+  }
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({
+      success: false,
+      error: 'Format de requête JSON invalide.',
+    });
+  }
+  next(err);
+});
 
 let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
@@ -46,7 +91,7 @@ const ai = new GoogleGenAI({
  * Promesse avec délai d'expiration strict (timeout)
  */
 function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMsg: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
+  let timer: NodeJS.Timeout;
   const timeoutPromise = new Promise<T>((_, reject) => {
     timer = setTimeout(() => reject(new Error(errorMsg)), timeoutMs);
   });
@@ -229,7 +274,7 @@ async function saveProjectToFirestore(project: any): Promise<void> {
   });
 }
 
-app.get('/api/ai-status', async (req: Request, res: Response) => {
+app.get('/api/ai-status', async (req: express.Request, res: express.Response) => {
   const status: Record<string, any> = {
     geminiKeyConfigured: hasGeminiKey(),
     gatewayConfigured: hasGatewayCredentials(),
@@ -250,12 +295,12 @@ app.get('/api/ai-status', async (req: Request, res: Response) => {
 });
 
 // REST API for Cloud History
-app.get('/api/projects', async (req: Request, res: Response) => {
+app.get('/api/projects', async (req: express.Request, res: express.Response) => {
   const list = await readProjects();
   res.json({ success: true, data: list });
 });
 
-app.get('/api/projects/:id', async (req: Request, res: Response) => {
+app.get('/api/projects/:id', async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
   const docData = await withFirestoreTimeout(async () => {
     const doc = await firestore.collection(GLOBAL_PROJECTS_COLLECTION).doc(id).get();
@@ -275,7 +320,7 @@ app.get('/api/projects/:id', async (req: Request, res: Response) => {
   res.status(404).json({ success: false, error: 'Projet introuvable.' });
 });
 
-app.post('/api/projects', async (req: Request, res: Response) => {
+app.post('/api/projects', async (req: express.Request, res: express.Response) => {
   try {
     const project = req.body;
     if (!project || !project.title) {
@@ -295,7 +340,7 @@ app.post('/api/projects', async (req: Request, res: Response) => {
   }
 });
 
-app.put('/api/projects/:id', async (req: Request, res: Response) => {
+app.put('/api/projects/:id', async (req: express.Request, res: express.Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -313,7 +358,7 @@ app.put('/api/projects/:id', async (req: Request, res: Response) => {
   }
 });
 
-app.delete('/api/projects/:id', async (req: Request, res: Response) => {
+app.delete('/api/projects/:id', async (req: express.Request, res: express.Response) => {
   try {
     const { id } = req.params;
     inMemoryProjects.delete(id);
@@ -325,6 +370,23 @@ app.delete('/api/projects/:id', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// Chargement différé de pdf-parse : pdfjs-dist exige DOMMatrix/Path2D, absents de Node
+// en serverless. `pdf-parse/worker` les polyfille via @napi-rs/canvas et fournit le worker
+// en data URL ; l'import différé évite qu'un échec de chargement ne casse toute l'API.
+let pdfParsePromise: Promise<typeof import('pdf-parse').PDFParse> | null = null;
+function loadPDFParse() {
+  pdfParsePromise ??= (async () => {
+    const { getData } = await import('pdf-parse/worker');
+    const { PDFParse } = await import('pdf-parse');
+    PDFParse.setWorker(getData());
+    return PDFParse;
+  })().catch((err) => {
+    pdfParsePromise = null;
+    throw err;
+  });
+  return pdfParsePromise;
+}
 
 /**
  * Analyse sémantique locale de secours garantissant des phrases complètes,
@@ -430,56 +492,105 @@ function extractRichDescriptionFallback(rawText: string, filename: string): {
 }
 
 /**
- * Extrait le texte brut depuis un fichier (PDF, DOCX, XLSX, TXT)
+/**
+ * Extrait le texte brut depuis un fichier (PDF, DOCX, XLSX, TXT, Images)
  */
 async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType?: string, base64Data?: string): Promise<string> {
-  const dot = (filename || '').lastIndexOf('.');
-  const ext = dot >= 0 ? (filename || '').slice(dot).toLowerCase() : '';
+  const ext = path.extname(filename || '').toLowerCase();
   let extractedText = '';
 
   if (ext === '.pdf' || mimeType === 'application/pdf') {
+    // 1. Première tentative : unpdf (moteur moderne sans worker externe)
     try {
-      const pdf = await getDocumentProxy(new Uint8Array(buffer));
-      const { text } = await extractText(pdf, { mergePages: true });
-      extractedText = String(text || '');
-    } catch (pdfErr: any) {
-      console.warn('[File Extract] Erreur unpdf:', pdfErr?.message);
+      const { extractText } = await import('unpdf');
+      const pdfResult = await extractText(new Uint8Array(buffer));
+      if (pdfResult && pdfResult.text) {
+        extractedText = Array.isArray(pdfResult.text)
+          ? pdfResult.text.join('\n\n')
+          : String(pdfResult.text);
+      }
+    } catch (unpdfErr: any) {
+      console.warn('[File Extract] unpdf non disponible:', unpdfErr?.message);
     }
 
-    if (!extractedText || extractedText.trim().length < 40) {
-      if (base64Data) {
-        try {
-          const { response: aiRes } = await generateContentWithResilience({
-            singleAttemptTimeoutMs: 7000,
-            totalTimeoutMs: 10000,
-            contents: [
-              {
-                inlineData: {
-                  mimeType: 'application/pdf',
-                  data: base64Data,
-                },
-              },
-              {
-                text: 'Extrais et transcris fidèlement le contenu descriptif de ce projet (problème résolu, solution technique, intrants, procédés, proposition de valeur et aspects environnementaux).',
-              },
-            ],
-          });
-          if (aiRes && aiRes.text) {
-            extractedText = aiRes.text;
+    // 2. Deuxième tentative : pdf-parse v2
+    if (!extractedText || extractedText.trim().length < 20) {
+      try {
+        const PDFParse = await loadPDFParse();
+        if (PDFParse) {
+          const parser = typeof PDFParse === 'function' ? new PDFParse({ data: buffer }) : null;
+          if (parser && typeof parser.getText === 'function') {
+            const parsedResult = await parser.getText();
+            extractedText = typeof parsedResult === 'string' ? parsedResult : (parsedResult?.text || '');
           }
-        } catch (geminiPdfErr: any) {
-          console.warn('[File Extract] Gemini PDF fallback non disponible:', geminiPdfErr?.message);
         }
+      } catch (pdfErr: any) {
+        console.warn('[File Extract] Erreur pdf-parse:', pdfErr?.message);
+      }
+    }
+
+    // 3. Troisième tentative : Gemini Multimodal pour PDF scannés ou à rendu graphique
+    if ((!extractedText || extractedText.trim().length < 25) && base64Data) {
+      try {
+        const { response: aiRes } = await generateContentWithResilience({
+          singleAttemptTimeoutMs: 18000,
+          totalTimeoutMs: 25000,
+          contents: [
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: base64Data,
+              },
+            },
+            {
+              text: 'Extrais et transcris fidèlement tout le texte, la description du projet, les chiffres, le modèle économique et les détails techniques de ce document PDF, sans interprétation.',
+            },
+          ],
+        });
+        if (aiRes && aiRes.text && aiRes.text.trim().length > 10) {
+          extractedText = aiRes.text;
+        }
+      } catch (geminiPdfErr: any) {
+        console.warn('[File Extract] Gemini PDF fallback non disponible:', geminiPdfErr?.message);
       }
     }
   } else if (ext === '.docx' || ext === '.doc' || mimeType?.includes('word')) {
     try {
-      const mammothResult = await mammoth.extractRawText({
-        arrayBuffer: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
-      });
+      const mammothResult = await mammoth.extractRawText({ buffer });
       extractedText = mammothResult.value || '';
     } catch (wordErr: any) {
       console.warn('[File Extract] Erreur extraction Word (mammoth):', wordErr?.message);
+    }
+
+    if ((!extractedText || extractedText.trim().length < 20) && base64Data) {
+      try {
+        const wordMime = ext === '.docx' || mimeType?.includes('openxmlformats')
+          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          : 'application/msword';
+        const { response: aiRes } = await generateContentWithResilience({
+          singleAttemptTimeoutMs: 18000,
+          totalTimeoutMs: 25000,
+          contents: [
+            {
+              inlineData: {
+                mimeType: wordMime,
+                data: base64Data,
+              },
+            },
+            {
+              text: 'Extrais et transcris fidèlement tout le texte et la description du projet figurant dans ce document Word.',
+            },
+          ],
+        });
+        if (aiRes && aiRes.text && aiRes.text.trim().length > 10) {
+          extractedText = aiRes.text;
+        }
+      } catch (geminiWordErr: any) {
+        console.warn('[File Extract] Gemini Word fallback non disponible:', geminiWordErr?.message);
+      }
+    }
+
+    if (!extractedText || extractedText.trim().length < 20) {
       extractedText = buffer.toString('utf-8').replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ');
     }
   } else if (ext === '.xlsx' || ext === '.xls' || mimeType?.includes('spreadsheet') || mimeType?.includes('excel')) {
@@ -493,15 +604,42 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
         .join('\n\n');
     } catch (xlsxErr: any) {
       console.warn('[File Extract] Erreur XLSX:', xlsxErr?.message);
-      extractedText = buffer.toString('utf-8');
+    }
+
+    if ((!extractedText || extractedText.trim().length < 20) && base64Data) {
+      try {
+        const excelMime = ext === '.xlsx' || mimeType?.includes('openxmlformats')
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/vnd.ms-excel';
+        const { response: aiRes } = await generateContentWithResilience({
+          singleAttemptTimeoutMs: 18000,
+          totalTimeoutMs: 25000,
+          contents: [
+            {
+              inlineData: {
+                mimeType: excelMime,
+                data: base64Data,
+              },
+            },
+            {
+              text: 'Extrais et transcris fidèlement toutes les données, tableaux et explications de ce fichier Excel.',
+            },
+          ],
+        });
+        if (aiRes && aiRes.text && aiRes.text.trim().length > 10) {
+          extractedText = aiRes.text;
+        }
+      } catch (geminiExcelErr: any) {
+        console.warn('[File Extract] Gemini Excel fallback non disponible:', geminiExcelErr?.message);
+      }
     }
   } else if (ext === '.jpg' || ext === '.jpeg' || ext === '.png' || ext === '.webp' || mimeType?.startsWith('image/')) {
     if (base64Data) {
       try {
         const cleanMime = mimeType && mimeType.startsWith('image/') ? mimeType : (ext === '.png' ? 'image/png' : 'image/jpeg');
         const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 15000,
-          totalTimeoutMs: 20000,
+          singleAttemptTimeoutMs: 18000,
+          totalTimeoutMs: 25000,
           contents: [
             {
               inlineData: {
@@ -519,7 +657,6 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
         }
       } catch (imgErr: any) {
         console.warn('[File Extract] OCR Image via Gemini non disponible:', imgErr?.message);
-        extractedText = `[Image importée : ${filename}]`;
       }
     }
   } else {
@@ -530,7 +667,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
     }
   }
 
-  return extractedText
+  return (extractedText || '')
     .replace(/\r\n/g, '\n')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
@@ -538,12 +675,12 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
 }
 
 // Endpoint d'extraction et de synthèse selon les 3 piliers méthodologiques
-app.post('/api/extract-file', async (req: Request, res: Response) => {
+app.post('/api/extract-file', async (req: express.Request, res: express.Response) => {
   try {
     const rawFiles = Array.isArray(req.body.files) && req.body.files.length > 0
       ? req.body.files
       : req.body.base64Data
-      ? [{ filename: req.body.filename, base64Data: req.body.base64Data, mimeType: req.body.mimeType }]
+      ? [{ filename: req.body.filename, base64Data: req.body.base64Data, mimeType: req.body.mimeType, localText: req.body.localText }]
       : [];
 
     if (rawFiles.length === 0) {
@@ -554,18 +691,26 @@ app.post('/api/extract-file', async (req: Request, res: Response) => {
     const extractedFiles: Array<{ filename: string; text: string }> = [];
 
     for (const item of rawFiles) {
-      if (!item.base64Data) continue;
-      const buffer = Buffer.from(item.base64Data, 'base64');
-      const text = await extractRawTextFromFile(buffer, item.filename, item.mimeType, item.base64Data);
-      if (text && text.trim().length > 0) {
-        extractedFiles.push({ filename: item.filename || 'Document', text: text.trim() });
+      if (!item.base64Data && !item.localText) continue;
+      const buffer = item.base64Data ? Buffer.from(item.base64Data, 'base64') : Buffer.from(item.localText || '');
+      let text = await extractRawTextFromFile(buffer, item.filename, item.mimeType, item.base64Data);
+
+      if ((!text || text.trim().length === 0) && item.localText && item.localText.trim().length > 0) {
+        text = item.localText.trim();
       }
+
+      if (!text || text.trim().length === 0) {
+        const cleanName = (item.filename || 'Document').replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+        text = `Projet issu du document : ${cleanName}.\nDescription : Document joint concernant le fonctionnement, les intrants et les objectifs écologiques du projet.`;
+      }
+
+      extractedFiles.push({ filename: item.filename || 'Document', text: text.trim() });
     }
 
     if (extractedFiles.length === 0) {
       res.status(400).json({
         success: false,
-        error: 'Impossible d\'extraire du texte de ce(s) document(s). Assurez-vous qu\'ils contiennent du texte lisible ou copiez directement votre description.',
+        error: 'Impossible d\'extraire du texte de ce(s) document(s). Assurez-vous qu\'ils ne sont pas protégés par un mot de passe.',
       });
       return;
     }
@@ -737,7 +882,7 @@ function normalizeDescriptionKey(desc: string, loc: string, answers?: any, fullD
 }
 
 // Expert Ecological Analysis API with EXACTLY the 8 required sections
-app.post('/api/analyze', async (req: Request, res: Response) => {
+app.post('/api/analyze', async (req: express.Request, res: express.Response) => {
   try {
     const { title, description, location, sector, targetAudience, businessModel, lifeCycleDetails, fullDocumentContent } = req.body;
 
@@ -1233,7 +1378,7 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
 });
 
 // Specialized Green Entrepreneurship AI Assistant Endpoint
-app.post('/api/chat', async (req: Request, res: Response) => {
+app.post('/api/chat', async (req: express.Request, res: express.Response) => {
   try {
     const { message, history, projectContext } = req.body;
 
