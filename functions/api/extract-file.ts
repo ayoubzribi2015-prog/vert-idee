@@ -127,6 +127,28 @@ async function callGemini(input: string, apiKey: string, model: string): Promise
     return parsed as Summary;
   } finally { clearTimeout(timeout); }
 }
+async function discoverGeminiModel(apiKey: string, preferred?: string): Promise<string> {
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', {
+    headers: { 'x-goog-api-key': apiKey }
+  });
+  if (!response.ok) {
+    console.error('Gemini model discovery failed', response.status);
+    throw new Error('GEMINI_MODELS_HTTP_' + response.status);
+  }
+  const payload: any = await response.json();
+  const models = (payload.models || []).filter((m: any) =>
+    Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent')
+  );
+  const configured = (preferred || '').trim().replace(/^models\\//, '');
+  const priorities = [configured, 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean);
+  for (const candidate of priorities) {
+    const match = models.find((m: any) => m.name === 'models/' + candidate);
+    if (match) return match.name.replace(/^models\\//, '');
+  }
+  const fallback = models.find((m: any) => /^models\\/gemini-.*flash/i.test(m.name));
+  if (fallback) return fallback.name.replace(/^models\\//, '');
+  throw new Error('GEMINI_NO_SUPPORTED_MODEL');
+}
 async function synthesize(text: string, apiKey: string, model: string): Promise<Summary> {
   if (text.length > 350000) throw new Error('DOCUMENT_TOO_LONG');
   // Gemini supports long context; one request avoids serial calls and repeated timeouts.
@@ -245,7 +267,8 @@ export const onRequestPost = async (
       return respond({ success: false, code: 'AI_NOT_CONFIGURED', error: 'Configurez GEMINI_API_KEY dans les secrets Cloudflare Pages.' }, 503);
     }
     try {
-      const summary = await synthesize(rawFullText, env.GEMINI_API_KEY.trim(), env.GEMINI_MODEL || 'gemini-2.5-flash');
+      const model = await discoverGeminiModel(env.GEMINI_API_KEY.trim(), env.GEMINI_MODEL);
+      const summary = await synthesize(rawFullText, env.GEMINI_API_KEY.trim(), model);
       const extractedText = [
         "1. Vue d'ensemble du projet & Problématique adressée\n" + summary.sections.overview,
         "2. Solution technique, intrants & Procédés sobres\n" + summary.sections.technicalSolution,
@@ -266,7 +289,10 @@ export const onRequestPost = async (
         GEMINI_HTTP_400: 'Requête Gemini refusée (400). Vérifiez le modèle et la configuration.',
         GEMINI_HTTP_401: 'Clé API Gemini non autorisée (401).',
         GEMINI_HTTP_403: 'Accès Gemini refusé (403). Vérifiez les restrictions de la clé et le projet Google.',
-        GEMINI_HTTP_404: 'Modèle Gemini introuvable (404). Vérifiez GEMINI_MODEL.',
+        GEMINI_HTTP_404: 'Le modèle annoncé par Gemini est indisponible pour generateContent (404).',
+        GEMINI_NO_SUPPORTED_MODEL: 'Aucun modèle Gemini compatible avec generateContent n’est accessible avec cette clé.',
+        GEMINI_MODELS_HTTP_403: 'Accès à la liste des modèles Gemini refusé (403). Vérifiez la clé API.',
+        GEMINI_MODELS_HTTP_429: 'Quota Gemini atteint lors de la recherche des modèles (429).',
         GEMINI_HTTP_429: 'Quota Gemini atteint (429). Réessayez plus tard ou vérifiez votre quota.',
         GEMINI_HTTP_503: 'Service Gemini temporairement indisponible (503).',
         GEMINI_INVALID_JSON: 'Gemini a renvoyé une réponse JSON invalide.',
