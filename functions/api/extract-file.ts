@@ -89,7 +89,9 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
 
     return result.text.trim();
   } finally {
-    await pdf.destroy();
+    if (pdf && typeof (pdf as any).destroy === 'function') {
+      await (pdf as any).destroy();
+    }
   }
 }
 
@@ -140,7 +142,7 @@ async function discoverGeminiModel(apiKey: string, preferred?: string): Promise<
     Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent')
   );
   const configured = (preferred || '').trim().replace(/^models\//, '');
-  const priorities = [configured, 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean);
+  const priorities = [configured, 'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'].filter(Boolean);
   for (const candidate of priorities) {
     const match = models.find((m: any) => m.name === 'models/' + candidate);
     if (match) return match.name.replace(/^models\//, '');

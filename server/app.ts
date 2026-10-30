@@ -67,7 +67,7 @@ let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
 
 // Valid model names per Gemini API SDK guidelines
-const DEFAULT_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
 let discoveredGeminiModels: string[] = [];
 let geminiModelsExpiresAt = 0;
 
