@@ -389,6 +389,38 @@ function loadPDFParse() {
 }
 
 /**
+ * Élimine le bruit administratif, les formulaires d'état civil/CIN, les pointillés
+ * et les tables des matières avant traitement par l'IA ou le secours local.
+ */
+function cleanAdministrativeAndFormNoise(rawText: string): string {
+  if (!rawText) return '';
+
+  const lines = rawText.split('\n');
+  const cleanLines = lines.filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+
+    // Élimination des lignes de pointillés, d'underscores, de tirets ou de puces répétés
+    if (/^[\s._\-\u2026\u22C5\u2022]{3,}$/.test(trimmed)) return false;
+    if (/(?:\.|\_|[\u2026]|\-){4,}/.test(trimmed) && trimmed.length < 90) return false;
+
+    // Élimination des lignes de sommaire avec pointillés de suite (ex: "1.3 Besoins ......... 12")
+    if (/\.{3,}\s*\d+$/.test(trimmed)) return false;
+
+    // Élimination des numéros de page isolés ou en-têtes/pieds de page (ex: "1 / 15", "Page 2 sur 10", "Edutech © 2025")
+    if (/^(?:page\s+\d+(?:\s*sur|\/)\s*\d+|\d+\s*\/\s*\d+|--\s*\d+\s*of\s*\d+\s*--)$/i.test(trimmed)) return false;
+
+    // Élimination des champs de formulaires administratifs et cartes d'identité (CIN, état civil) en français et arabe
+    const adminPattern = /(?:تاريخ\s+و?\s*مكان|رقــ?م\s+بطاقة\s+التعريف|تاريخ\s+و?\s*مكان\s+الاصدار|تاريخ\s+و?\s*مكان\s+الولادة|محل\s+السكنى|الاسم\s+و?\s*اللقب|الصفة|التوقيع|بطاقة\s+تعريف|cin\s*[:\.\_]|n°?\s*cin|date\s+et\s+lieu\s+de\s+naissance|d\.o\.b|numéro\s+de\s+carte|lieu\s+de\s+délivrance|nom\s+et\s+prénom|signature\s*[:\.]|fait\s+à\s+.*\s+le\s+.*|cadre\s+réservé|réservé\s+à\s+l'administration)/i;
+    if (adminPattern.test(trimmed) && trimmed.length < 120) return false;
+
+    return true;
+  });
+
+  return cleanLines.join('\n');
+}
+
+/**
  * Analyse sémantique locale de secours garantissant des phrases complètes,
  * explicites et rigoureusement articulées sans coupure en milieu d'idée.
  */
@@ -397,8 +429,10 @@ function extractRichDescriptionFallback(rawText: string, filename: string): {
   suggestedTitle: string;
   suggestedLocation: string;
 } {
-  // Normalisation du texte : suppression des césures de mots et fusion des lignes d'un même paragraphe
-  const normalizedText = rawText
+  const cleanedSource = cleanAdministrativeAndFormNoise(rawText);
+
+  // Normalisation du texte : suppression des césures de mots et fusion des lignes
+  const normalizedText = cleanedSource
     .replace(/\r\n/g, '\n')
     .replace(/(\w+)-\n(\w+)/g, '$1$2')
     .replace(/\n(?!\n)/g, ' ')
@@ -414,13 +448,33 @@ function extractRichDescriptionFallback(rawText: string, filename: string): {
       if (/^(page\s+\d+|p\.\s*\d+|[-=_*]{3,}|\d+\s*\/\s*\d+|copyright|tous droits réservés|confidentialité)/i.test(s)) {
         return false;
       }
+      // Élimination des bribes de formulaires ou d'identité
+      if (/(تاريخ|مكان|بطاقة\s+التعريف|الولادة|cin\b|passeport|nom\s+et\s+prénom|signature)/i.test(s) && s.length < 100) {
+        return false;
+      }
       return true;
     });
+
+  // Si après filtrage il ne reste pas de phrases explicatives de projet (ex: formulaire d'identité / CIN)
+  if (cleanSentences.length < 2) {
+    return {
+      richDescription: `■ 1. Vue d'ensemble du projet & Problématique adressée :
+Le document importé ("${filename}") contient principalement des pièces administratives ou d'état civil sans description rédigée de l'activité du projet.
+
+■ 2. Solution technique, intrants & Procédés sobres :
+Veuillez sélectionner un document de présentation comportant le détail du concept, des produits, des services ou du fonctionnement opérationnel du projet.
+
+■ 3. Proposition de valeur & Modèle circulaire :
+Vous pouvez également saisir ou coller directement la description détaillée de votre projet dans le champ ci-dessus pour lancer le diagnostic.`,
+      suggestedTitle: filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' '),
+      suggestedLocation: '',
+    };
+  }
 
   // Détection du lieu (villes et gouvernorats tunisiens prioritaires + international)
   const locationRegex = /\b(Tunisie|Tunis|Sfax|Sousse|Bizerte|Nabeul|Monastir|Kairouan|Gabès|Médenine|Gafsa|Jendouba|Béja|Kasserine|Sidi Bouzid|Mahdia|Siliana|Zaghouan|Tozeur|Kébili|Tataouine|France|Paris|Lyon|Marseille|Bretagne)\b/i;
   let suggestedLocation = '';
-  const locMatch = rawText.match(locationRegex);
+  const locMatch = cleanedSource.match(locationRegex);
   if (locMatch) {
     suggestedLocation = locMatch[1];
     if (
@@ -435,7 +489,7 @@ function extractRichDescriptionFallback(rawText: string, filename: string): {
   let suggestedTitle = '';
   for (const s of cleanSentences) {
     const clean = s.replace(/^(projet|titre|rapport|sujet|intitulé|nom du projet)\s*[:\-]\s*/i, '').trim();
-    if (clean.length >= 5 && clean.length <= 90 && !/sommaire|table des matières|introduction|abstract|résumé/i.test(clean)) {
+    if (clean.length >= 5 && clean.length <= 90 && !/sommaire|table des matières|introduction|abstract|résumé|attestation/i.test(clean)) {
       suggestedTitle = clean.replace(/[.:;]$/, '');
       break;
     }
@@ -570,7 +624,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
               },
             },
             {
-              text: 'Extrais et transcris fidèlement tout le texte, les données, le titre, la problématique et la description du projet figurant sur cette image, sans interprétation.',
+              text: 'Extrais et transcris fidèlement tout le texte descriptif du projet figurant sur cette image en ignorant les formulaires administratifs ou pièces d\'identité.',
             },
           ],
         });
@@ -590,7 +644,10 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
     }
   }
 
-  return extractedText
+  // Application du nettoyage strict du bruit administratif, CIN et formulaires à trous
+  const cleaned = cleanAdministrativeAndFormNoise(extractedText);
+
+  return cleaned
     .replace(/\r\n/g, '\n')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
@@ -625,7 +682,7 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
     if (extractedFiles.length === 0) {
       res.status(400).json({
         success: false,
-        error: 'Impossible d\'extraire du texte de ce(s) document(s). Assurez-vous qu\'ils contiennent du texte lisible ou copiez directement votre description.',
+        error: 'Impossible d\'extraire du texte de ce(s) document(s). Assurez-vous qu\'ils contiennent un texte explicatif du projet ou copiez directement votre description.',
       });
       return;
     }
@@ -646,24 +703,28 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
     let isAIEnhanced = false;
 
     // Préparation pour l'IA (jusqu'à 35 000 caractères)
-    let preparedSource = combinedSourceText;
-    if (combinedSourceText.length > 35000) {
-      const head = combinedSourceText.slice(0, 16000);
-      const midStart = Math.floor(combinedSourceText.length * 0.4);
-      const middle = combinedSourceText.slice(midStart, midStart + 12000);
-      const tail = combinedSourceText.slice(-7000);
+    let preparedSource = cleanAdministrativeAndFormNoise(combinedSourceText);
+    if (preparedSource.length > 35000) {
+      const head = preparedSource.slice(0, 16000);
+      const midStart = Math.floor(preparedSource.length * 0.4);
+      const middle = preparedSource.slice(midStart, midStart + 12000);
+      const tail = preparedSource.slice(-7000);
       preparedSource = `[Synthèse amont & Contexte] :\n${head}\n\n[Procédés & Données techniques] :\n${middle}\n\n[Résultats & Conclusions] :\n${tail}`;
     }
 
-    if (combinedSourceText.length > 50) {
+    if (preparedSource.length > 20) {
       try {
-        // --- PREMIÈRE PASSE : Extraction brute et factuelle en éliminant tout bruit structurel ---
-        const pass1Prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de lire les documents importés (${fileLabels}) et d'extraire uniquement le contenu rédactionnel et informatif utile du projet.
+        // --- PREMIÈRE PASSE : Extraction brute et factuelle en éliminant tout bruit administratif ---
+        const pass1Prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de lire les documents importés (${fileLabels}) et d'extraire uniquement le contenu rédactionnel et informatif utile décrivant un PROJET, une ACTIVITÉ ou une ENTREPRISE.
 
 CONSIGNES STRICTES DE FILTRAGE :
-1. EXCLUSION TOTALE DES SOMMAIRES ET TABLES DES MATIÈRES : Ignore et jette toutes les lignes de tables des matières, listes de chapitres, index, titres de rubriques isolés (ex: "Table des matières", "6 Besoins prioritaires...", "4 Proposition de valeur...", "1 / 15", "Plan d'affaires Confidentiel").
-2. EXCLUSION DES EN-TÊTES ET PIEDS DE PAGE : Ignore les en-têtes de pages, numéros de page (ex: "2 / 15", "3 / 15"), mentions de copyright et métadonnées de document.
-3. CONSERVATION UNIQUEMENT DU CORPS DU TEXTE : Extrais uniquement les phrases explicatives du fond du projet (problématique, description de la solution, fonctionnalités, public cible, modèle économique, intrants).
+1. ÉLIMINATION TOTAL DU BRUIT ADMINISTRATIF ET D'ÉTAT CIVIL (RÈGLE ABSOLUE) :
+   - Ignore et jette STRICTEMENT tous les champs de formulaires administratifs, cartes d'identité (CIN), formulaires d'état civil, numéros de pièces, dates et lieux de naissance (ex: "تاريخ و مكان الولادة", "رقم بطاقة التعريف", "تاريخ و مكان الاصدار", "Nom/Prénom", "Signature", "CIN"), formulaires à trous ou pointillés (............).
+   - Ignore et jette toutes les lignes de tables des matières, sommaires, numéros de page (ex: "1 / 15"), en-têtes/pieds de page, mentions de confidentialité ou de copyright.
+2. CONSERVATION UNIQUEMENT DU CORPS DU TEXTE D'ACTIVITÉ :
+   - Extrais uniquement les phrases explicatives qui décrivent réellement la problématique résolue, la solution technique, les produits, les services, les intrants, les procédés ou le modèle économique.
+3. CAS PARTICULIER DES DOCUMENTS SANS DESCRIPTION DE PROJET :
+   - Si le document est un formulaire administratif vierge, une carte d'identité ou un document ne contenant aucune explication de projet, réponds explicitement : "DOC_ADMINISTRATIF_SANS_PROJET : Le document importé ne contient que des données d'état civil ou administratives sans description d'activité."
 
 TEXTE BRUT DES DOCUMENTS À FILTRER :
 ${preparedSource}`;
@@ -677,25 +738,28 @@ ${preparedSource}`;
           totalTimeoutMs: 22000,
         });
 
-        const rawExtractedFacts = pass1Res?.text || combinedSourceText;
+        const rawExtractedFacts = pass1Res?.text || preparedSource;
 
         // --- DEUXIÈME PASSE : Relecture, polissage et structuration rigoureuse en 3 piliers ---
-        const pass2Prompt = `Tu es un éditeur et relecteur expert en projets industriels et écologiques. À partir des éléments factuels extraits des documents, rédige une description claire, fluide, parfaitement articulée et formalisée strictement selon les 3 rubriques ci-dessous.
+        const pass2Prompt = `Tu es un éditeur et relecteur expert en projets industriels et écologiques. À partir des éléments factuels extraits des documents, rédige une description claire, fluide, parfaitement articulée et formalisée strictly selon les 3 rubriques ci-dessous.
 
 CONSIGNES STRICTES POUR LA SECONDE LECTURE :
-1. RESPECT ABSOLUE DES 3 RUBRIQUES (les libellés exacts doivent être conservés) :
+1. DÉTECTION DES DOCUMENTS SANS DESCRIPTION DE PROJET (CARTES D'IDENTITÉ / FORMULAIRES) :
+   - Si le texte extrait indique "DOC_ADMINISTRATIF_SANS_PROJET" ou ne contient que des données administratives/d'identité (ex: CIN, formulaire d'état civil, dates de naissance), NE METS JAMAIS de données d'état civil, de champs de CIN ou de pointillés sous les 3 piliers !
+   - Rédige sous les 3 rubriques un message poli et explicite informant l'utilisateur que le document importé est un document administratif ou d'état civil ne comportant pas de description de projet, et invite-le à importer une présentation descriptive ou à saisir sa description manuellement dans le champ.
+2. SI UN PROJET EST PRÉSENT (RESPECT ABSOLU DES 3 RUBRIQUES) :
    - ■ 1. Vue d'ensemble du projet & Problématique adressée
    - ■ 2. Solution technique, intrants & Procédés sobres
    - ■ 3. Proposition de valeur & Modèle circulaire
-2. QUALITÉ RÉDACTIONNELLE (ZÉRO PHRASE INCOMPLÈTE) : Rédige chaque section avec des phrases complètes (Sujet, Verbe, Complément), bien ponctuées et soignées. Élimine toute phrase coupée, tout style télégraphique et toute approximation.
-3. FIDÉLITÉ FACTUELLE TOTALE : Interdiction totale d'inventer des allégations écologiques, des chiffres ou des labels non présents dans les données sources. Restitue fidèlement la réalité exacte du projet.
+3. ZÉRO DONNÉE ADMINISTRATIVE DANS LES PILIERS : Interdiction absolue de faire figurer des numéros de CIN, des dates/lieux de naissance, des pointillés (......) ou des lignes de sommaires sous l'un des piliers.
+4. QUALITÉ RÉDACTIONNELLE : Rédige chaque section avec des phrases complètes (Sujet, Verbe, Complément), soignées et bien ponctuées, sans inventer d'allégations écologiques fictives.
 
 ÉLÉMENTS FACTUELS À STRUCTURER :
 ${rawExtractedFacts}
 
 FORMAT DE RÉPONSE STRICT (JSON valide) :
 {
-  "suggestedTitle": "Titre clair et explicite du projet",
+  "suggestedTitle": "Titre du projet (ou 'Document administratif' si aucun projet)",
   "suggestedLocation": "Lieu ou région explicitement mentionné dans le document (ou chaîne vide si non précisé)",
   "richDescription": "Texte complet structuré avec les 3 rubriques exactes..."
 }`;
