@@ -18,6 +18,7 @@ interface HomePageFormProps {
     title: string;
     description: string;
     location: string;
+    fullDocumentContent?: string;
   }) => Promise<void>;
   isLoading: boolean;
 }
@@ -48,6 +49,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const [fullDocumentContent, setFullDocumentContent] = useState('');
   const [loadingStep, setLoadingStep] = useState(0);
 
   const loadingSteps = [
@@ -75,12 +77,14 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
     setTitle(preset.title);
     setDescription(preset.description);
     setLocation(preset.location);
+    setFullDocumentContent('');
   };
 
   const handleReset = () => {
     setTitle('');
     setDescription('');
     setLocation('');
+    setFullDocumentContent('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,6 +94,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
       title: title.trim(),
       description: description.trim(),
       location: location.trim() || 'Tunisie',
+      fullDocumentContent: fullDocumentContent.trim(),
     });
   };
 
@@ -214,6 +219,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
             <DescriptionFileInput
               value={description}
               onChange={setDescription}
+              onFullContentChange={setFullDocumentContent}
               onSuggestedTitle={(suggested) => {
                 if (!title.trim()) setTitle(suggested);
               }}

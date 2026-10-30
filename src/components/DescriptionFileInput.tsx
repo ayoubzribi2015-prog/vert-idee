@@ -9,6 +9,7 @@ interface ImportedFileItem {
 interface DescriptionFileInputProps {
   value: string;
   onChange: (newValue: string) => void;
+  onFullContentChange?: (fullContent: string) => void;
   onSuggestedTitle?: (title: string) => void;
   onSuggestedLocation?: (location: string) => void;
   currentTitle?: string;
@@ -20,6 +21,7 @@ interface DescriptionFileInputProps {
 export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
   value,
   onChange,
+  onFullContentChange,
   onSuggestedTitle,
   onSuggestedLocation,
   currentTitle,
@@ -121,31 +123,20 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
       }
 
       if (!res.ok || !data?.success) {
-        const clientTexts = payloadFiles
-          .map((f) => f.localText)
-          .filter(Boolean)
-          .join('\n\n');
-
-        if (clientTexts.trim().length > 10) {
-          const fallbackDescription = `■ 1. Vue d'ensemble du projet & Problématique adressée : concept clé, secteur d'activité, dysfonctionnement ou pollution résolu.\n${clientTexts.slice(0, 600)}\n\n■ 2. Solution technique, intrants & Procédés sobres : fonctionnement concret, matières biosourcées/recyclées, sobriété énergétique et hydrique, chimie verte.\nContenu extrait du document (${payloadFiles[0].filename}).\n\n■ 3. Proposition de valeur & Modèle circulaire : gains économiques et opérationnels pour les clients, éco-conception, réemploi, réparabilité, symbiose industrielle.\nDonnées du projet chargées.`;
-          onChange(fallbackDescription);
-          const newChips: ImportedFileItem[] = validFiles.map((f) => ({
-            name: f.name,
-            size: formatFileSize(f.size),
-          }));
-          setImportedFiles((prev) => [...prev, ...newChips]);
-          return;
-        }
-
         throw new Error(data?.error || "Impossible d'extraire le contenu des documents.");
       }
 
       const synthesizedText = data.extractedText || '';
+      const rawFullText = data.rawFullText || '';
       const suggestedTitle = data.suggestedTitle || '';
       const suggestedLocation = data.suggestedLocation || '';
 
       if (synthesizedText) {
         onChange(synthesizedText);
+      }
+
+      if (rawFullText && onFullContentChange) {
+        onFullContentChange(rawFullText);
       }
 
       if (!currentTitle?.trim() && suggestedTitle && onSuggestedTitle) {
@@ -204,7 +195,13 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
   };
 
   const handleRemoveFile = (index: number) => {
-    setImportedFiles((prev) => prev.filter((_, idx) => idx !== index));
+    setImportedFiles((prev) => {
+      const next = prev.filter((_, idx) => idx !== index);
+      if (next.length === 0 && onFullContentChange) {
+        onFullContentChange('');
+      }
+      return next;
+    });
   };
 
   return (

@@ -9,6 +9,7 @@ interface ProjectInputModalProps {
     title: string;
     description: string;
     location: string;
+    fullDocumentContent?: string;
   }) => Promise<void>;
   isLoading: boolean;
 }
@@ -43,6 +44,7 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const [fullDocumentContent, setFullDocumentContent] = useState('');
   const [loadingStep, setLoadingStep] = useState(0);
 
   const loadingSteps = [
@@ -72,6 +74,7 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
     setTitle(preset.title);
     setDescription(preset.description);
     setLocation(preset.location);
+    setFullDocumentContent('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -81,6 +84,7 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
       title,
       description,
       location: location.trim() || 'Tunisie',
+      fullDocumentContent: fullDocumentContent.trim(),
     });
   };
 
@@ -186,6 +190,7 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
             <DescriptionFileInput
               value={description}
               onChange={setDescription}
+              onFullContentChange={setFullDocumentContent}
               onSuggestedTitle={(suggested) => {
                 if (!title.trim()) setTitle(suggested);
               }}
