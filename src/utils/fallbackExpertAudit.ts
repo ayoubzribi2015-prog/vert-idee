@@ -621,45 +621,196 @@ export function generateExpertAuditFallback(
       circularValueProposition: 'Permettre aux clients de réduire leur empreinte environnementale de plus de 60% sans surcoût d\'usage prohibitif.',
     },
 
-    // 5. Alignement ODD
-    sdgAlignment: [
-      {
-        oddNumber: 12,
-        title: 'Consommation et production responsables',
-        contribution: `Substitution de matières fossiles ou polluantes par des procédés régénératifs circulaires à ${location}.`,
-        targets: [
-          '12.2 Gestion durable et utilisation rationnelle des ressources naturelles',
-          '12.4 Gestion écologiquement rationnelle des produits chimiques et déchets',
-          '12.5 Réduction considérable de la production de déchets par la prévention et le recyclage',
+    // 5. Alignement ODD (spécifique au secteur d'activité)
+    sdgAlignment: isDigitalOrEdTech
+      ? [
+          {
+            oddNumber: 4,
+            title: 'Éducation de qualité',
+            contribution: `Démocratisation de l'accès à une formation et un apprentissage de qualité avec éco-conception digitale à ${location}.`,
+            targets: [
+              '4.4 Compétences techniques et professionnelles nécessaires à l\'emploi',
+              '4.5 Égalité d\'accès et inclusion des personnes vulnérables',
+              '4.7 Éducation au développement durable et à la transition écologique',
+            ],
+          },
+          {
+            oddNumber: 10,
+            title: 'Inégalités réduites',
+            contribution: 'Réduction de la fracture numérique et accès équitable aux opportunités éducatives.',
+            targets: [
+              '10.2 Autonomisation sociale et économique de tous',
+              '10.3 Égalité des chances et réduction des inégalités de résultats',
+            ],
+          },
+          {
+            oddNumber: 8,
+            title: 'Travail décent et croissance économique',
+            contribution: 'Développement des compétences employables des jeunes et soutien aux nouveaux métiers verts.',
+            targets: [
+              '8.5 Plein emploi productif et travail décent',
+              '8.6 Réduction de la proportion de jeunes sans emploi ni formation',
+            ],
+          },
+          {
+            oddNumber: 12,
+            title: 'Consommation et production responsables',
+            contribution: 'Éco-conception logicielle (Green IT), hébergement sobre et allongement de la durée de vie des équipements.',
+            targets: [
+              '12.2 Utilisation rationnelle des ressources naturelles',
+              '12.5 Réduction de la production de déchets électroniques',
+            ],
+          },
+        ]
+      : isWater
+      ? [
+          {
+            oddNumber: 6,
+            title: 'Eau propre et assainissement',
+            contribution: `Preservation des ressources en eau, réduction drastique du prélèvement sur les nappes et recyclage à ${location}.`,
+            targets: [
+              '6.3 Amélioration de la qualité de l\'eau et élimination des rejets toxiques',
+              '6.4 Augmentation de l\'efficacité d\'utilisation de l\'eau dans tous les secteurs',
+            ],
+          },
+          {
+            oddNumber: 12,
+            title: 'Consommation et production responsables',
+            contribution: 'Boucle fermée zéro rejet liquide (ZLD) et élimination des rejets polluants.',
+            targets: [
+              '12.4 Gestion écologiquement rationnelle des effluents et produits chimiques',
+              '12.5 Réduction drastique de la production de déchets',
+            ],
+          },
+          {
+            oddNumber: 13,
+            title: 'Mesures relatives à la lutte contre les changements climatiques',
+            contribution: `Abaissement des émissions de GES de ${baselineCO2} à ${targetCO2} kg CO2e par m³ traité.`,
+            targets: [
+              '13.1 Renforcement de la résilience et de la capacité d\'adaptation face au stress hydrique',
+            ],
+          },
+          {
+            oddNumber: 9,
+            title: 'Industrie, innovation et infrastructure',
+            contribution: 'Déploiement d\'infrastructures de filtration et de traitement décentralisées sobres.',
+            targets: [
+              '9.4 Conversion des installations industrielles pour la durabilité',
+            ],
+          },
+        ]
+      : isEnergyOrSolar
+      ? [
+          {
+            oddNumber: 7,
+            title: "Énergie propre et d'un coût abordable",
+            contribution: `Production et distribution d'énergie décarbonée renouvelable et sécurisation du mix énergétique à ${location}.`,
+            targets: [
+              '7.2 Augmentation de la part des énergies renouvelables dans le mix global',
+              "7.3 L'amélioration du taux d'efficacité énergétique",
+            ],
+          },
+          {
+            oddNumber: 13,
+            title: 'Mesures relatives à la lutte contre les changements climatiques',
+            contribution: `Substitutions directes d'énergies fossiles abaissant l'empreinte de ${baselineCO2} à ${targetCO2} kg CO2e.`,
+            targets: [
+              '13.2 Intégration des mesures climatiques dans les politiques et stratégies',
+            ],
+          },
+          {
+            oddNumber: 9,
+            title: 'Industrie, innovation et infrastructure',
+            contribution: 'Modernisation des réseaux électriques et déploiement d\'infrastructures renouvelables.',
+            targets: [
+              '9.4 Équipements sobres et infrastructures décarbonées',
+            ],
+          },
+          {
+            oddNumber: 12,
+            title: 'Consommation et production responsables',
+            contribution: 'Éco-conception des équipements énergétiques et recyclage fin de vie des composants.',
+            targets: [
+              '12.5 Réduction des déchets par le recyclage',
+            ],
+          },
+        ]
+      : isAgriOrFood
+      ? [
+          {
+            oddNumber: 2,
+            title: 'Faim « Zéro »',
+            contribution: `Développement de systèmes de production agricole régénérative renforçant la sécurité alimentaire à ${location}.`,
+            targets: [
+              '2.4 Systèmes de production alimentaire durables et résilients',
+              '2.3 Augmentation de la productivité agricole des petits producteurs',
+            ],
+          },
+          {
+            oddNumber: 12,
+            title: 'Consommation et production responsables',
+            contribution: 'Pratiques sans intrants chimiques de synthèse, circuits courts et réduction du gaspillage.',
+            targets: [
+              '12.3 Réduction du gaspillage alimentaire tout au long de la chaîne',
+              '12.4 Gestion écologiquement rationnelle des produits agricoles',
+            ],
+          },
+          {
+            oddNumber: 15,
+            title: 'Vie terrestre',
+            contribution: 'Régénération des sols, préservation de la biodiversité et lutte contre la désertification.',
+            targets: [
+              '15.3 Lutte contre la dégradation des terres et restauration des sols',
+              '15.5 Enrayement de la perte de biodiversité',
+            ],
+          },
+          {
+            oddNumber: 13,
+            title: 'Mesures relatives à la lutte contre les changements climatiques',
+            contribution: 'Séquestration du carbone dans les sols et réduction des émissions de gaz à effet de serre.',
+            targets: [
+              '13.1 Résilience et capacité d\'adaptation face aux aléas climatiques',
+            ],
+          },
+        ]
+      : [
+          {
+            oddNumber: 12,
+            title: 'Consommation et production responsables',
+            contribution: `Substitution de matières fossiles ou polluantes par des procédés régénératifs circulaires à ${location}.`,
+            targets: [
+              '12.2 Gestion durable et utilisation rationnelle des ressources naturelles',
+              '12.4 Gestion écologiquement rationnelle des produits chimiques et déchets',
+              '12.5 Réduction considérable de la production de déchets par la prévention et le recyclage',
+            ],
+          },
+          {
+            oddNumber: 13,
+            title: 'Mesures relatives à la lutte contre les changements climatiques',
+            contribution: `Abaissement drastique des émissions de GES de ${baselineCO2} à ${targetCO2} kg CO2e par unité fonctionnelle.`,
+            targets: [
+              '13.1 Renforcement de la résilience et de la capacité d\'adaptation face aux aléas climatiques',
+              '13.3 Amélioration de la sensibilisation à la décarbonation',
+            ],
+          },
+          {
+            oddNumber: 8,
+            title: 'Travail décent et croissance économique',
+            contribution: 'Génération d\'emplois verts qualifiés, non délocalisables et respectueux des normes de santé au travail.',
+            targets: [
+              '8.4 Amélioration progressive de l\'efficacité globale des ressources',
+              '8.5 Plein emploi productif et travail décent',
+            ],
+          },
+          {
+            oddNumber: 9,
+            title: 'Industrie, innovation et infrastructure',
+            contribution: 'Modernisation des outils de production par des technologies sobres et durables.',
+            targets: [
+              '9.4 Rénovation des infrastructures et conversion des industries pour les rendre durables',
+            ],
+          },
         ],
-      },
-      {
-        oddNumber: 13,
-        title: 'Mesures relatives à la lutte contre les changements climatiques',
-        contribution: `Abaissement drastique des émissions de GES de ${baselineCO2} à ${targetCO2} kg CO2e par unité fonctionnelle.`,
-        targets: [
-          '13.1 Renforcement de la résilience et de la capacité d\'adaptation face aux aléas climatiques',
-          '13.3 Amélioration de l\'éducation et de la sensibilisation à la décarbonation',
-        ],
-      },
-      {
-        oddNumber: 8,
-        title: 'Travail décent et croissance économique',
-        contribution: 'Génération d\'emplois verts qualifiés, non délocalisables et respectueux des normes de santé au travail.',
-        targets: [
-          '8.4 Amélioration progressive de l\'efficacité globale des ressources',
-          '8.5 Plein emploi productif et travail décent pour les jeunes et les femmes',
-        ],
-      },
-      {
-        oddNumber: 9,
-        title: 'Industrie, innovation et infrastructure',
-        contribution: 'Modernisation des outils de production par des technologies sobres et durables.',
-        targets: [
-          '9.4 Rénovation des infrastructures et conversion des industries pour les rendre durables',
-        ],
-      },
-    ],
 
     // 6. Indicateurs d'impact
     impactIndicators: {

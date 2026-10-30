@@ -5,6 +5,26 @@ interface SdgAlignmentTabProps {
   sdgItems: SdgAlignmentItem[];
 }
 
+export const OFFICIAL_SDG_TITLES: Record<number, string> = {
+  1: 'Pas de pauvreté',
+  2: 'Faim « Zéro »',
+  3: 'Bonne santé et bien-être',
+  4: 'Éducation de qualité',
+  5: 'Égalité entre les sexes',
+  6: 'Eau propre et assainissement',
+  7: "Énergie propre et d'un coût abordable",
+  8: 'Travail décent et croissance économique',
+  9: 'Industrie, innovation et infrastructure',
+  10: 'Inégalités réduites',
+  11: 'Villes et communautés durables',
+  12: 'Consommation et production responsables',
+  13: 'Mesures relatives à la lutte contre les changements climatiques',
+  14: 'Vie aquatique',
+  15: 'Vie terrestre',
+  16: 'Paix, justice et institutions efficaces',
+  17: 'Partenariats pour la réalisation des objectifs',
+};
+
 const SDG_COLORS: Record<number, { bg: string; text: string }> = {
   1: { bg: 'bg-[#E5243B]', text: 'text-white' },
   2: { bg: 'bg-[#DDA63A]', text: 'text-white' },
@@ -31,10 +51,10 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
       {/* 5. Alignement ODD Header */}
       <div className="border-b border-stone-200 pb-3">
         <h2 className="text-xl font-black text-[#063428] font-serif-title">
-          5. Alignement ODD de l'ONU
+          5. Alignement ODD de l'ONU (Agenda 2030)
         </h2>
         <p className="text-xs text-stone-500 mt-0.5">
-          Contribution directe du projet aux 17 Objectifs de Développement Durable de l'ONU pour l'horizon 2030
+          Contribution directe du projet aux Objectifs de Développement Durable de l'ONU pour 2030
         </p>
       </div>
 
@@ -42,21 +62,22 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
       <div className="bg-white rounded-xl border border-stone-200/90 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
         <div>
           <h3 className="text-sm font-bold text-slate-900 font-heading">
-            {sdgItems.length} Objectifs Mondiaux Ciblés Directement
+            {sdgItems.length} Objectifs Mondiaux Ciblés avec Précision
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Cadre de référence incontournable pour les investisseurs à impact et les rapports de durabilité CSRD.
+            Cartographie des sous-cibles de l'ONU pour les investisseurs à impact et rapports CSRD.
           </p>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
           {sdgItems.map((odd) => {
             const colors = SDG_COLORS[odd.oddNumber] || { bg: 'bg-slate-700', text: 'text-white' };
+            const officialTitle = OFFICIAL_SDG_TITLES[odd.oddNumber] || odd.title;
             return (
               <span
                 key={odd.oddNumber}
                 className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold font-mono-numbers ${colors.bg} ${colors.text}`}
-                title={`ODD ${odd.oddNumber} : ${odd.title}`}
+                title={`ODD ${odd.oddNumber} : ${officialTitle}`}
               >
                 {odd.oddNumber}
               </span>
@@ -69,6 +90,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {sdgItems.map((odd) => {
           const colors = SDG_COLORS[odd.oddNumber] || { bg: 'bg-emerald-700', text: 'text-white' };
+          const officialTitle = OFFICIAL_SDG_TITLES[odd.oddNumber] || odd.title;
 
           return (
             <div
@@ -89,7 +111,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
                       Objectif {odd.oddNumber}
                     </span>
                     <h4 className="text-sm font-bold text-slate-900 font-heading leading-snug">
-                      {odd.title}
+                      {officialTitle}
                     </h4>
                   </div>
                 </div>
@@ -104,7 +126,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
               {/* Sub-targets tags */}
               <div className="pt-2 border-t border-slate-100 text-xs text-slate-600 space-y-1">
                 <span className="text-[11px] font-semibold text-slate-400 block">
-                  Sous-cibles adressées :
+                  Sous-cibles ONU adressées :
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {odd.targets.map((target, idx) => (
