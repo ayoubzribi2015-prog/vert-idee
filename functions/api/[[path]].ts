@@ -23,10 +23,7 @@ export const onRequest = async ({ request, env }: PagesContext): Promise<Respons
   const headers = new Headers(request.headers);
   headers.delete('host');
   headers.delete('content-length');
-  headers.delete('cookie');
-  headers.delete('authorization');
-  // Credentials are not forwarded cross-origin by default. Add explicit
-  // authenticated proxy support only after reviewing the API auth contract.
+  // Preserve application Authorization/Cookie headers for API authentication.
   try {
     const response = await fetch(target, {
       method: request.method,
