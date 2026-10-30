@@ -1,6 +1,6 @@
 type Context = { request: Request; env: { GEMINI_API_KEY?: string; GEMINI_MODEL?: string } };
 
-const defaultModels = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
+const defaultModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
 
 async function callGeminiChat(
   apiKey: string,

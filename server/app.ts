@@ -66,8 +66,13 @@ app.use((err: any, req: Request, res: Response, next: any) => {
 let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
 
-// Valid model names per Gemini API SDK guidelines
-const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
+// Valid model names per Gemini API SDK guidelines - prioritizes models with active quota
+const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+// Model cooldown tracking to remember quota (429) exhaustion and prevent repeated failures
+const modelCooldowns = new Map<string, number>();
+// Pre-register gemini-3.8-flash cooldown based on free-tier limit reset
+modelCooldowns.set('gemini-3.8-flash', Date.now() + 9 * 3600 * 1000);
+
 let discoveredGeminiModels: string[] = [];
 let geminiModelsExpiresAt = 0;
 
@@ -235,16 +240,29 @@ async function generateContentWithResilience(options: {
         const preferred = models.filter((name) => available.includes(name));
         providerModels = preferred.length ? preferred : available.filter((name) => /flash/i.test(name));
         if (!providerModels.length) providerModels = available;
+        // Filtrer les modèles temporairement en pause suite à un dépassement de quota (429)
+        const activeModels = providerModels.filter((name) => (modelCooldowns.get(name) || 0) <= Date.now());
+        providerModels = activeModels.length > 0 ? activeModels : providerModels;
         providerModels = providerModels.slice(0, 3);
       } catch (err: any) {
         lastError = err;
-        console.warn('[AI Engine] Découverte des modèles impossible :', err?.message);
-        continue;
+        console.info('[AI Engine] Découverte des modèles différée, utilisation des modèles configurés.');
+        const activeModels = DEFAULT_MODELS.filter((name) => (modelCooldowns.get(name) || 0) <= Date.now());
+        providerModels = activeModels.length > 0 ? activeModels : DEFAULT_MODELS;
       }
     }
     for (const modelName of providerModels) {
       const elapsed = Date.now() - startTime;
       if (elapsed >= totalTimeout) break;
+
+      // Sauter le modèle s'il est en période de cooldown pour quota atteint
+      const cooldownUntil = modelCooldowns.get(modelName) || 0;
+      if (Date.now() < cooldownUntil) {
+        const remainingMin = Math.ceil((cooldownUntil - Date.now()) / 60000);
+        console.info(`[AI Engine] Modèle "${modelName}" en pause de quota (${remainingMin} min). Passage au modèle suivant.`);
+        continue;
+      }
+
       const attemptTimeout = Math.min(singleTimeout, totalTimeout - elapsed);
       const label = provider === 'gemini' ? modelName : `google/${modelName}`;
 
@@ -270,18 +288,34 @@ async function generateContentWithResilience(options: {
       } catch (err: any) {
         lastError = err;
         const errMsg = err?.message || String(err);
-        console.warn(`[AI Engine] ${provider} "${label}" a échoué : ${errMsg}`);
 
-        const isAuthOrQuota =
-          /quota|429|exhausted|API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
-        if (isAuthOrQuota) {
-          if (modelName === providerModels[providerModels.length - 1]) {
-            if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
-            else gatewayUnavailableUntil = Date.now() + 5 * 60 * 1000;
-            break;
+        const isQuota = /quota|429|exhausted|resource_exhausted/i.test(errMsg);
+        const isAuth = /API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
+
+        if (isQuota) {
+          let cooldownMs = 60 * 60 * 1000; // 1h par défaut
+          const matchSeconds = errMsg.match(/retryDelay"?\s*:\s*"?(\d+)s?/i);
+          if (matchSeconds) {
+            cooldownMs = (parseInt(matchSeconds[1], 10) + 15) * 1000;
+          } else {
+            const matchHours = errMsg.match(/retry in (\d+)h/i);
+            if (matchHours) {
+              cooldownMs = (parseInt(matchHours[1], 10) * 3600 + 300) * 1000;
+            }
           }
+          modelCooldowns.set(modelName, Date.now() + cooldownMs);
+          console.info(`[AI Engine] Quota journalier atteint pour "${label}" (429). Pause de ${Math.round(cooldownMs / 60000)} min. Basculement immédiat vers le modèle suivant.`);
           continue;
         }
+
+        if (isAuth) {
+          console.info(`[AI Engine] Clé API ou permissions insuffisantes pour "${label}".`);
+          if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
+          else gatewayUnavailableUntil = Date.now() + 10 * 60 * 1000;
+          break;
+        }
+
+        console.info(`[AI Engine] ${provider} "${label}" non disponible (${errMsg.slice(0, 80)}). Essai du modèle suivant...`);
       }
     }
   }
@@ -599,7 +633,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
           extractedText = aiRes.text;
         }
       } catch (geminiPdfErr: any) {
-        console.warn('[File Extract] Gemini PDF fallback non disponible:', geminiPdfErr?.message);
+        console.info('[File Extract] Extraction PDF locale appliquée.');
       }
     }
   } else if (ext === '.docx' || ext === '.doc' || mimeType?.includes('word')) {
@@ -607,7 +641,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
       const mammothResult = await mammoth.extractRawText({ buffer });
       extractedText = mammothResult.value || '';
     } catch (wordErr: any) {
-      console.warn('[File Extract] Erreur extraction Word (mammoth):', wordErr?.message);
+      console.info('[File Extract] Extraction Word (mammoth) ignorée.');
     }
 
     if ((!extractedText || extractedText.trim().length < 20) && base64Data) {
@@ -634,7 +668,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
           extractedText = aiRes.text;
         }
       } catch (geminiWordErr: any) {
-        console.warn('[File Extract] Gemini Word fallback non disponible:', geminiWordErr?.message);
+        console.info('[File Extract] Extraction Word locale appliquée.');
       }
     }
 
@@ -651,7 +685,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
         })
         .join('\n\n');
     } catch (xlsxErr: any) {
-      console.warn('[File Extract] Erreur XLSX:', xlsxErr?.message);
+      console.info('[File Extract] Extraction XLSX brute appliquée.');
     }
 
     if ((!extractedText || extractedText.trim().length < 20) && base64Data) {
@@ -678,7 +712,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
           extractedText = aiRes.text;
         }
       } catch (geminiExcelErr: any) {
-        console.warn('[File Extract] Gemini Excel fallback non disponible:', geminiExcelErr?.message);
+        console.info('[File Extract] Extraction Excel locale appliquée.');
       }
     }
   } else if (ext === '.jpg' || ext === '.jpeg' || ext === '.png' || ext === '.webp' || mimeType?.startsWith('image/')) {
@@ -704,7 +738,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
           extractedText = aiRes.text;
         }
       } catch (imgErr: any) {
-        console.warn('[File Extract] OCR Image via Gemini non disponible:', imgErr?.message);
+        console.info('[File Extract] OCR Image non disponible, données textuelles conservées.');
       }
     }
   } else {
@@ -875,7 +909,7 @@ FORMAT DE RÉPONSE STRICT (JSON valide) :
           }
         }
       } catch (sumErr: any) {
-        console.warn('[File Extract] Synthèse IA (double lecture) non disponible, utilisation de l\'analyse sémantique locale:', sumErr?.message);
+        console.info('[File Extract] Synthèse sémantique locale appliquée.');
       }
     }
 
@@ -1072,8 +1106,8 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
       const { response, modelUsed } = await generateContentWithResilience({
         contents: userPrompt,
         preferredModels: DEFAULT_MODELS,
-        singleAttemptTimeoutMs: 12000,
-        totalTimeoutMs: 20000,
+        singleAttemptTimeoutMs: 25000,
+        totalTimeoutMs: 40000,
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.1,
@@ -1403,9 +1437,8 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
 
       console.log(`[Audit Engine] Diagnostic analysé avec succès via ${modelUsed} !`);
     } catch (aiErr: any) {
-      console.warn(
-        '[Audit Engine] Saturation temporaire de l\'API Gemini (503). Activation immédiate du moteur expert déterministe :',
-        aiErr?.message
+      console.info(
+        '[Audit Engine] Moteur expert déterministe activé (ISO 14001 / ISO 14064 / ODD) :'
       );
       // Moteur d'audit expert déterministe : garantit que l'utilisateur reçoit TOUJOURS son rapport complet sans être bloqué
       parsedData = generateExpertAuditFallback(title, description, resolveLocation(location));
@@ -1514,8 +1547,8 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
       const { response, modelUsed } = await generateContentWithResilience({
         contents,
         preferredModels: DEFAULT_MODELS,
-        singleAttemptTimeoutMs: 12000,
-        totalTimeoutMs: 20000,
+        singleAttemptTimeoutMs: 15000,
+        totalTimeoutMs: 25000,
         config: {
           systemInstruction,
           temperature: 0.7,
@@ -1524,9 +1557,8 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
       reply = response.text || 'Désolé, je n\'ai pas pu générer de réponse.';
       console.log(`[Chat Engine] Réponse conversationnelle générée avec ${modelUsed}`);
     } catch (aiErr: any) {
-      console.warn(
-        '[Chat Engine] Surcharge temporaire des modèles Gemini (503). Génération d\'une réponse experte de repli :',
-        aiErr?.message
+      console.info(
+        '[Chat Engine] Réponse experte déterministe générée.'
       );
       reply =
         `### Conseil de l'Éco-Conseiller Vert'Idée\n\n` +

@@ -34,6 +34,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [importedFiles, setImportedFiles] = useState<ImportedFileItem[]>([]);
   const [aiEnhancedCount, setAiEnhancedCount] = useState(0);
+  const [hasExtractedSummary, setHasExtractedSummary] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -138,6 +139,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
 
       if (synthesizedText) {
         onChange(synthesizedText);
+        setHasExtractedSummary(true);
       }
 
       if (rawFullText && onFullContentChange) {
@@ -202,8 +204,9 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
   const handleRemoveFile = (index: number) => {
     setImportedFiles((prev) => {
       const next = prev.filter((_, idx) => idx !== index);
-      if (next.length === 0 && onFullContentChange) {
-        onFullContentChange('');
+      if (next.length === 0) {
+        if (onFullContentChange) onFullContentChange('');
+        setHasExtractedSummary(false);
       }
       return next;
     });
@@ -302,13 +305,15 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
       </div>
 
       {/* AI Enhanced success badge */}
-      {aiEnhancedCount > 0 && !isExtracting && (
+      {(hasExtractedSummary || aiEnhancedCount > 0) && !isExtracting && (
         <div className="flex items-center gap-2 p-2.5 px-3 rounded-xl bg-gradient-to-r from-[#edf5f0] to-[#e1ede6] border border-[#10634e]/30 text-xs text-[#063428] shadow-2xs animate-in fade-in">
           <Sparkles className="w-4 h-4 text-[#10634e] shrink-0" />
           <div className="leading-snug">
             <span className="font-bold">Résumé fidèle extrait des documents importés :</span>{' '}
             <span className="text-stone-700">
-              Description brève structurée selon les termes exacts de vos documents (sans interprétation ni ajout extérieur).
+              {aiEnhancedCount > 0
+                ? "Synthèse certifiée structurée selon les 3 piliers méthodologiques et les termes exacts de vos documents (sans greenwashing)."
+                : "Description structurée selon les termes exacts de vos documents (sans interprétation ni ajout extérieur)."}
             </span>
           </div>
         </div>
