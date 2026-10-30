@@ -139,20 +139,20 @@ async function discoverGeminiModel(apiKey: string, preferred?: string): Promise<
   const models = (payload.models || []).filter((m: any) =>
     Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent')
   );
-  const configured = (preferred || '').trim().replace(/^models\\//, '');
+  const configured = (preferred || '').trim().replace(/^models\//, '');
   const priorities = [configured, 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean);
   for (const candidate of priorities) {
     const match = models.find((m: any) => m.name === 'models/' + candidate);
-    if (match) return match.name.replace(/^models\\//, '');
+    if (match) return match.name.replace(/^models\//, '');
   }
-  const fallback = models.find((m: any) => /^models\\/gemini-.*flash/i.test(m.name));
-  if (fallback) return fallback.name.replace(/^models\\//, '');
+  const fallback = models.find((m: any) => /^models\/gemini-.*flash/i.test(m.name));
+  if (fallback) return fallback.name.replace(/^models\//, '');
   throw new Error('GEMINI_NO_SUPPORTED_MODEL');
 }
 async function synthesize(text: string, apiKey: string, model: string): Promise<Summary> {
   if (text.length > 350000) throw new Error('DOCUMENT_TOO_LONG');
   // Gemini supports long context; one request avoids serial calls and repeated timeouts.
-  return callGemini('Analyse ce document et produis une synthèse unique, concise et sans répétitions.\\n<document>\\n' + text + '\\n</document>', apiKey, model);
+  return callGemini('Analyse ce document et produis une synthèse unique, concise et sans répétitions.\n<document>\n' + text + '\n</document>', apiKey, model);
 }
 
 export const onRequestPost = async (
@@ -298,7 +298,7 @@ export const onRequestPost = async (
         GEMINI_INVALID_JSON: 'Gemini a renvoyé une réponse JSON invalide.',
         DOCUMENT_TOO_LONG: 'Document trop volumineux pour cette synthèse.',
       };
-      const diagnostic = /^GEMINI_HTTP_\\d+$/.test(reason) ? reason : (reason === 'AbortError' ? 'GEMINI_TIMEOUT' : reason);
+      const diagnostic = /^GEMINI_HTTP_\d+$/.test(reason) ? reason : (reason === 'AbortError' ? 'GEMINI_TIMEOUT' : reason);
       return respond({ success: false, code: 'AI_SUMMARIZATION_FAILED', diagnostic, error: messages[diagnostic] || 'La synthèse IA a échoué. Consultez les journaux Cloudflare.' }, 502);
     }
   } catch (error) {
