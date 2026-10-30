@@ -1,6 +1,9 @@
 name: Synchronize Bun lockfile and verify build
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - fix/bun-lockfile-cloudflare-20261030
