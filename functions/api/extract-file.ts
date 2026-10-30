@@ -1,5 +1,6 @@
+import { extractText, getDocumentProxy } from 'unpdf';
 import { unzipSync, strFromU8 } from 'fflate';
-// Native Cloudflare document extraction for plain text and DOCX (OOXML).
+// Native Cloudflare extraction for text, DOCX and text-based PDF files.
 type Context = { request: Request };
 type Upload = { filename?: string; mimeType?: string; base64Data?: string; localText?: string };
 const respond = (data: unknown, status = 200) => Response.json(data, { status });
@@ -27,6 +28,12 @@ const extractDocx = (base64: string): string => {
     .replace(/\\n{3,}/g, '\\n\\n')
     .trim();
 };
+const extractPdf = async (base64: string): Promise<string> => {
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  const pdf = await getDocumentProxy(bytes);
+  const result = await extractText(pdf, { mergePages: true });
+  return result.text.trim();
+};
 const textExtensions = /\.(txt|md|csv|tsv|json|log)$/i;
 export const onRequestPost = async ({ request }: Context): Promise<Response> => {
   try {
@@ -37,6 +44,10 @@ export const onRequestPost = async ({ request }: Context): Promise<Response> => 
     for (const file of files) {
       const filename = file.filename || 'Document';
       let content = typeof file.localText === 'string' ? file.localText : '';
+      if (!content && /\.pdf$/i.test(filename) && file.base64Data) {
+        content = await extractPdf(file.base64Data);
+        if (!content) return respond({ success: false, error: `Le PDF « ${filename} » ne contient pas de texte sélectionnable. Une reconnaissance OCR est nécessaire pour les documents scannés.`, code: 'PDF_OCR_REQUIRED' }, 422);
+      }
       if (!content && /\.docx$/i.test(filename) && file.base64Data) {
         content = extractDocx(file.base64Data);
       }
