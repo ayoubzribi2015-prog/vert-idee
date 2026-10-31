@@ -351,6 +351,61 @@ export async function generateWordReport(project: ProjectAudit): Promise<Blob> {
                 }),
               ]
             : []),
+          ...(project.greenEntrepreneurshipIntegration.environmentalAssets && project.greenEntrepreneurshipIntegration.environmentalAssets.length > 0
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 180, after: 80 },
+                  children: [
+                    new TextRun({ text: 'Atouts environnementaux majeurs du modèle vert', bold: true, size: 20, color: SECONDARY_COLOR }),
+                  ],
+                }),
+                ...project.greenEntrepreneurshipIntegration.environmentalAssets.map(
+                  (asset) =>
+                    new Paragraph({
+                      spacing: { before: 40, after: 60 },
+                      children: [
+                        new TextRun({ text: '✓ ', bold: true, color: PRIMARY_COLOR }),
+                        new TextRun({ text: asset, color: '111827' }),
+                      ],
+                    })
+                ),
+              ]
+            : []),
+          ...(project.greenEntrepreneurshipIntegration.improvementAxes && project.greenEntrepreneurshipIntegration.improvementAxes.length > 0
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 200, after: 80 },
+                  children: [
+                    new TextRun({ text: 'Axes d\'amélioration prioritaires & Leviers d\'éco-transition', bold: true, size: 20, color: SECONDARY_COLOR }),
+                  ],
+                }),
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        createHeaderCell('Chantier d\'amélioration'),
+                        createHeaderCell('Levier opérationnel'),
+                        createHeaderCell('Gain environnemental mesuré'),
+                        createHeaderCell('Impact économique / ROI'),
+                      ],
+                    }),
+                    ...project.greenEntrepreneurshipIntegration.improvementAxes.map((item) =>
+                      new TableRow({
+                        children: [
+                          createDataCell(`${item.axis}${item.priority ? `\n[Priorité : ${item.priority}]` : ''}`, true),
+                          createDataCell(item.lever),
+                          createDataCell(item.environmentalGain),
+                          createDataCell(item.economicPayoff, true),
+                        ],
+                      })
+                    ),
+                  ],
+                }),
+              ]
+            : []),
           new Paragraph({
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 180, after: 80 },

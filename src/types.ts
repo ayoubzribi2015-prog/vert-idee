@@ -75,6 +75,14 @@ export interface DecouplingMetric {
   methodology: string;
 }
 
+export interface GreenImprovementAxis {
+  axis: string;
+  lever: string;
+  environmentalGain: string;
+  economicPayoff: string;
+  priority?: 'Haute' | 'Moyenne' | 'Stratégique';
+}
+
 export interface GreenEntrepreneurshipIntegration {
   differentiationFactor: string;
   circularValueProposition: string;
@@ -82,6 +90,8 @@ export interface GreenEntrepreneurshipIntegration {
   circularArchetype?: string;
   iso59000Compliance?: string;
   competitiveMoat?: string;
+  environmentalAssets?: string[];
+  improvementAxes?: GreenImprovementAxis[];
   monetizationMechanisms?: CircularMonetizationMechanism[];
   industrialSymbiosis?: IndustrialSymbiosisSynergy[];
   decouplingMetrics?: DecouplingMetric[];

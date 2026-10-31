@@ -117,6 +117,133 @@ export const GreenBusinessTab: React.FC<GreenBusinessTabProps> = ({ integration 
         </div>
       </div>
 
+      {/* Atouts Environnementaux Validés & Axes d'Amélioration du Projet */}
+      {((integration.environmentalAssets && integration.environmentalAssets.length > 0) ||
+        (integration.improvementAxes && integration.improvementAxes.length > 0)) && (
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 space-y-6 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  Performance & Trajectoire Verte
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                  Plan de Progrès Éco-responsable
+                </span>
+              </div>
+              <h3 className="text-base font-bold text-stone-900 font-heading mt-1.5">
+                Atouts Environnementaux Validés & Axes d'Amélioration Prioritaires
+              </h3>
+              <p className="text-xs text-stone-500">
+                Capitalisation sur les éco-avantages compétitifs du modèle et pilotage opérationnel des chantiers d'éco-transition à haut retour sur investissement
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Colonne 1: Atouts Environnementaux (Éco-avantages) */}
+            {integration.environmentalAssets && integration.environmentalAssets.length > 0 && (
+              <div className={`space-y-3.5 ${integration.improvementAxes && integration.improvementAxes.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'}`}>
+                <div className="flex items-center gap-2 pb-1 border-b border-emerald-100">
+                  <span className="p-1 rounded-md bg-emerald-100 text-emerald-800">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
+                      Atouts Environnementaux Majeurs
+                    </h4>
+                    <span className="text-[11px] text-emerald-700">Gains écologiques intrinsèques au projet</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {integration.environmentalAssets.map((asset, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-xl border border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50/70 transition-colors flex items-start gap-3"
+                    >
+                      <span className="mt-0.5 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">
+                        ✓
+                      </span>
+                      <p className="text-xs text-stone-800 leading-relaxed font-medium">
+                        {asset}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Colonne 2: Axes d'Amélioration & Leviers de transition */}
+            {integration.improvementAxes && integration.improvementAxes.length > 0 && (
+              <div className={`space-y-3.5 ${integration.environmentalAssets && integration.environmentalAssets.length > 0 ? 'lg:col-span-7' : 'lg:col-span-12'}`}>
+                <div className="flex items-center gap-2 pb-1 border-b border-sky-100">
+                  <span className="p-1 rounded-md bg-sky-100 text-sky-800">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h4 className="text-xs font-bold text-sky-950 uppercase tracking-wider">
+                      Axes d'Amélioration & Leviers d'Éco-Transition
+                    </h4>
+                    <span className="text-[11px] text-sky-700">Chantiers prioritaires de progrès et de rentabilité verte</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {integration.improvementAxes.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 rounded-xl border border-stone-200 bg-stone-50/60 hover:bg-white hover:border-sky-300 transition-all space-y-2.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <h5 className="font-bold text-xs text-stone-900 leading-snug">
+                          {item.axis}
+                        </h5>
+                        {item.priority && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            item.priority === 'Stratégique'
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : item.priority === 'Haute'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-stone-100 text-stone-700 border-stone-200'
+                          }`}>
+                            Priorité : {item.priority}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-stone-600">
+                        <span className="font-semibold text-stone-700">Levier opérationnel : </span>
+                        <span>{item.lever}</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-stone-200/80 text-[11px]">
+                        <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-100">
+                          <span className="font-bold text-emerald-900 block text-[10px] uppercase tracking-wide">
+                            Gain environnemental mesuré :
+                          </span>
+                          <span className="text-emerald-800 font-medium">{item.environmentalGain}</span>
+                        </div>
+                        <div className="bg-sky-50/70 p-2 rounded-lg border border-sky-100">
+                          <span className="font-bold text-sky-900 block text-[10px] uppercase tracking-wide">
+                            Impact économique / Rentabilité :
+                          </span>
+                          <span className="text-sky-800 font-medium">{item.economicPayoff}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Innovative Business Models */}
       <div className="bg-white rounded-2xl border border-stone-200 p-6 space-y-5 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-3">

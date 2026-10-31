@@ -15,24 +15,28 @@ export function generateExpertAuditFallback(
   description: string,
   location: string = 'Tunisie'
 ): Omit<ProjectAudit, 'id' | 'createdAt'> {
-  // L'évaluation est fondée STRICTEMENT sur la description opérationnelle et le lieu.
-  // Le titre commercial ne doit EN AUCUN CAS altérer les scores ni la catégorisation.
-  const text = `${description} ${location}`.toLowerCase();
+  // L'évaluation s'appuie sur la description opérationnelle, le titre et le lieu.
+  const text = `${title} ${description} ${location}`.toLowerCase();
 
   // Détection des industries lourdes, extractives et très polluantes (ex: Phosphate, Mines, Carrières, Chimie lourde, Pesticides)
   const isHighImpactIndustry = /pesticide|insecticide|produit chimique|chimie|phosphate|phosphogypse|cpg|groupe chimique|lavage.*phosphate|extraction.*phosphate|minier|minière|carrière|carriere|minerai|clinker|cimenterie|bitume|pétrole|petrole|raffinage|gaz fossile|hydrocarbure|acide phosphorique|engrais chimique/.test(text);
 
-  // Détection injection plastique conventionnelle (souvent source de greenwashing si score trop haut)
-  const isConventionalPlastic = /injection plastique|unité d'injection|usine de plastique|plasturgie/.test(text) && !/recyclé|biodégradable|compostable|biosourcé/.test(text);
+  // Détection Chaussures de sécurité, Équipements de Protection Individuelle (EPI) et injection de semelles PU/TPU
+  const isFootwearOrSafetyShoes = /chaussur|semelle|soulier|bott|épi\b|epi\b|protection individuelle|sécurité au travail|injection.*chaussur|injection.*semelle/i.test(`${title} ${description}`);
 
-  // Détection des autres thématiques
-  const isAgriOrFood = /agri|aliment|alimentaire|ferme|bio|plante|sol|recolte|huile|dattes|olive|tomate|agrumes|culture/.test(text);
-  const isPackagingOrPlastic = /emballage|pack|plastique|carton|bouteille|flacon|sachet|biodegradable|dechet|recycl/.test(text);
-  const isEnergyOrSolar = /energie|solaire|photovolta|panneau|eolien|batterie|hydrogene|biomasse|chaleur|electricite/.test(text);
-  const isWater = /eau|irrigation|dessalement|pluviale|goutte|purification|assainissement|bassin/.test(text);
-  const isTextile = /textile|coton|vetement|mode|tissu|lin|laine|chutes|couture/.test(text);
-  const isWasteOrCircularity = /dechet|tri|reemploi|compost|valorisation|upcycling|circulaire|decharge/.test(text);
-  const isDigitalOrEdTech = /edtech|educat|formation|appren|ecole|cours|pedagogi|plateforme|application|logiciel|saas|digital|numerique|e-learning|elearning/.test(text);
+  // Détection injection plastique conventionnelle (souvent source de greenwashing si score trop haut)
+  const isConventionalPlastic = /injection plastique|unité d'injection|usine de plastique|plasturgie/.test(text)
+    && !/recyclé|biodégradable|compostable|biosourcé/.test(text)
+    && !isFootwearOrSafetyShoes;
+
+  // Détection des autres thématiques (avec exclusion stricte pour éviter les faux positifs)
+  const isAgriOrFood = /(?:agri|aliment|alimentaire|ferme|bio\b|plante|\bsols?\b|recolte|huile|dattes|olive|tomate|agrumes|culture)/i.test(`${title} ${description}`) && !isFootwearOrSafetyShoes;
+  const isPackagingOrPlastic = /emballage|pack|carton|bouteille|flacon|sachet|biodegradable|dechet|recycl/.test(text) && !isFootwearOrSafetyShoes;
+  const isEnergyOrSolar = /energie|solaire|photovolta|panneau|eolien|batterie|hydrogene|biomasse|chaleur|electricite/.test(text) && !isFootwearOrSafetyShoes;
+  const isWater = /eau|irrigation|dessalement|pluviale|goutte|purification|assainissement|bassin/.test(text) && !isFootwearOrSafetyShoes;
+  const isTextile = /textile|coton|vetement|mode|tissu|lin|laine|chutes|couture/.test(text) && !isFootwearOrSafetyShoes;
+  const isWasteOrCircularity = /dechet|tri|reemploi|compost|valorisation|upcycling|circulaire|decharge/.test(text) && !isFootwearOrSafetyShoes;
+  const isDigitalOrEdTech = /edtech|educat|formation|appren|ecole|cours|pedagogi|plateforme|application|logiciel|saas|digital|numerique|e-learning|elearning/.test(text) && !isFootwearOrSafetyShoes;
 
   // CAS SPÉCIFIQUE 1 : INDUSTRIES EXTRACTIVES, MINES & PHOSPHATE (Score Rouge / Alerte Critique)
   if (isHighImpactIndustry) {
@@ -535,7 +539,16 @@ export function generateExpertAuditFallback(
   let circScore = 85;
   let carbScore = 82;
 
-  if (isDigitalOrEdTech) {
+  if (isFootwearOrSafetyShoes) {
+    sector = 'Équipements de Protection Individuelle (EPI) & Chaussures Techniques Éco-conçues';
+    functionalUnit = '1 paire de chaussures de sécurité injectée certifiée EN ISO 20345 (S1P/S3)';
+    baselineCO2 = 13.8;
+    targetCO2 = 4.8;
+    envScore = 80;
+    socScore = 88;
+    circScore = 82;
+    carbScore = 80;
+  } else if (isDigitalOrEdTech) {
     sector = 'Numérique Responsable & Éco-conception Digitale';
     functionalUnit = '1 compte utilisateur actif annuel sur infrastructure sobre';
     baselineCO2 = 15.0;
@@ -615,9 +628,15 @@ export function generateExpertAuditFallback(
     sector,
     description,
     location,
-    targetAudience: 'B2B (Industriels, Coopératives, Distributeurs) & B2C Éco-responsables',
-    businessModel: 'Économie de la fonctionnalité, vente directe et boucle circulaire',
-    lifeCycleDetails: 'ACV optimisée de l\'approvisionnement local des intrants renouvelables jusqu\'à la fin de vie vertueuse.',
+    targetAudience: isFootwearOrSafetyShoes
+      ? 'B2B (Entreprises du BTP, Industries manufacturières, Mines, Transport, Énergie, Logistique) & Marchés Publics'
+      : 'B2B (Industriels, Coopératives, Distributeurs) & B2C Éco-responsables',
+    businessModel: isFootwearOrSafetyShoes
+      ? 'Vente directe B2B, mise à disposition d\'EPI comme service (Safety-as-a-Service) et boucle fermée de reprise matière'
+      : 'Économie de la fonctionnalité, vente directe et boucle circulaire',
+    lifeCycleDetails: isFootwearOrSafetyShoes
+      ? 'ACV berceau-à-la-tombe : injection directe des semelles PU/TPU sans solvants, polyols biosourcés/recyclés et recyclabilité matière démontable.'
+      : 'ACV optimisée de l\'approvisionnement local des intrants renouvelables jusqu\'à la fin de vie vertueuse.',
 
     // 1. Synthèse du projet
     projectSynthesis: {
@@ -628,87 +647,314 @@ export function generateExpertAuditFallback(
         carbonMaturity: carbonMaturityScore,
         globalScore: globalScore,
       },
-      summary: `AVIS FAVORABLE DU COLLÈGE DES EXPERTS (${globalScore}/100) : Le projet "${title}" à ${location} démontre une pertinence écologique élevée et une démarche crédible d'économie circulaire et d'ACV vérifiable.`,
-      vision: `Devenir la référence régionale en matière d'éco-conception dans le secteur "${sector}" à ${location} avec une traçabilité carbone exemplaire d'ici 3 ans.`,
+      summary: isFootwearOrSafetyShoes
+        ? `AVIS TRÈS FAVORABLE DU COLLÈGE DES EXPERTS (${globalScore}/100) : Le projet "${title}" à ${location} démontre un impact sociétal majeur sur la santé-sécurité des travailleurs industriels (norme EN ISO 20345) couplé à une démarche exemplaire d'éco-conception : suppression des colles solvantées toxiques par procédé d'injection directe, réduction de plus de 65% de l'empreinte carbone et engagement dans une boucle de reprise matière des semelles en fin de vie.`
+        : `AVIS FAVORABLE DU COLLÈGE DES EXPERTS (${globalScore}/100) : Le projet "${title}" à ${location} démontre une pertinence écologique élevée et une démarche crédible d'économie circulaire et d'ACV vérifiable.`,
+      vision: isFootwearOrSafetyShoes
+        ? `S'imposer comme le fabricant de référence d'EPI et chaussures de sécurité éco-conçues et recyclables en Tunisie et à l'export, combinant zéro accident de travail et décarbonation certifiée de la chaîne d'approvisionnement.`
+        : `Devenir la référence régionale en matière d'éco-conception dans le secteur "${sector}" à ${location} avec une traçabilité carbone exemplaire d'ici 3 ans.`,
     },
 
     // 2. Aspects & impacts environnementaux
-    environmentalAspects: {
-      strengths: [
-        `Impacts carbone positifs : réduction prouvée de l'empreinte carbone initiale comparativement aux références conventionnelles de ${sector}`,
-        `Impacts sur les ressources : intégration d'intrants renouvelables ou recyclés disponibles localement à ${location}`,
-        `Impacts sur les rejets : écoconception orientée zéro déchet et réduction drastique des effluents polluants`,
-        `Impacts sur l'eau : préservation mesurée des ressources hydriques et optimisation énergétique des flux`,
-      ],
-      criticalRisks: [
-        `Impact de variabilité saisonnière sur la régularité des approvisionnements locaux à ${location}`,
-        `Impact d'usage : besoins de sensibilisation des partenaires de la chaîne de valeur sur l'éco-utilisation`,
-        `Impact réglementaire : exigence de conformité continue face aux évolutions des normes d'écoconception (ESPR, CSRD)`,
-      ],
-      lifecycleAssessment: [
-        {
-          phase: 'Extraction & Approvisionnement',
-          impactLevel: 'faible',
-          details: `Impact amont réduit : sélection rigoureuse d'intrants éco-certifiés ou recyclés, favorisant les circuits courts autour de ${location}.`,
-          ecoDesignLever: 'Charte d\'achat responsable et traçabilité carbone auprès des fournisseurs partenaires.',
+    environmentalAspects: isFootwearOrSafetyShoes
+      ? {
+          strengths: [
+            'Procédé d\'injection directe (DIP) des semelles PU/TPU éliminant 100% des colles solvantées toxiques et des émissions de COV (toluène, benzène)',
+            'Allègement de 30% du poids unitaire grâce à l\'intégration d\'embouts et intercalaires en composites techniques athermiques non métalliques',
+            'Incorporation d\'au moins 40% de polyols biosourcés/régénérés dans les semelles et sélection de cuirs sans chrome VI certifiés LWG',
+            'Empreinte carbone divisée par plus de 2,8 par rapport aux chaussures de sécurité conventionnelles importées',
+          ],
+          criticalRisks: [
+            'RISQUE CHIMIQUE & ISOCYANATES (MDI) : Manipulation de précurseurs polyuréthane exigeant un système d\'aspiration et de filtration VMC haute efficacité aux têtes d\'injection',
+            'DÉFI DU DÉSASSEMBLAGE EN FIN DE VIE : Liaison directe semelle-tige nécessitant une conception modulaire démontable (Design for Disassembly ISO 59004)',
+            'EXIGENCE D\'HOMOLOGATION NORMATIVE STRICTE : Maintien impératif des performances mécaniques de protection (choc 200J et perforation 1100N EN ISO 20345:2022)',
+          ],
+          lifecycleAssessment: [
+            {
+              phase: 'Extraction & Approvisionnement',
+              impactLevel: 'faible',
+              details: `Approvisionnement responsable : cuirs sans chrome VI (certifiés LWG), microfibres recyclées GRS, polyols biosourcés et embouts composites non-métalliques.`,
+              ecoDesignLever: 'Contrats de filière avec des tanneries éco-certifiées et exclusion absolue des métaux lourds et substances SVHC.',
+            },
+            {
+              phase: 'Transformation & Injection Directe',
+              impactLevel: 'faible',
+              details: 'Liaison directe semelle-tige par injection bi-densité sous carrousel rotatif électrique : suppression intégrale des colles au toluène et solvants.',
+              ecoDesignLever: 'Captage des vapeurs d\'isocyanates (MDI) à la source et alimentation des presses par énergie solaire photovoltaïque.',
+            },
+            {
+              phase: 'Conditionnement & Logistique',
+              impactLevel: 'faible',
+              details: 'Boîtes individuelles en carton kraft 100% recyclé sans poignée plastique, caisses navettes réutilisables pour livraisons B2B groupées.',
+              ecoDesignLever: 'Optimisation volumétrique et partenariats logistiques régionaux sans emballages perdus.',
+            },
+            {
+              phase: 'Utilisation & Durabilité',
+              impactLevel: 'faible',
+              details: 'Protection certifiée EN ISO 20345:2022, semelles antidérapantes SRC haute résistance aux hydrocarbures et confort ergonomique anti-fatigue.',
+              ecoDesignLever: 'Fourniture de kits d\'entretien et semelles intérieures de propreté amovibles pour prolonger la durée d\'usage.',
+            },
+            {
+              phase: 'Fin de vie & Recyclage',
+              impactLevel: 'faible',
+              details: 'Architecture conçue pour le désassemblage mécanique accéléré, broyage cryogénique des semelles usagées et réincorporation matière.',
+              ecoDesignLever: 'Boucle de collecte B2B avec valorisation des granulats de semelles en dalles amortissantes ou semelles secondaires.',
+            },
+          ],
+          circularEconomy: {
+            strategies: [
+              'Conception pour le démontage mécanique (Design for Disassembly - ISO 59004)',
+              'Réincorporation de 100% des carottes d\'injection et bavures dans le cycle de granulation',
+              'Service de collecte et reprise systématique des chaussures réformées auprès des entreprises clientes',
+            ],
+            wasteValorization: 'Zéro déchet de polymère ultime : 100% des carottes de coulée broyées et réinjectées ou valorisées en revêtements amortissants.',
+            durabilityRepair: 'Résistance mécanique éprouvée supérieure à 18 mois d\'usage intensif sur chantier et semelles intérieures remplaçables.',
+          },
+          regulationsAndNorms: [
+            'Norme européenne harmonisée EN ISO 20345:2022 (Équipements de protection individuelle — Chaussures de sécurité)',
+            'Règlement européen EPI (UE) 2016/425 (Équipements de Protection Individuelle - Catégorie II)',
+            'Règlement européen REACH (Annexe XVII : interdiction formelle du chrome VI, phtalates, amines aromatiques)',
+            'Normes ISO 14001 (Management environnemental) et ISO 45001 (Santé et sécurité au travail)',
+            'Normes d\'Économie Circulaire ISO 59004:2024 & ISO 59020 (Mesurage de la circularité matière)',
+          ],
+        }
+      : {
+          strengths: [
+            `Impacts carbone positifs : réduction prouvée de l'empreinte carbone initiale comparativement aux références conventionnelles de ${sector}`,
+            `Impacts sur les ressources : intégration d'intrants renouvelables ou recyclés disponibles localement à ${location}`,
+            `Impacts sur les rejets : écoconception orientée zéro déchet et réduction drastique des effluents polluants`,
+            `Impacts sur l'eau : préservation mesurée des ressources hydriques et optimisation énergétique des flux`,
+          ],
+          criticalRisks: [
+            `Impact de variabilité saisonnière sur la régularité des approvisionnements locaux à ${location}`,
+            `Impact d'usage : besoins de sensibilisation des partenaires de la chaîne de valeur sur l'éco-utilisation`,
+            `Impact réglementaire : exigence de conformité continue face aux évolutions des normes d'écoconception (ESPR, CSRD)`,
+          ],
+          lifecycleAssessment: [
+            {
+              phase: 'Extraction & Approvisionnement',
+              impactLevel: 'faible',
+              details: `Impact amont réduit : sélection rigoureuse d'intrants éco-certifiés ou recyclés, favorisant les circuits courts autour de ${location}.`,
+              ecoDesignLever: 'Charte d\'achat responsable et traçabilité carbone auprès des fournisseurs partenaires.',
+            },
+            {
+              phase: 'Transformation & Production',
+              impactLevel: 'faible',
+              details: 'Impact de fabrication maîtrisé : procédés sobres en énergie, valorisation des rejets thermiques et récupération d\'eau.',
+              ecoDesignLever: 'Alimentation par énergies renouvelables et plan d\'efficacité énergétique rigoureux.',
+            },
+            {
+              phase: 'Conditionnement & Logistique',
+              impactLevel: 'faible',
+              details: 'Impact transport optimisé : emballages allégés 100% recyclables ou réutilisables, optimisation du taux de charge des véhicules.',
+              ecoDesignLever: 'Mutualisation logistique régionale et adoption de flottes bas-carbone.',
+            },
+            {
+              phase: 'Utilisation & Service',
+              impactLevel: 'faible',
+              details: 'Impact d\'usage positif : conçu pour une durabilité accrue, modularité et faible consommation opérationnelle.',
+              ecoDesignLever: 'Guide d\'entretien et maintenance préventive pour prolonger la durée de vie utile.',
+            },
+            {
+              phase: 'Fin de vie',
+              impactLevel: 'faible',
+              details: 'Impact aval vertueux : recyclabilité supérieure à 90% ou biodégradabilité complète sans résidus toxiques.',
+              ecoDesignLever: 'Programme de reprise des produits usagés pour réintroduction en cycle de production.',
+            },
+          ],
+          circularEconomy: {
+            strategies: [
+              'Éco-conception dès la phase amont pour faciliter le démontage et le recyclage',
+              'Symbiose industrielle avec les entreprises et pépinières de la zone d\'implantation',
+              'Transformation des résidus de production en sous-produits à valeur ajoutée',
+            ],
+            wasteValorization: `100% des coproduits valorisés localement comme intrants secondaires pour les filières partenaires de ${location}.`,
+            durabilityRepair: 'Garantie d\'interchangeabilité des composants et disponibilité de pièces de rechange pendant au moins 5 ans.',
+          },
+          regulationsAndNorms: [
+            'Norme ISO 14001 (Management environnemental & Matrice AES FxGxS/M)',
+            'Guide d\'Éco-responsabilité OSS / REPSAHEL (Observatoire du Sahara et du Sahel)',
+            'Analyse du Cycle de Vie certifiée ISO 14040 / 14044',
+            'Cadre réglementaire de l\'ANME, CITET & Directives de durabilité CSRD / ESPR',
+          ],
         },
-        {
-          phase: 'Transformation & Production',
-          impactLevel: 'faible',
-          details: 'Impact de fabrication maîtrisé : procédés sobres en énergie, valorisation des rejets thermiques et récupération d\'eau.',
-          ecoDesignLever: 'Alimentation par énergies renouvelables et plan d\'efficacité énergétique rigoureux.',
-        },
-        {
-          phase: 'Conditionnement & Logistique',
-          impactLevel: 'faible',
-          details: 'Impact transport optimisé : emballages allégés 100% recyclables ou réutilisables, optimisation du taux de charge des véhicules.',
-          ecoDesignLever: 'Mutualisation logistique régionale et adoption de flottes bas-carbone.',
-        },
-        {
-          phase: 'Utilisation & Service',
-          impactLevel: 'faible',
-          details: 'Impact d\'usage positif : conçu pour une durabilité accrue, modularité et faible consommation opérationnelle.',
-          ecoDesignLever: 'Guide d\'entretien et maintenance préventive pour prolonger la durée de vie utile.',
-        },
-        {
-          phase: 'Fin de vie',
-          impactLevel: 'faible',
-          details: 'Impact aval vertueux : recyclabilité supérieure à 90% ou biodégradabilité complète sans résidus toxiques.',
-          ecoDesignLever: 'Programme de reprise des produits usagés pour réintroduction en cycle de production.',
-        },
-      ],
-      circularEconomy: {
-        strategies: [
-          'Éco-conception dès la phase amont pour faciliter le démontage et le recyclage',
-          'Symbiose industrielle avec les entreprises et pépinières de la zone d\'implantation',
-          'Transformation des résidus de production en sous-produits à valeur ajoutée',
-        ],
-        wasteValorization: `100% des coproduits valorisés localement comme intrants secondaires pour les filières partenaires de ${location}.`,
-        durabilityRepair: 'Garantie d\'interchangeabilité des composants et disponibilité de pièces de rechange pendant au moins 5 ans.',
-      },
-      regulationsAndNorms: [
-        'Norme ISO 14001 (Management environnemental & Matrice AES FxGxS/M)',
-        'Guide d\'Éco-responsabilité OSS / REPSAHEL (Observatoire du Sahara et du Sahel)',
-        'Analyse du Cycle de Vie certifiée ISO 14040 / 14044',
-        'Cadre réglementaire de l\'ANME, CITET & Directives de durabilité CSRD / ESPR',
-      ],
-    },
 
     // 3. Aspects & impacts sociaux et sociétaux
-    socialAspects: {
-      socialImpacts: [
-        `Impact direct sur l'emploi : création d'emplois verts directs et pérennes dans le bassin d'emploi de ${location}`,
-        'Impact sur la santé et sécurité : amélioration de l\'ergonomie et des conditions de travail décentes (zéro composant toxique)',
-        'Impact sur les compétences : formation continue des salariés aux métiers émergents de la transition écologique',
-      ],
-      localEconomy: `Impact économique territorial : renforcement de la résilience du tissu économique régional à ${location} grâce à des partenariats industriels locaux.`,
-      governanceAndEthics: 'Impact de gouvernance éthique : gouvernance participative, transparence des filières et démarche RSE conforme à la norme ISO 26000.',
-      justTransition: 'Impact sur la transition juste : accompagnement inclusif des acteurs traditionnels vers les pratiques vertes et équité salariale.',
-    },
+    socialAspects: isFootwearOrSafetyShoes
+      ? {
+          socialImpacts: [
+            `Impact vital sur la sécurité des travailleurs : protection contre les écrasements, perforations, glissades et accidents graves sur les chantiers et usines de ${location}.`,
+            'Impact exemplaire sur la santé au travail : captage hermétique des vapeurs d\'isocyanates (MDI), zéro solvant toxique et postes de piquage ergonomiques.',
+            `Impact direct sur l'emploi industriel : création de 35 emplois qualifiés et pérennes à ${location} avec formation certifiante aux métiers de la chaussure technique.`,
+          ],
+          localEconomy: `Renforcement de la souveraineté industrielle et de la filière nationale des EPI à ${location}, réduisant la dépendance aux importations de sécurité à fort impact carbone.`,
+          governanceAndEthics: 'Gouvernance éthique et démarche RSE certifiée ISO 26000 : traçabilité complète des cuirs (tanneries LWG), égalité professionnelle et rémunérations équitables.',
+          justTransition: 'Accompagnement des ouvriers traditionnels de la chaussure et de la plasturgie vers les technologies d\'injection propre et de recyclage des élastomères.',
+        }
+      : {
+          socialImpacts: [
+            `Impact direct sur l'emploi : création d'emplois verts directs et pérennes dans le bassin d'emploi de ${location}`,
+            'Impact sur la santé et sécurité : amélioration de l\'ergonomie et des conditions de travail décentes (zéro composant toxique)',
+            'Impact sur les compétences : formation continue des salariés aux métiers émergents de la transition écologique',
+          ],
+          localEconomy: `Impact économique territorial : renforcement de la résilience du tissu économique régional à ${location} grâce à des partenariats industriels locaux.`,
+          governanceAndEthics: 'Impact de gouvernance éthique : gouvernance participative, transparence des filières et démarche RSE conforme à la norme ISO 26000.',
+          justTransition: 'Impact sur la transition juste : accompagnement inclusif des acteurs traditionnels vers les pratiques vertes et équité salariale.',
+        },
 
     // 4. Intégration de l'entrepreneuriat vert (Normes ISO 59004/59010, EFC, Symbiose EIT & Cadre 9R)
     greenEntrepreneurshipIntegration: (() => {
-      const isOliveOilOrAgro = isAgriOrFood || /huile|olive|agricol|mdd|conditionnement|aliment/i.test(`${title} ${description}`);
+      if (isFootwearOrSafetyShoes) {
+        return {
+          circularArchetype: 'Économie de la fonctionnalité appliquée aux EPI (Safety-Shoe-as-a-Service), écoconception modulaire démontable et recyclage matière PU/TPU en boucle fermée',
+          differentiationFactor: `Chaussures de sécurité haute durabilité injectées à ${location}, sans solvants chimiques toxiques (zéro colle COV), semelles en polyuréthane à 40% d'intrants biosourcés/recyclés et embouts composites légers certifiés EN ISO 20345:2022.`,
+          circularValueProposition: 'Permettre aux entreprises du BTP, de l\'industrie et de la logistique de diviser par deux le coût de renouvellement de leurs EPI tout en réduisant de 60% leur empreinte carbone Scope 3 grâce à une offre d\'abonnement avec maintenance, ressemelage et recyclage garanti.',
+          competitiveMoat: 'Homologations EN ISO 20345 validées par organisme notifié (CTC / SATRA), brevet d\'assemblage facilitant le décollement mécanique semelle/tige en fin de vie, et contrats-cadres pluriannuels de fourniture et reprise d\'EPI auprès des grands comptes industriels.',
+          iso59000Compliance: 'Conforme ISO 59004:2024 (Préservation de la valeur d\'usage, architecture pour le désassemblage et boucles fermées de polymères thermoplastiques).',
+          environmentalAssets: [
+            'Procédé d\'injection directe (DIP) bi-densité supprimant 100% des colles solvantées toxiques et des émissions de COV (toluène, benzène) au poste d\'assemblage.',
+            'Intégration de ≥ 40% de polyols régénérés et biosourcés dans les semelles PU/TPU sans altération des résistances mécaniques à l\'abrasion et à la déchirure.',
+            'Empreinte carbone unitaire divisée par 2,8 (4,8 kg CO2e / paire vs 13,8 kg pour les modèles conventionnels importés) certifiée selon ISO 14067.',
+            'Allègement de 30% grâce aux embouts de sécurité et intercalaires en composites techniques athermiques (non métalliques) et textiles balistiques recyclés.',
+            'Conformité stricte au règlement européen REACH (Annexe XVII) : cuirs sans chrome VI certifiés LWG Gold et absence totale de substances SVHC.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Augmentation du taux de polyols régénérés par glycolyse chimique',
+              lever: 'Partenariat R&D formulation avec les centres techniques plasturgie pour porter de 40% à 60% la fraction recyclée dans les semelles polyuréthane.',
+              environmentalGain: 'Réduction additionnelle de 1,1 kg CO2e par paire et économie de 18 tonnes de polyols fossiles par an.',
+              economicPayoff: 'Baisse de 14% du coût matière première semelle et couverture contre la volatilité des cours pétrochimiques.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Autoconsommation photovoltaïque dédiée aux carrousels d\'injection',
+              lever: 'Installation d\'une toiture solaire photovoltaïque de 80 kWc alimentant les presses d\'injection rotatives et le captage VMC des vapeurs MDI.',
+              environmentalGain: 'Suppression de 28 tCO2e/an sur le Scope 2 et autonomie électrique en journée de 65%.',
+              economicPayoff: 'Économie de 35% sur la facture électrique industrielle avec retour sur investissement (ROI) sous 3,8 ans.',
+              priority: 'Haute',
+            },
+            {
+              axis: 'Industrialisation de l\'insert de démontage semelle-tige (Design for Disassembly)',
+              lever: 'Intégration d\'un fil thermofusible ou insert mécanique breveté permettant la séparation semelle/tige en moins de 30 secondes en fin de vie (ISO 59004).',
+              environmentalGain: 'Taux de recyclabilité matière porté à 85% de la masse de la chaussure et élimination de l\'enfouissement.',
+              economicPayoff: 'Productivité de démontage multipliée par 3 et revente valorisée du granulat PU de haute pureté.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Standardisation de bacs navettes réutilisables pour livraisons B2B',
+              lever: 'Remplacement des cartons d\'emballage jetables par des caisses plastiques pliables consignées pour les grands chantiers et sites industriels.',
+              environmentalGain: 'Évitement de 4,2 tonnes de déchets d\'emballage carton annuels.',
+              economicPayoff: 'Économie nette de 50% sur le budget emballage dès la 6ème rotation des bacs.',
+              priority: 'Moyenne',
+            },
+          ],
+          innovativeBusinessModels: [
+            {
+              title: 'EPI Circulaire comme Service & Maintenance Préventive (Safety-Shoe-as-a-Service)',
+              archetype: 'Économie de la fonctionnalité (PaaS)',
+              strategy9R: 'R3 (Re-use) & R4 (Repair)',
+              description: 'Mise à disposition d\'un parc de chaussures de sécurité pour les salariés des entreprises clientes avec révision semestrielle, ressemelage des pièces d\'usure et reprise systématique en fin de vie.',
+              feasibility: 'Haute maturité sur les grands chantiers BTP, aéroports et sites industriels.',
+              economicBenefit: 'Transformation des dépenses d\'achat ponctuelles en charges d\'exploitation prévisibles et fidélisation contractuelle sur 24 à 36 mois.',
+              revenueStream: 'Abonnement mensuel par collaborateur actif équipé (12 à 18 DT/mois).',
+              targetCustomer: 'Entreprises du BTP, cimenteries, sites pétrochimiques et plateformes logistiques.',
+              paybackPeriod: '14 à 18 mois.',
+            },
+            {
+              title: 'Boucle Fermée de Granulation et Régénération PU/TPU',
+              archetype: 'Symbiose industrielle & Recyclage matière',
+              strategy9R: 'R8 (Recycle)',
+              description: 'Collecte des paires réformées, séparation mécanique rapide de la semelle, broyage cryogénique du PU/TPU et réincorporation à 30-40% dans de nouvelles semelles intermédiaires amortissantes.',
+              feasibility: 'Éprouvée avec un broyeur granulateur couplé à la ligne d\'extrusion/injection.',
+              economicBenefit: 'Réduction de 25% du coût d\'achat des résines polyuréthane vierges fossiles et conformité anticipée aux exigences REP.',
+              revenueStream: 'Économies d\'achats matières + revente de granulats secondaires aux fabricants de revêtements de sol.',
+              targetCustomer: 'Usines de transformation d\'élastomères et gestionnaires d\'infrastructures sportives.',
+              paybackPeriod: '10 à 14 mois.',
+            },
+            {
+              title: 'Passeport Numérique du Produit (DPP) & Traçabilité RSE des Équipements',
+              archetype: 'Modèle serviciel & Données d\'impact (CSRD / ISO 59020)',
+              strategy9R: 'R2 (Rethink)',
+              description: 'Puce RFID surmoulée ou QR code inaltérable sous la languette indiquant la date de mise en service, les performances EN ISO (S1P/S3, SRC, ESD) et le bilan carbone unitaire pour le reporting CSRD.',
+              feasibility: 'Immédiate via étiquetage automatisé en fin de chaîne de piquage.',
+              economicBenefit: 'Prime de valorisation de 15% à la vente et argument décisif pour les appels d\'offres des groupes sous directive CSRD.',
+              revenueStream: 'Licence d\'accès au portail de gestion de parc EPI pour les directions QHSE.',
+              targetCustomer: 'Responsables Sécurité (QHSE) et Achats RSE des entreprises structurées.',
+              paybackPeriod: 'Inférieur à 12 mois.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Vente directe aux entreprises B2B avec garantie de durabilité',
+              category: 'Usage & Performance',
+              description: 'Tarification directe sans intermédiaire distributeur avec engagement de longévité supérieure à 18 mois.',
+              directCashFlowImpact: '+22% de marge brute par rapport aux circuits traditionnels.',
+            },
+            {
+              name: 'Économies matière par réincorporation des carottes d\'injection',
+              category: 'Boucle Matière & Valorisation',
+              description: 'Broyage et recyclage interne immédiat de 100% des carottes de coulée et rebuts d\'ébavurage.',
+              directCashFlowImpact: '-18% sur le poste d\'achats de résines polyuréthane.',
+            },
+            {
+              name: 'Abonnement récurrent Safety-Shoe-as-a-Service',
+              category: 'Usage & Performance',
+              description: 'Facturation mensuelle récurrente par salarié équipé incluant entretien et remplacement.',
+              directCashFlowImpact: 'Flux de trésorerie stable et prévisible sur 2 à 3 ans.',
+            },
+            {
+              name: 'Attestations de recyclage et valorisation matière RSE',
+              category: 'Plateforme & Données',
+              description: 'Délivrance de certificats de fin de vie matière pour le bilan extra-financier des clients.',
+              directCashFlowImpact: 'Fidélisation client et avantage concurrentiel décisif.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Tanneries régionales et maroquineries partenaires',
+              fluxType: 'Matière / Coproduit',
+              description: 'Approvisionnement en cuirs éco-tannés sans chrome VI et valorisation des chutes nobles pour les renforts de tige.',
+              mutualBenefit: 'Sécurisation d\'un approvisionnement local sans métaux lourds et réduction des déchets des tanneries.',
+            },
+            {
+              partner: 'Entreprises du BTP et sites industriels du bassin d\'emploi',
+              fluxType: 'Logistique & Espaces',
+              description: 'Mise en place de bacs de collecte sur les chantiers et usines pour le retour groupé des chaussures usagées.',
+              mutualBenefit: 'Zéro déchet ultime sur les chantiers et gisement matière secondaire garanti.',
+            },
+            {
+              partner: 'Fabricants de revêtements de sols amortissants et dalles de sécurité',
+              fluxType: 'Matière / Coproduit',
+              description: 'Cession des semelles PU/TPU broyées pour la fabrication de dalles amortissantes pour aires de jeux et ateliers.',
+              mutualBenefit: 'Débouché à valeur ajoutée pour les fractions de semelles non réinjectables.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Taux d\'intrants recyclés ou biosourcés dans la semelle',
+              targetValue: '≥ 42% en poids de polymère',
+              methodology: 'Bilan matière et datation radiocarbone ASTM D6866.',
+            },
+            {
+              indicator: 'Émissions nettes de GES par paire de chaussures de sécurité',
+              targetValue: '≤ 4,8 kg CO2e / paire (vs 13,8 kg référence)',
+              methodology: 'ACV berceau-à-la-tombe conforme ISO 14067:2018.',
+            },
+            {
+              indicator: 'Taux de démontabilité et recyclabilité en fin de vie',
+              targetValue: '≥ 78% en poids de la chaussure',
+              methodology: 'Essais de séparation mécanique selon protocole ISO 59020.',
+            },
+            {
+              indicator: 'Teneur en solvants organiques volatils (COV) à l\'assemblage',
+              targetValue: '0 g de solvant (Procédé DIP direct)',
+              methodology: 'Contrôle analytique des émissions au poste de travail.',
+            },
+          ],
+        };
+      }
+
+      const isOliveOilOrAgro = (isAgriOrFood || /huile.*olive|huilerie|moulin.*huile|margine|grignon/i.test(`${title} ${description}`)) && !isFootwearOrSafetyShoes;
 
       if (isOliveOilOrAgro) {
         return {
@@ -717,6 +963,36 @@ export function generateExpertAuditFallback(
           circularValueProposition: 'Permettre aux distributeurs et centrales d\'achat (MDD) d\'atteindre leurs objectifs de réduction carbone Scope 3 (directive CSRD) grâce à un emballage consigné à zéro déchet ultime, avec un coût d\'usage optimisé.',
           competitiveMoat: 'Accès privilégié aux gisements d\'huile d\'olive extra-vierge certifiée, chaîne d\'embouteillage automatisée calibrée pour les bouteilles réemployables et contrats pluriannuels B2B à engagement de volume.',
           iso59000Compliance: 'Conformité ISO 59004:2024 (Régénération des écosystèmes, préservation maximale de la valeur matière et boucle logistique inversée normée ISO 59010).',
+          environmentalAssets: [
+            'Système de consigne circulaire B2B permettant jusqu\'à 30 réemplois des bouteilles en verre lourd, réduisant de 75% l\'empreinte matière emballage.',
+            'Valorisation intégrale en cascade des coproduits oléicoles (grignons et margines) en biocombustible compacté et amendements organiques certifiés.',
+            'Empreinte carbone unitaire divisée par 2,2 (0,92 kg CO2e / L vs 2,05 kg CO2e / L pour le verre perdu conventionnel) selon ISO 14067.',
+            'Ligne d\'embouteillage ultra-sobre en eau avec lavage en circuit fermé et filtration membranaire sans rejets polluants dans les nappes.',
+            'Passeport numérique de traçabilité lot par lot (QR code GS1) garantissant l\'origine géographique et l\'absence totale d\'adultération.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Optimisation de la logistique inversée mutualisée avec les centrales d\'achat',
+              lever: 'Mise en place de circuits courts de retour de bouteilles consignées avec les transporteurs régionaux pour éliminer les retours à vide.',
+              environmentalGain: 'Économie de 14 tCO2e/an sur le fret aval Scope 3.',
+              economicPayoff: 'Réduction de 25% des coûts de transport logistique retour.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Co-compostage aérobie contrôlé des margines et des grignons',
+              lever: 'Installation d\'une unité de compostage membranaire pour produire un biofertilisant riche en polyphénols stabilisés.',
+              environmentalGain: 'Suppression du risque d\'écotoxicité sur les sols et séquestration de 35 t carbone/an.',
+              economicPayoff: 'Nouvelle ligne de revenus par revente de compost organique normé aux exploitants oléicoles.',
+              priority: 'Haute',
+            },
+            {
+              axis: 'Autoconsommation solaire de la chaîne d\'embouteillage et de lavage',
+              lever: 'Installation d\'une toiture photovoltaïque de 50 kWc pour alimenter les rinceuses, étiqueteuses et chambres froides de stockage.',
+              environmentalGain: 'Évitement de 18 tCO2e/an Scope 2 et 70% d\'autoconsommation en période de pointe.',
+              economicPayoff: 'Amortissement en 4 ans et protection contre les hausses tarifaires de l\'électricité.',
+              priority: 'Moyenne',
+            },
+          ],
           innovativeBusinessModels: [
             {
               title: 'Système de Consigne Circulaire B2B & Réemploi des Bouteilles en Verre',
@@ -819,6 +1095,28 @@ export function generateExpertAuditFallback(
           circularValueProposition: 'Suppression totale des microplastiques et conformité anticipée aux règlements européens PPWR et directive SUP sans perte de cadence d\'operculage.',
           competitiveMoat: 'Formulation propriétaire de biopolymère à base de résidus locaux et partenariats exclusifs avec des collecteurs de biomasse.',
           iso59000Compliance: 'Conforme ISO 59004 (Régénération biologique et gestion des cycles fermés biosourcés).',
+          environmentalAssets: [
+            'Substitution intégrale des résines pétrochimiques fossiles par des biopolymères 100% biosourcés et compostables à domicile (norme NF T51-800 / EN 13432).',
+            'Élimination complète des microplastiques persistants et des additifs perturbateurs endocriniens (phtalates, bisphénols).',
+            'Empreinte carbone cycle de vie divisée par 3,3 comparativement aux polymères fossiles conventionnels (PET, PP, PSE).',
+            'Compatibilité directe avec les lignes d\'extrusion et thermoformage existantes sans investissement lourd d\'adaptation machine.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Approvisionnement local en biomasse résiduelle agricole',
+              lever: 'Structuration d\'une filière d\'extraction d\'amidon et cellulose à partir de sous-produits agricoles locaux non alimentaires.',
+              environmentalGain: 'Réduction de 45% des émissions de transport amont Scope 3 et valorisation de coproduits territoriaux.',
+              economicPayoff: 'Sécurisation des intrants à un coût matière inférieur de 20% aux bioplastiques importés.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Mise en place d\'une boucle de reprise et compostage industriel B2B',
+              lever: 'Accords avec les plateformes de restauration collective et GMS pour collecter les emballages usagés et alimenter des méthaniseurs.',
+              environmentalGain: 'Zéro déchet mis en décharge et production de biogaz renouvelable.',
+              economicPayoff: 'Revenus additionnels sur les services de collecte et vente de compost organique.',
+              priority: 'Haute',
+            },
+          ],
           innovativeBusinessModels: [
             {
               title: 'Emballage-comme-Service (PaaS) avec Collecte et Compostage Industriel',
@@ -887,6 +1185,28 @@ export function generateExpertAuditFallback(
           circularValueProposition: 'Réduction immédiate de 25% à 40% de la facture énergétique des sites industriels et couverture contre la volatilité des tarifs réseau.',
           competitiveMoat: 'Algorithmes propriétaires d\'optimisation de la charge batterie et contrats d\'approvisionnement d\'équipements à haut rendement.',
           iso59000Compliance: 'Conforme ISO 59010 (Transition vers des modèles d\'affaires énergétiques circulaires et sobres).',
+          environmentalAssets: [
+            'Production d\'électricité 100% renouvelable décarbonée avec un facteur d\'émission inférieur à 25 g CO2e / kWh.',
+            'Modèle sans investissement initial pour le client (Tiers-financement & CPE), démocratisant l\'accès à l\'énergie propre.',
+            'Réduction immédiate de 30% à 45% des émissions Scope 2 des sites industriels et tertiaires raccordés.',
+            'Intégration d\'un monitoring prédictif en temps réel maximisant le rendement énergétique des installations.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Seconde vie et reconditionnement des batteries de stockage',
+              lever: 'Développement d\'une filière de reconditionnement des cellules lithium réformées issues de la mobilité pour le stockage stationnaire.',
+              environmentalGain: 'Évitement de l\'extraction de métaux critiques (lithium, cobalt) et allongement de 6 ans de la durée d\'usage.',
+              economicPayoff: 'Baisse de 40% du coût d\'investissement des systèmes de stockage batterie.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Valorisation de l\'autoconsommation collective et flexibilité réseau',
+              lever: 'Agrégation logicielle des surplus de production pour injection intelligente lors des pointes de demande réseau.',
+              environmentalGain: 'Optimisation des flux sur le réseau électrique et évitement du recours aux turbines à gaz.',
+              economicPayoff: 'Revenus complémentaires de services d\'équilibrage et effacement rémunérés par le gestionnaire de réseau.',
+              priority: 'Haute',
+            },
+          ],
           innovativeBusinessModels: [
             {
               title: 'Contrat de Performance Énergétique (CPE) & Vente de kWh Décarboné à l\'Usage',
@@ -955,6 +1275,28 @@ export function generateExpertAuditFallback(
           circularValueProposition: 'Autonomie hydrique accrue de 85% pour les sites industriels et élimination intégrale des redevances de pollution et des risques d\'arrêt pour pénurie d\'eau.',
           competitiveMoat: 'Brevets sur membranes anti-colmatage et dimensionnement spécifique pour la gestion des saumures en climat aride.',
           iso59000Compliance: 'Conforme ISO 59004 et directives de gestion résiliente de l\'eau OSS / REPSAHEL.',
+          environmentalAssets: [
+            'Procédé Zéro Rejet Liquide (ZLD) recyclant jusqu\'à 92% des eaux de procédé industrielles en circuit fermé.',
+            'Suppression complète des pollutions des nappes phréatiques et des réseaux publics d\'assainissement.',
+            'Économies d\'eau douce brute de plus de 85% par rapport aux procédés conventionnels de l\'industrie.',
+            'Élimination des redevances et pénalités de pollution ONAS.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Récupération et cristallisation des sels et minéraux des saumures',
+              lever: 'Intégration d\'un évapo-concentrateur solaire sous vide pour valoriser les saumures concentrées en sels purifiés.',
+              environmentalGain: 'Zéro déchet de saumure liquide rejetée dans l\'environnement.',
+              economicPayoff: 'Revente des sels industriels purifiés aux filières chimiques et traitement routier.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Alimentation par énergies renouvelables des unités d\'osmose inverse',
+              lever: 'Couplage direct des pompes haute pression d\'osmose avec un champ solaire photovoltaïque dédié.',
+              environmentalGain: 'Réduction de 70% de l\'empreinte carbone de purification de l\'eau (Scope 2).',
+              economicPayoff: 'Coût de revient du m³ d\'eau recyclée divisé par deux par rapport à l\'électricité réseau.',
+              priority: 'Haute',
+            },
+          ],
           innovativeBusinessModels: [
             {
               title: 'Vente d\'Eau Régénérée au m³ & Service ZLD Tout-Compris (Water-as-a-Service)',
@@ -1023,6 +1365,28 @@ export function generateExpertAuditFallback(
           circularValueProposition: 'Offrir aux marques de mode et donneurs d\'ordres des textiles haut de gamme conformes à la directive européenne sur l\'écoconception (ESPR) et exempts de fast-fashion jetable.',
           competitiveMoat: 'Gisement exclusif de chutes de coupe industrielles pré-consommation triées optiquement par coloris sans re-teinture polluante.',
           iso59000Compliance: 'Conforme ISO 59004 (Préservation de l\'intégrité des fibres et architecture démontable).',
+          environmentalAssets: [
+            'Valorisation de chutes de coupe textiles pré-consommation en fibres régénérées sans re-teinture chimique ni détergents polluants.',
+            'Économie de plus de 95% d\'eau douce par rapport à la filature de coton conventionnel vierge.',
+            'Modèle de vestiaire professionnel en abonnement avec réparation illimitée garantissant une durée de vie multipliée par 3.',
+            'Conformité stricte aux exigences de l\'éco-conception textile européenne (ESPR) et suppression des microfibres de synthèse.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Tri optique automatisé des fibres par spectrométrie proche infrarouge (NIR)',
+              lever: 'Automatisation du tri matière par couleur et composition pour garantir des fils régénérés mono-matière de qualité supérieure.',
+              environmentalGain: 'Hausse de la résistance mécanique des fils et zéro déchet textile résiduel.',
+              economicPayoff: 'Valorisation commerciale accrue de 25% du fil régénéré sur les marchés haut de gamme.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Collecte post-consommation en boucle fermée auprès des clients B2B',
+              lever: 'Mise en place de conteneurs connectés dans les entreprises pour le retour systématique des tenues usagées.',
+              environmentalGain: 'Évitement total de l\'incinération et de l\'enfouissement des vêtements de travail.',
+              economicPayoff: 'Gisement matière première secondaire sécurisé à coût quasi nul.',
+              priority: 'Haute',
+            },
+          ],
           innovativeBusinessModels: [
             {
               title: 'Vestiaire Professionnel en Abonnement avec Entretien & Réparation (Workwear-as-a-Service)',
@@ -1091,6 +1455,28 @@ export function generateExpertAuditFallback(
           circularValueProposition: 'Permettre aux entreprises et institutions de déployer des services numériques critiques sans forcer le renouvellement coûteux du parc matériel, avec un bilan carbone informatique audité et conforme CSRD.',
           competitiveMoat: 'Moteur logiciel propriétaire sans dépendance aux frameworks énergivores, fonctionnement hors-ligne (PWA) et optimisation du code au niveau octet.',
           iso59000Compliance: 'Conforme aux standards d\'éco-conception des services numériques (RGESN / ISO 14062 / AFNOR Spec 2201).',
+          environmentalAssets: [
+            'Architecture logicielle éco-conçue (RGESN / Green Code) réduisant de 75% les requêtes serveur et la consommation de bande passante.',
+            'Compatibilité garantie sur des équipements reconditionnés anciens (plus de 8 ans), freinant l\'obsolescence matérielle prématurée.',
+            'Fonctionnement hors-ligne autonome (PWA / Edge computing) éliminant la dépendance aux centres de données énergivores.',
+            'Transparence totale et conformité RGPD / CSRD sans traqueurs publicitaires ni scripts superflus.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Hébergement 100% sur serveurs alimentés par énergies renouvelables à PUE < 1,15',
+              lever: 'Migration vers des centres de données éco-responsables à refroidissement liquide passif sans climatisation active.',
+              environmentalGain: 'Baisse de 60% des émissions de GES liées à l\'hébergement cloud (Scope 3 amont).',
+              economicPayoff: 'Facture d\'hébergement cloud optimisée de 30% grâce à la frugalité architecturale.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Programme de reconditionnement solidaire de terminaux informatiques',
+              lever: 'Partenariat avec des ateliers d\'insertion pour équiper les écoles en ordinateurs reconditionnés sous Linux léger.',
+              environmentalGain: 'Prolongation de 4 ans de la durée de vie des parcs d\'ordinateurs réformés.',
+              economicPayoff: 'Offre packagée matériel + logiciel à coût imbattable pour les institutions éducatives.',
+              priority: 'Haute',
+            },
+          ],
           innovativeBusinessModels: [
             {
               title: 'Abonnement SaaS Sobre & Tarification Équitable à l\'Usage Réel',
@@ -1159,6 +1545,35 @@ export function generateExpertAuditFallback(
         circularValueProposition: 'Permettre aux clients de réduire leur empreinte environnementale et leurs coûts totaux de possession (TCO) de plus de 50%, sans risque technique ni compromis opérationnel.',
         competitiveMoat: 'Maîtrise exclusive de la chaîne d\'approvisionnement circulaire locale, conception modulaire facilitant le désassemblage et certifications de conformité tierce partie.',
         iso59000Compliance: 'Alignement rigoureux avec la norme ISO 59004:2024 (Préservation de la valeur, régénération des écosystèmes et transparence des filières circulaires).',
+        environmentalAssets: [
+          'Éco-conception du produit ou service permettant une réduction démontrée de plus de 45% des impacts environnementaux sur son cycle de vie (ISO 14040/14044).',
+          'Intégration prioritaire de matières premières secondaires recyclées ou biosourcées locales préservant les ressources critiques.',
+          'Modèle économique circulaire limitant la production de déchets ultimes et favorisant la réemployabilité ou la réparabilité (Cadre 9R).',
+          'Alignement stratégique avec les normes d\'économie circulaire ISO 59004:2024 et les exigences de reporting CSRD (ESRS E5).',
+        ],
+        improvementAxes: [
+          {
+            axis: 'Transition vers l\'approvisionnement en énergies renouvelables sur site',
+            lever: 'Déploiement d\'une installation solaire photovoltaïque en toiture ou autoconsommation collective pour les procédés clés.',
+            environmentalGain: 'Réduction de 50% à 75% de l\'empreinte carbone Scope 2.',
+            economicPayoff: 'Maîtrise durable des coûts énergétiques avec un ROI inférieur à 4 ans.',
+            priority: 'Haute',
+          },
+          {
+            axis: 'Structuration d\'une filière de reprise et de logistique inversée',
+            lever: 'Mise en place d\'un système contractuel de reprise en fin de vie pour reconditionnement ou recyclage matière en boucle courte.',
+            environmentalGain: 'Taux de valorisation matière porté à plus de 80% et zéro enfouissement.',
+            economicPayoff: 'Accès sécurisé à une matière première secondaire à coût inférieur aux matières vierges.',
+            priority: 'Stratégique',
+          },
+          {
+            axis: 'Éco-conception avancée des emballages de transport et distribution',
+            lever: 'Remplacement des conditionnements perdus par des contenants réutilisables standardisés ou 100% recyclés et compostables.',
+            environmentalGain: 'Diminution drastique des volumes de déchets d\'emballage générés.',
+            economicPayoff: 'Réduction récurrente des dépenses de consommables d\'emballage.',
+            priority: 'Moyenne',
+          },
+        ],
         innovativeBusinessModels: [
           {
             title: 'Produit-comme-Service & Boucle Circulaire (Product-as-a-Service)',
@@ -1249,7 +1664,108 @@ export function generateExpertAuditFallback(
     })(),
 
     // 5. Alignement ODD (spécifique au secteur d'activité selon la méthodologie SDG Compass)
-    sdgAlignment: isDigitalOrEdTech
+    sdgAlignment: isFootwearOrSafetyShoes
+      ? [
+          {
+            oddNumber: 8,
+            title: 'Travail décent et croissance économique',
+            level: 'Majeur',
+            contribution: `Protection vitale de la sécurité et de la santé des travailleurs industriels et du BTP par la fabrication de chaussures de sécurité certifiées EN ISO 20345 à ${location}.`,
+            targets: [
+              '8.8 Défendre les droits des travailleurs et promouvoir la sécurité sur le lieu de travail',
+              '8.5 Plein emploi productif et travail décent pour toutes et tous',
+            ],
+            targetsDetail: [
+              {
+                code: '8.8',
+                title: 'Défendre les droits des travailleurs et promouvoir la sécurité sur le lieu de travail, en assurant la protection de tous les travailleurs',
+                indicator: 'Indicateur ONU 8.8.1 (Taux d\'accidents du travail mortels et non mortels par secteur)',
+                targetKpi: 'Taux d\'accidents de travail par écrasement ou perforation réduit à 0 chez les clients équipés',
+              },
+              {
+                code: '8.5',
+                title: 'Parvenir au plein emploi productif et garantir un travail décent avec égalité de rémunération',
+                indicator: 'Indicateur ONU 8.5.1 (Rémunération horaire moyenne des salariés)',
+                targetKpi: 'Création de 35 emplois industriels directs en CDI avec couverture sociale intégrale',
+              },
+            ],
+            kpis: ['Paires de chaussures de sécurité conformes EN ISO 20345 produites (unités/an)', 'Taux d\'accidents du travail avec arrêt dans l\'usine (0%)'],
+            dnshAssessment: 'DNSH SOCIAL : Respect absolu des normes fondamentales de l\'OIT et conditions de travail ergonomiques.',
+            griStandards: ['GRI 403 (Santé et sécurité au travail)', 'GRI 401 (Emploi)'],
+            csrdEsrs: 'ESRS S1 (Main-d\'œuvre propre) & ESRS S2 (Travailleurs de la chaîne de valeur)',
+          },
+          {
+            oddNumber: 12,
+            title: 'Consommation et production responsables',
+            level: 'Majeur',
+            contribution: 'Procédé d\'injection directe sans colle solvantée toxique (zéro COV), réincorporation de 100% des carottes d\'injection et recyclage des semelles en fin de vie.',
+            targets: [
+              '12.4 Gestion écologiquement rationnelle des produits chimiques et réduction des rejets toxiques',
+              '12.5 Réduction considérable de la production de déchets par la prévention et le recyclage',
+            ],
+            targetsDetail: [
+              {
+                code: '12.4',
+                title: 'Parvenir à une gestion écologiquement rationnelle des produits chimiques tout au long de leur cycle de vie',
+                indicator: 'Indicateur ONU 12.4.2 (Quantité de déchets dangereux produits par habitant)',
+                targetKpi: 'Suppression totale des colles solvantées au toluène (0 kg de solvant COV émis par paire)',
+              },
+              {
+                code: '12.5',
+                title: 'Réduire considérablement la production de déchets par la prévention, la réduction, le recyclage et la réutilisation',
+                indicator: 'Indicateur ONU 12.5.1 (Taux national de recyclage et de valorisation matière)',
+                targetKpi: 'Taux de réincorporation des rebuts d\'injection et carottes ≥ 95% dans les semelles secondaires',
+              },
+            ],
+            kpis: ['Taux d\'incorporation de matières recyclées ou biosourcées dans la semelle (%)', 'Tonnage de déchets de polymères valorisés (t/an)'],
+            dnshAssessment: 'DNSH CHIMIE & MATÉRIAUX : Respect strict du règlement REACH (absence de chrome VI et phtalates).',
+            griStandards: ['GRI 306 (Déchets)', 'GRI 301 (Matériaux)'],
+            csrdEsrs: 'ESRS E5 (Économie circulaire & gestion des ressources)',
+          },
+          {
+            oddNumber: 9,
+            title: 'Industrie, innovation et infrastructure',
+            level: 'Secondaire',
+            contribution: 'Modernisation industrielle de la filière chaussure vers des carrousels d\'injection haute précision électriques et matériaux composites légers.',
+            targets: [
+              '9.4 Rénovation des infrastructures et conversion des industries pour les rendre durables',
+            ],
+            targetsDetail: [
+              {
+                code: '9.4',
+                title: 'Moderniser les infrastructures et adapter les industries pour les rendre durables avec une utilisation accrue de technologies propres',
+                indicator: 'Indicateur ONU 9.4.1 (Émissions de CO2 par unité de valeur ajoutée industrielle)',
+                targetKpi: 'Gains d\'efficacité énergétique de production ≥ 30% grâce aux carrousels d\'injection électriques',
+              },
+            ],
+            kpis: ['Investissement en R&D éco-conception (%)', 'Rendement matière de la ligne d\'injection (≥ 98%)'],
+            dnshAssessment: 'DNSH INDUSTRIE : Conformité aux meilleures techniques disponibles BREF Plasturgie et Chaussure.',
+            griStandards: ['GRI 302 (Énergie)'],
+            csrdEsrs: 'ESRS E5 (Économie circulaire)',
+          },
+          {
+            oddNumber: 13,
+            title: 'Mesures relatives à la lutte contre les changements climatiques',
+            level: 'Secondaire',
+            contribution: `Division par plus de 2,8 de l'empreinte carbone unitaire (${baselineCO2} kg CO2e à ${targetCO2} kg CO2e par paire) par l'éco-conception et les énergies renouvelables.`,
+            targets: [
+              '13.2 Intégration des mesures relatives aux changements climatiques dans les politiques et stratégies',
+            ],
+            targetsDetail: [
+              {
+                code: '13.2',
+                title: 'Intégrer des mesures relatives aux changements climatiques dans les politiques, stratégies et plans nationaux',
+                indicator: 'Indicateur ONU 13.2.2 (Total des émissions de gaz à effet de serre par an)',
+                targetKpi: 'Évitement annuel de plus de 180 tCO2e par rapport aux chaussures importées sur une base de 20 000 paires',
+              },
+            ],
+            kpis: ['Intensité carbone par paire produite (kg CO2e/paire)', 'Part de l\'électricité solaire en autoconsommation (%)'],
+            dnshAssessment: 'DNSH CLIMAT : Trajectoire bas-carbone vérifiée par ACV certifiée ISO 14067 sans compensation fictive.',
+            griStandards: ['GRI 305 (Émissions de GES)'],
+            csrdEsrs: 'ESRS E1 (Changement climatique)',
+          },
+        ]
+      : isDigitalOrEdTech
       ? [
           {
             oddNumber: 4,
@@ -1755,162 +2271,319 @@ export function generateExpertAuditFallback(
         benchmarkComparison: {
           industryAverageKgCO2e: baselineCO2,
           ecoDesignedTargetKgCO2e: targetCO2,
-          commentary: `Ce projet permet une économie nette de ${Math.round(((baselineCO2 - targetCO2) / baselineCO2) * 100)}% de gaz à effet de serre par rapport à la moyenne sectorielle constatée.`,
+          commentary: isFootwearOrSafetyShoes
+            ? `Ce procédé d'injection directe éco-conçu permet une réduction de ${Math.round(((baselineCO2 - targetCO2) / baselineCO2) * 100)}% des émissions de GES par paire par rapport à la moyenne des chaussures de sécurité conventionnelles importées.`
+            : `Ce projet permet une économie nette de ${Math.round(((baselineCO2 - targetCO2) / baselineCO2) * 100)}% de gaz à effet de serre par rapport à la moyenne sectorielle constatée.`,
         },
-        lifecycleStages: [
-          {
-            id: 'stage_raw',
-            name: 'Matières premières & Extraction (ISO 14064-1 Cat. 4 / ISO 14067 Amont)',
-            category: 'raw_materials',
-            emissionKgCO2e: +(targetCO2 * 0.35).toFixed(2),
-            percentage: 35,
-            description: 'Approvisionnement local et bio-sourcé / recyclé à faible impact, traçabilité biogénique isolée.',
-            reductionOpportunity: 'Privilégier les gisements secondaires certifiés de proximité et fournisseurs audités.',
-          },
-          {
-            id: 'stage_mfg',
-            name: 'Procédé de Fabrication (ISO 14064-1 Cat. 1 & 2 / ISO 14067)',
-            category: 'manufacturing',
-            emissionKgCO2e: +(targetCO2 * 0.28).toFixed(2),
-            percentage: 28,
-            description: 'Lignes sobres alimentées par un mix électrique propre (approches location-based & market-based).',
-            reductionOpportunity: 'Récupération de chaleur fatale, isolation thermique et autoconsommation ENR sur site.',
-          },
-          {
-            id: 'stage_pkg',
-            name: 'Conditionnement & Emballage (ISO 14064-1 Cat. 4)',
-            category: 'packaging',
-            emissionKgCO2e: +(targetCO2 * 0.12).toFixed(2),
-            percentage: 12,
-            description: 'Emballages réutilisables ou kraft 100% recyclé sans dérivés pétrochimiques vierges.',
-            reductionOpportunity: 'Suppression définitive des suremballages plastiques et standardisation réemploi.',
-          },
-          {
-            id: 'stage_trans',
-            name: 'Transport & Distribution (ISO 14064-1 Cat. 3)',
-            category: 'transport',
-            emissionKgCO2e: +(targetCO2 * 0.15).toFixed(2),
-            percentage: 15,
-            description: 'Distribution en boucle courte régionale et logistique inversée optimisée.',
-            reductionOpportunity: 'Optimisation du taux de charge, tournées groupées et flotte à motorisation alternative.',
-          },
-          {
-            id: 'stage_eol',
-            name: 'Fin de vie & Recyclage (ISO 14064-1 Cat. 5 / ISO 14067 Aval)',
-            category: 'end_of_life',
-            emissionKgCO2e: +(targetCO2 * 0.10).toFixed(2),
-            percentage: 10,
-            description: 'Compostage direct ou recyclabilité sans fraction résiduelle toxique.',
-            reductionOpportunity: 'Filière locale de reprise matière en boucle fermée pour éviter tout enfouissement.',
-          },
-        ],
-        highImpactDecarbonizationActions: [
-          { action: 'Alimentation 100% en énergie solaire d\'autoconsommation sur le site de production', estimatedReductionPct: 22, priority: 'P1' },
-          { action: 'Sélection exclusive d\'approvisionnements locaux dans un rayon inférieur à 100 km', estimatedReductionPct: 15, priority: 'P2' },
-          { action: 'Système de consigne et de réemploi des contenants logistiques', estimatedReductionPct: 12, priority: 'P2' },
-        ],
+        lifecycleStages: isFootwearOrSafetyShoes
+          ? [
+              {
+                id: 'stage_raw',
+                name: 'Matières premières (Cuir sans chrome LWG, polyols biosourcés, embout composite)',
+                category: 'raw_materials',
+                emissionKgCO2e: 1.80,
+                percentage: 38,
+                description: 'Sélection de cuirs certifiés Leather Working Group (sans chrome VI), polyols biosourcés et renforts composites légers.',
+                reductionOpportunity: 'Augmenter le taux de polyols régénérés par glycolyse jusqu\'à 50% et tester des microfibres biosourcées locales.',
+              },
+              {
+                id: 'stage_mfg',
+                name: 'Procédé d\'Injection Directe Semelle (PU/TPU)',
+                category: 'manufacturing',
+                emissionKgCO2e: 1.35,
+                percentage: 28,
+                description: 'Injection bi-densité sous carrousel rotatif électrique haute cadence, liaison directe sans colle solvantée ni toluène.',
+                reductionOpportunity: 'Alimentation 100% solaire photovoltaïque des résistances de chauffe et des presses hydrauliques.',
+              },
+              {
+                id: 'stage_pkg',
+                name: 'Conditionnement & Emballage (Boîte kraft 100% recyclée)',
+                category: 'packaging',
+                emissionKgCO2e: 0.55,
+                percentage: 11,
+                description: 'Boîtes individuelles compactes en carton recyclé non blanchi sans poignée plastique ni suremballage.',
+                reductionOpportunity: 'Caisses navettes réutilisables pour livraisons groupées B2B sur les sites industriels.',
+              },
+              {
+                id: 'stage_trans',
+                name: 'Transport & Logistique de Distribution Locale',
+                category: 'transport',
+                emissionKgCO2e: 0.60,
+                percentage: 13,
+                description: 'Distribution en circuit court pour les entreprises régionales et optimisation des tournées logistiques.',
+                reductionOpportunity: 'Mutualisation des flux de retour pour la reprise des chaussures usagées (logistique inversée).',
+              },
+              {
+                id: 'stage_eol',
+                name: 'Fin de vie, Démantèlement & Recyclage des Semelles',
+                category: 'end_of_life',
+                emissionKgCO2e: 0.50,
+                percentage: 10,
+                description: 'Séparation mécanique simplifiée tige-semelle, broyage des semelles PU/TPU et réincorporation en dalles amortissantes.',
+                reductionOpportunity: 'Structuration d\'une filière de consigne et de reprise systématique auprès des grands comptes industriels.',
+              },
+            ]
+          : [
+              {
+                id: 'stage_raw',
+                name: 'Matières premières & Extraction (ISO 14064-1 Cat. 4 / ISO 14067 Amont)',
+                category: 'raw_materials',
+                emissionKgCO2e: +(targetCO2 * 0.35).toFixed(2),
+                percentage: 35,
+                description: 'Approvisionnement local et bio-sourcé / recyclé à faible impact, traçabilité biogénique isolée.',
+                reductionOpportunity: 'Privilégier les gisements secondaires certifiés de proximité et fournisseurs audités.',
+              },
+              {
+                id: 'stage_mfg',
+                name: 'Procédé de Fabrication (ISO 14064-1 Cat. 1 & 2 / ISO 14067)',
+                category: 'manufacturing',
+                emissionKgCO2e: +(targetCO2 * 0.28).toFixed(2),
+                percentage: 28,
+                description: 'Lignes sobres alimentées par un mix électrique propre (approches location-based & market-based).',
+                reductionOpportunity: 'Récupération de chaleur fatale, isolation thermique et autoconsommation ENR sur site.',
+              },
+              {
+                id: 'stage_pkg',
+                name: 'Conditionnement & Emballage (ISO 14064-1 Cat. 4)',
+                category: 'packaging',
+                emissionKgCO2e: +(targetCO2 * 0.12).toFixed(2),
+                percentage: 12,
+                description: 'Emballages réutilisables ou kraft 100% recyclé sans dérivés pétrochimiques vierges.',
+                reductionOpportunity: 'Suppression définitive des suremballages plastiques et standardisation réemploi.',
+              },
+              {
+                id: 'stage_trans',
+                name: 'Transport & Distribution (ISO 14064-1 Cat. 3)',
+                category: 'transport',
+                emissionKgCO2e: +(targetCO2 * 0.15).toFixed(2),
+                percentage: 15,
+                description: 'Distribution en boucle courte régionale et logistique inversée optimisée.',
+                reductionOpportunity: 'Optimisation du taux de charge, tournées groupées et flotte à motorisation alternative.',
+              },
+              {
+                id: 'stage_eol',
+                name: 'Fin de vie & Recyclage (ISO 14064-1 Cat. 5 / ISO 14067 Aval)',
+                category: 'end_of_life',
+                emissionKgCO2e: +(targetCO2 * 0.10).toFixed(2),
+                percentage: 10,
+                description: 'Compostage direct ou recyclabilité sans fraction résiduelle toxique.',
+                reductionOpportunity: 'Filière locale de reprise matière en boucle fermée pour éviter tout enfouissement.',
+              },
+            ],
+        highImpactDecarbonizationActions: isFootwearOrSafetyShoes
+          ? [
+              { action: 'Alimentation du parc de presses d\'injection par une toiture solaire photovoltaïque de 80 kWc', estimatedReductionPct: 24, priority: 'P1' },
+              { action: 'Substitution de 40% des polyols fossiles par des polyols régénérés par glycolyse ou biosourcés', estimatedReductionPct: 18, priority: 'P1' },
+              { action: 'Généralisation d\'embouts et semelles anti-perforation en composites non-métalliques athermiques', estimatedReductionPct: 12, priority: 'P2' },
+            ]
+          : [
+              { action: 'Alimentation 100% en énergie solaire d\'autoconsommation sur le site de production', estimatedReductionPct: 22, priority: 'P1' },
+              { action: 'Sélection exclusive d\'approvisionnements locaux dans un rayon inférieur à 100 km', estimatedReductionPct: 15, priority: 'P2' },
+              { action: 'Système de consigne et de réemploi des contenants logistiques', estimatedReductionPct: 12, priority: 'P2' },
+            ],
       },
-      circularityRate: '88% de flux matière circulaires ou biodégradables',
-      wasteAvoided: '3,8 tonnes de déchets non recyclables éliminées par an',
-      waterPreservation: 'Préservation des nappes phréatiques grâce à des procédés secs ou circuits fermés',
-      localJobsProjection: '6 emplois verts directs créés à 18 mois',
-      keyMetrics: [
-        { label: 'Intensité carbone', value: `${targetCO2}`, unit: 'kg CO2e / unité', interpretation: 'Conforme aux trajectoires de décarbonation 1.5°C' },
-        { label: 'Taux de circularité', value: '88%', unit: '% matière', interpretation: 'Haut niveau de circularité' },
-        { label: 'Indépendance fossile', value: '92%', unit: '% renouvelable', interpretation: 'Rupture nette avec les matières pétrosourcées' },
-        { label: 'Ancrage territorial', value: 'Local', unit: `${location}`, interpretation: 'Circuits courts favorisés' },
-      ],
+      circularityRate: isFootwearOrSafetyShoes ? '82% de matières recyclables ou biosourcées (conception pour le démontage)' : '88% de flux matière circulaires ou biodégradables',
+      wasteAvoided: isFootwearOrSafetyShoes ? '4,5 tonnes de solvants toxiques et chutes de polymères éliminées par an' : '3,8 tonnes de déchets non recyclables éliminées par an',
+      waterPreservation: isFootwearOrSafetyShoes ? 'Préservation intégrale des eaux souterraines grâce à l\'élimination des colles solvantées et des bains de chrome' : 'Préservation des nappes phréatiques grâce à des procédés secs ou circuits fermés',
+      localJobsProjection: isFootwearOrSafetyShoes ? '35 emplois industriels directs créés à 18 mois' : '6 emplois verts directs créés à 18 mois',
+      keyMetrics: isFootwearOrSafetyShoes
+        ? [
+            { label: 'Intensité carbone', value: `${targetCO2}`, unit: 'kg CO2e / paire', interpretation: 'Division par 2,8 vs référence standard importée' },
+            { label: 'Taux de recyclabilité', value: '82%', unit: '% matière', interpretation: 'Conception pour le démontage ISO 59004' },
+            { label: 'Teneur en solvants (COV)', value: '0', unit: 'g / paire', interpretation: 'Procédé d\'injection directe 100% sans solvant' },
+            { label: 'Norme de sécurité', value: 'EN ISO 20345', unit: 'S1P / S3', interpretation: 'Protection certifiée conforme' },
+          ]
+        : [
+            { label: 'Intensité carbone', value: `${targetCO2}`, unit: 'kg CO2e / unité', interpretation: 'Conforme aux trajectoires de décarbonation 1.5°C' },
+            { label: 'Taux de circularité', value: '88%', unit: '% matière', interpretation: 'Haut niveau de circularité' },
+            { label: 'Indépendance fossile', value: '92%', unit: '% renouvelable', interpretation: 'Rupture nette avec les matières pétrosourcées' },
+            { label: 'Ancrage territorial', value: 'Local', unit: `${location}`, interpretation: 'Circuits courts favorisés' },
+          ],
     },
 
     // 7. Financements et labels verts
-    greenFinancingAndLabels: {
-      labels: [
-        {
-          name: 'Label Écologique & RSE ISO 26000 / Label Engagé RSE',
-          category: 'Responsabilité Sociétale & Environnementale',
-          whyItMatters: 'Confère une crédibilité d\'audit vérifiée auprès des bailleurs de fonds internationaux et partenaires B2B.',
-          eligibilityCriteria: 'Respect des 7 questions centrales ISO 26000, gouvernance transparente et audit sur site.',
+    greenFinancingAndLabels: isFootwearOrSafetyShoes
+      ? {
+          labels: [
+            {
+              name: 'Marquage CE & Homologation EN ISO 20345:2022 (EPI Catégorie II)',
+              category: 'Certification Industrielle Obligatoire',
+              whyItMatters: 'Obligation légale pour la commercialisation des chaussures de sécurité ; garantit la résistance au choc (200J), perforation (1100N) et glissement (SRC).',
+              eligibilityCriteria: 'Essais de conformité réussis auprès d\'un laboratoire notifié européen (ex: CTC, SATRA ou CETTEX).',
+            },
+            {
+              name: 'Certification ISO 45001 & ISO 14001',
+              category: 'Système de Management Intégré QHSE',
+              whyItMatters: 'Prouve la maîtrise des risques professionnels (aspiration MDI) et la réduction des impacts environnementaux de l\'usine.',
+              eligibilityCriteria: 'Audit de conformité des installations de production, protocole de sécurité et politique environnementale formalisée.',
+            },
+            {
+              name: 'Label Leather Working Group (LWG) & Écolabel Européen Chaussures',
+              category: 'Éco-conception & Innocuité Chimique',
+              whyItMatters: 'Garantit l\'absence de chrome VI, métaux lourds et phtalates toxiques dans le cuir et les polymères.',
+              eligibilityCriteria: 'Approvisionnement 100% certifié traçable et respect des valeurs limites de la réglementation REACH.',
+            },
+          ],
+          fundings: [
+            {
+              source: 'BFPME / Ligne de Crédit Verte BERD & Banque Mondiale',
+              program: 'Programme d\'Appui à la Modernisation Industrielle & Transition Écologique',
+              amountOrAid: 'Prêt à taux bonifié jusqu\'à 60% du coût des équipements d\'injection directe',
+              conditions: 'Acquisition de presses d\'injection électriques basse consommation et création d\'emplois industriels durables.',
+            },
+            {
+              source: 'FODEP (Fonds de Dépollution Industrielle / Ministère de l\'Environnement)',
+              program: 'Aide aux Équipements de Captage et Dépollution de l\'Air en Milieu Professionnel',
+              amountOrAid: 'Subvention jusqu\'à 20% et crédit à taux zéro pour le système de captage des vapeurs d\'injection',
+              conditions: 'Conformité aux normes de rejets atmosphériques et protection de la santé des opérateurs.',
+            },
+            {
+              source: 'Programme PACE (Union Européenne / CETTEX)',
+              program: 'Subvention pour l\'Homologation et la Certification à l\'Export des Produits Techniques',
+              amountOrAid: 'Prise en charge de 50% à 70% des frais d\'essais en laboratoire notifié pour le marquage CE',
+              conditions: 'Dépôt d\'un dossier technique complet et essais d\'échantillons selon la norme EN ISO 20345.',
+            },
+          ],
+        }
+      : {
+          labels: [
+            {
+              name: 'Label Écologique & RSE ISO 26000 / Label Engagé RSE',
+              category: 'Responsabilité Sociétale & Environnementale',
+              whyItMatters: 'Confère une crédibilité d\'audit vérifiée auprès des bailleurs de fonds internationaux et partenaires B2B.',
+              eligibilityCriteria: 'Respect des 7 questions centrales ISO 26000, gouvernance transparente et audit sur site.',
+            },
+            {
+              name: 'Certification Cradle to Cradle (C2C) ou Écolabel',
+              category: 'Éco-conception & Circularité Produit',
+              whyItMatters: 'Prouve la sécurité chimique des matériaux et leur réintégration perpétuelle en cycle biologique ou technique.',
+              eligibilityCriteria: 'Toxicité zéro des intrants, utilisation d\'énergies renouvelables et gestion saine de l\'eau.',
+            },
+          ],
+          fundings: [
+            {
+              source: 'APII / Pépinières du Réseau National (RNPE)',
+              program: 'Accompagnement Entrepreneuriat Vert & Prime d\'Investissement',
+              amountOrAid: 'Hébergement en pépinière, coaching technique et primes d\'éco-innovation',
+              conditions: 'Projet d\'innovation durable à impact local créateur d\'emplois pérennes.',
+            },
+            {
+              source: 'ANME (Agence Nationale pour la Maîtrise de l\'Énergie)',
+              program: 'Fonds de Transition Énergétique (FTE)',
+              amountOrAid: 'Prise en charge d\'audits énergétiques et primes sur investissements sobres',
+              conditions: 'Dépôt d\'un dossier d\'efficacité énergétique ou d\'installation ENR.',
+            },
+            {
+              source: 'Programmes Internationaux (SwitchMed / Horizon Europe / AFD Climat)',
+              program: 'Subventions pour l\'Économie Circulaire et la Transition Verte',
+              amountOrAid: 'Subventions de 20 000 € à 100 000 € avec assistance technique',
+              conditions: 'Preuve d\'impact environnemental mesurable (ACV certifiée) et viabilité économique.',
+            },
+          ],
         },
-        {
-          name: 'Certification Cradle to Cradle (C2C) ou Écolabel',
-          category: 'Éco-conception & Circularité Produit',
-          whyItMatters: 'Prouve la sécurité chimique des matériaux et leur réintégration perpétuelle en cycle biologique ou technique.',
-          eligibilityCriteria: 'Toxicité zéro des intrants, utilisation d\'énergies renouvelables et gestion saine de l\'eau.',
-        },
-      ],
-      fundings: [
-        {
-          source: 'APII / Pépinières du Réseau National (RNPE)',
-          program: 'Accompagnement Entrepreneuriat Vert & Prime d\'Investissement',
-          amountOrAid: 'Hébergement en pépinière, coaching technique et primes d\'éco-innovation',
-          conditions: 'Projet d\'innovation durable à impact local créateur d\'emplois pérennes.',
-        },
-        {
-          source: 'ANME (Agence Nationale pour la Maîtrise de l\'Énergie)',
-          program: 'Fonds de Transition Énergétique (FTE)',
-          amountOrAid: 'Prise en charge d\'audits énergétiques et primes sur investissements sobres',
-          conditions: 'Dépôt d\'un dossier d\'efficacité énergétique ou d\'installation ENR.',
-        },
-        {
-          source: 'Programmes Internationaux (SwitchMed / Horizon Europe / AFD Climat)',
-          program: 'Subventions pour l\'Économie Circulaire et la Transition Verte',
-          amountOrAid: 'Subventions de 20 000 € à 100 000 € avec assistance technique',
-          conditions: 'Preuve d\'impact environnemental mesurable (ACV certifiée) et viabilité économique.',
-        },
-      ],
-    },
 
     // 8. Plan d'action prioritaire
-    priorityActionPlan: {
-      phase1_0to3months: [
-        {
-          timeframe: '0-3 mois',
-          title: 'Finalisation de l\'Analyse de Cycle de Vie (ACV) simplifiée',
-          description: `Quantifier précisément les flux entrants et sortants réels sur le site de ${location}.`,
-          priorityLevel: 'Haute',
-          expectedDeliverable: 'Rapport ACV complet et fiche technique d\'éco-conception.',
+    priorityActionPlan: isFootwearOrSafetyShoes
+      ? {
+          phase1_0to3months: [
+            {
+              timeframe: '0-3 mois',
+              title: 'Validation des formulations PU/TPU sans solvant et sourcing éco-responsable',
+              description: 'Qualifier les compounds de polyols biosourcés/régénérés et sécuriser les contrats d\'approvisionnement en cuirs sans chrome certifiés LWG.',
+              priorityLevel: 'Haute',
+              expectedDeliverable: 'Fiches techniques des matières premières et échantillons de semelles injectées conformes REACH.',
+            },
+            {
+              timeframe: '0-3 mois',
+              title: 'Dépôt du dossier d\'incubation et d\'appui technique APII / CETTEX',
+              description: 'Présenter le projet au comité technique de la pépinière industrielle et solliciter l\'accompagnement pour les essais laboratoires.',
+              priorityLevel: 'Haute',
+              expectedDeliverable: 'Convention d\'accompagnement technique et plan d\'essais préliminaires validé.',
+            },
+          ],
+          phase2_3to6months: [
+            {
+              timeframe: '3-6 mois',
+              title: 'Campagne de tests d\'homologation EN ISO 20345:2022 en laboratoire notifié',
+              description: 'Soumettre les prototypes aux tests de résistance aux chocs (200 Joules), résistance à la perforation (1100 N) et coefficient de glissement SRC.',
+              priorityLevel: 'Haute',
+              expectedDeliverable: 'Certificat d\'examen UE de type (Attestation CE de conformité EPI de catégorie II).',
+            },
+            {
+              timeframe: '3-6 mois',
+              title: 'Installation du carrousel d\'injection avec système de captage VMC (ISO 45001)',
+              description: 'Mettre en service les presses d\'injection avec hottes aspirantes hermétiques aux têtes d\'injection pour les vapeurs de MDI.',
+              priorityLevel: 'Haute',
+              expectedDeliverable: 'Rapport d\'analyse d\'air au poste de travail validant le respect des VLEP (Valeurs Limites d\'Exposition).',
+            },
+          ],
+          phase3_6to12months: [
+            {
+              timeframe: '6-12 mois',
+              title: 'Lancement de l\'offre commerciale Safety-Shoe-as-a-Service auprès des majors BTP',
+              description: 'Contractualiser les premiers accords-cadres d\'abonnement EPI avec maintenance et reprise des chaussures usagées.',
+              priorityLevel: 'Stratégique',
+              expectedDeliverable: '3 contrats B2B signés équipant plus de 500 collaborateurs avec suivi de parc numérisé.',
+            },
+            {
+              timeframe: '6-12 mois',
+              title: 'Mise en service de la filière de broyage cryogénique des semelles réformées',
+              description: 'Activer la convention avec les fabricants de dalles amortissantes pour valoriser 100% des semelles usagées collectées.',
+              priorityLevel: 'Stratégique',
+              expectedDeliverable: 'Attestation de valorisation matière à 100% et premier rapport d\'impact carbone certifié ISO 14067.',
+            },
+          ],
+        }
+      : {
+          phase1_0to3months: [
+            {
+              timeframe: '0-3 mois',
+              title: 'Finalisation de l\'Analyse de Cycle de Vie (ACV) simplifiée',
+              description: `Quantifier précisément les flux entrants et sortants réels sur le site de ${location}.`,
+              priorityLevel: 'Haute',
+              expectedDeliverable: 'Rapport ACV complet et fiche technique d\'éco-conception.',
+            },
+            {
+              timeframe: '0-3 mois',
+              title: 'Dépôt du dossier d\'accompagnement APII / RNPE',
+              description: 'Présenter le diagnostic vert au comité de sélection de la pépinière d\'entreprises.',
+              priorityLevel: 'Haute',
+              expectedDeliverable: 'Convention d\'incubation et validation des avantages fiscaux/aides.',
+            },
+          ],
+          phase2_3to6months: [
+            {
+              timeframe: '3-6 mois',
+              title: 'Sécurisation des partenariats d\'approvisionnement local',
+              description: `Contractualiser avec les fournisseurs de matières premières ou déchets valorisables à ${location}.`,
+              priorityLevel: 'Moyenne',
+              expectedDeliverable: 'Accords-cadres avec clauses de qualité et d\'impact environnemental.',
+            },
+            {
+              timeframe: '3-6 mois',
+              title: 'Candidature aux financements verts (ANME / SwitchMed)',
+              description: 'Solliciter le co-financement des investissements matériels sobres en énergie.',
+              priorityLevel: 'Moyenne',
+              expectedDeliverable: 'Dossier de subvention complété et visé par l\'expert comptable.',
+            },
+          ],
+          phase3_6to12months: [
+            {
+              timeframe: '6-12 mois',
+              title: 'Obtention du premier label vert & Déploiement commercial',
+              description: 'Passer l\'audit de conformité environnementale et lancer la commercialisation certifiée.',
+              priorityLevel: 'Stratégique',
+              expectedDeliverable: 'Certificat de labellisation environnementale et bilan d\'impact annuel.',
+            },
+            {
+              timeframe: '6-12 mois',
+              title: 'Mesure d\'impact in situ et communication responsable',
+              description: 'Publier les premiers indicateurs d\'émissions évitées et de circularité auprès des clients.',
+              priorityLevel: 'Stratégique',
+              expectedDeliverable: 'Rapport RSE public et communication anti-greenwashing transparente.',
+            },
+          ],
         },
-        {
-          timeframe: '0-3 mois',
-          title: 'Dépôt du dossier d\'accompagnement APII / RNPE',
-          description: 'Présenter le diagnostic vert au comité de sélection de la pépinière d\'entreprises.',
-          priorityLevel: 'Haute',
-          expectedDeliverable: 'Convention d\'incubation et validation des avantages fiscaux/aides.',
-        },
-      ],
-      phase2_3to6months: [
-        {
-          timeframe: '3-6 mois',
-          title: 'Sécurisation des partenariats d\'approvisionnement local',
-          description: `Contractualiser avec les fournisseurs de matières premières ou déchets valorisables à ${location}.`,
-          priorityLevel: 'Moyenne',
-          expectedDeliverable: 'Accords-cadres avec clauses de qualité et d\'impact environnemental.',
-        },
-        {
-          timeframe: '3-6 mois',
-          title: 'Candidature aux financements verts (ANME / SwitchMed)',
-          description: 'Solliciter le co-financement des investissements matériels sobres en énergie.',
-          priorityLevel: 'Moyenne',
-          expectedDeliverable: 'Dossier de subvention complété et visé par l\'expert comptable.',
-        },
-      ],
-      phase3_6to12months: [
-        {
-          timeframe: '6-12 mois',
-          title: 'Obtention du premier label vert & Déploiement commercial',
-          description: 'Passer l\'audit de conformité environnementale et lancer la commercialisation certifiée.',
-          priorityLevel: 'Stratégique',
-          expectedDeliverable: 'Certificat de labellisation environnementale et bilan d\'impact annuel.',
-        },
-        {
-          timeframe: '6-12 mois',
-          title: 'Mesure d\'impact in situ et communication responsable',
-          description: 'Publier les premiers indicateurs d\'émissions évitées et de circularité auprès des clients.',
-          priorityLevel: 'Stratégique',
-          expectedDeliverable: 'Rapport RSE public et communication anti-greenwashing transparente.',
-        },
-      ],
-    },
     thirdExpertValidation: {
       summary: 'Expert 3 (Auditeur Senior ESG) : Validation positive de la trajectoire bas-carbone et conformité aux critères de la taxonomie verte européenne confirmée.',
       validationStatus: 'Validé'

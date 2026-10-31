@@ -1163,7 +1163,7 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
 1. Synthèse du projet : Scores d'impacts rigoureusement calibrés (sévères si polluant), avis collégial des experts (STRICTEMENT LIMITÉ À 5 LIGNES MAX / ~40-50 mots directement après le nom du projet) et vision de transformation.
 2. Aspects & impacts environnementaux : Analyse approfondie des aspects et impacts environnementaux (directs et indirects, positifs et négatifs) sur les écosystèmes, l'air, l'eau, le climat, les sols et la biodiversité. Évaluation normée des AES selon la matrice ISO 14001 (F, G, S, M), quantification des impacts par phase du cycle de vie (ACV ISO 14040/14044), écotoxicité (ERA), flux de matière (MFA) et leviers d'atténuation d'impacts.
 3. Aspects & impacts sociaux et sociétaux : Analyse approfondie des impacts sociaux et sociétaux directs et indirects : santé et sécurité des travailleurs, santé publique et riverains (exposition poussières PM, produits toxiques, bruit), création d'emplois locaux pérennes, retombées communautaires, gouvernance partagée éthique (ISO 26000) et accompagnement vers une transition juste.
-4. Intégration de l'entrepreneuriat vert : Analyse économique critique, modèles de rupture technologique nécessaires (ex: recyclage d'eau fermé ZLD, filtres-presses, solaire dédié).
+4. Intégration de l'entrepreneuriat vert : Analyse économique critique, modèles de rupture technologique et circulaires (normes ISO 59004:2024 / ISO 59020 / Cadre 9R / EFC / CSRD ESRS E5). Renseigner impérativement les ATOUTS ENVIRONNEMENTAUX MAJEURS (éco-avantages compétitifs vérifiables et intrinsèques du modèle) ainsi que les AXES D'AMÉLIORATION PRIORITAIRES & LEVIERS D'ÉCO-TRANSITION (avec levier opérationnel concret, gain environnemental mesuré chiffré, impact économique/ROI et niveau de priorité : 'Stratégique', 'Haute', 'Moyenne').
 5. Alignement ODD (Objectifs de Développement Durable - Méthodologie normée SDG Compass, ONU Agenda 2030, GRI & CSRD/ESRS) :
    - RÈGLE DE MATÉRIALITÉ & NIVEAU DE CONTRIBUTION : Distinguer rigoureusement les contributions 'Majeur' (cœur de métier / impact direct mesurable) des contributions 'Secondaire' (impact indirect / mesures transversales). Éviter le saupoudrage non justifié (tolérance zéro au SDG-washing).
    - CODES OFFICIELS ET INDICATEURS DE L'ONU : Pour chaque ODD retenu, renseigner impérativement les sous-cibles officielles (ex: 12.5, 13.2, 4.4, 6.4), les libellés de l'Agenda 2030, ainsi que l'indicateur officiel ONU associé (ex: 'Indicateur ONU 12.5.1 (Taux de valorisation matière)').
@@ -1301,6 +1301,31 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
             greenEntrepreneurshipIntegration: {
               type: Type.OBJECT,
               properties: {
+                circularArchetype: { type: Type.STRING, description: 'Archétype circulaire dominant selon ISO 59004' },
+                differentiationFactor: { type: Type.STRING, description: 'Facteur clé de différenciation compétitive verte' },
+                circularValueProposition: { type: Type.STRING, description: 'Proposition de valeur circulaire' },
+                competitiveMoat: { type: Type.STRING, description: 'Barrière à l\'entrée écologique (Moat concurrentiel)' },
+                iso59000Compliance: { type: Type.STRING, description: 'Niveau d\'alignement avec la série ISO 59000' },
+                environmentalAssets: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: 'Atouts environnementaux majeurs du modèle (éco-avantages compétitifs vérifiables et intrinsèques)',
+                },
+                improvementAxes: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      axis: { type: Type.STRING, description: 'Intitulé du chantier d\'amélioration prioritaire' },
+                      lever: { type: Type.STRING, description: 'Levier opérationnel concret mis en œuvre' },
+                      environmentalGain: { type: Type.STRING, description: 'Gain environnemental mesuré et chiffré' },
+                      economicPayoff: { type: Type.STRING, description: 'Impact économique ou rentabilité (ROI)' },
+                      priority: { type: Type.STRING, enum: ['Haute', 'Moyenne', 'Stratégique'], description: 'Niveau de priorité' },
+                    },
+                    required: ['axis', 'lever', 'environmentalGain', 'economicPayoff'],
+                  },
+                  description: 'Axes d\'amélioration prioritaires et leviers d\'éco-transition',
+                },
                 innovativeBusinessModels: {
                   type: Type.ARRAY,
                   items: {
@@ -1314,8 +1339,6 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
                     required: ['title', 'description', 'feasibility', 'economicBenefit'],
                   },
                 },
-                differentiationFactor: { type: Type.STRING },
-                circularValueProposition: { type: Type.STRING },
               },
               required: ['innovativeBusinessModels', 'differentiationFactor', 'circularValueProposition'],
             },
