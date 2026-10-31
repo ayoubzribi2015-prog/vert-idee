@@ -283,10 +283,10 @@ export async function generateWordReport(project: ProjectAudit): Promise<Blob> {
           // ==========================================
           new Paragraph({
             heading: HeadingLevel.HEADING_1,
-            spacing: { before: 400, after: 120 },
+            spacing: { before: 400, after: 80 },
             children: [
               new TextRun({
-                text: '4. Intégration de l\'entrepreneuriat vert',
+                text: '4. Intégration de l\'entrepreneuriat vert & Modèles circulaires',
                 bold: true,
                 color: SECONDARY_COLOR,
                 size: 24,
@@ -294,29 +294,195 @@ export async function generateWordReport(project: ProjectAudit): Promise<Blob> {
             ],
           }),
           new Paragraph({
-            spacing: { before: 60, after: 80 },
+            spacing: { before: 40, after: 100 },
+            children: [
+              new TextRun({
+                text: 'Cadres normatifs : ISO 59004:2024 / ISO 59020 | Cadre 9R (R0 à R9) | Économie de la Fonctionnalité (EFC) | CSRD ESRS E5',
+                italics: true,
+                size: 16,
+                color: TEXT_MUTED,
+              }),
+            ],
+          }),
+          ...(project.greenEntrepreneurshipIntegration.circularArchetype
+            ? [
+                new Paragraph({
+                  spacing: { before: 40, after: 60 },
+                  children: [
+                    new TextRun({ text: 'Archétype Circulaire Dominant : ', bold: true, color: PRIMARY_COLOR }),
+                    new TextRun({ text: project.greenEntrepreneurshipIntegration.circularArchetype }),
+                  ],
+                }),
+              ]
+            : []),
+          ...(project.greenEntrepreneurshipIntegration.iso59000Compliance
+            ? [
+                new Paragraph({
+                  spacing: { before: 40, after: 80 },
+                  children: [
+                    new TextRun({ text: 'Conformité Cadre ISO 59000 : ', bold: true, color: PRIMARY_COLOR }),
+                    new TextRun({ text: project.greenEntrepreneurshipIntegration.iso59000Compliance }),
+                  ],
+                }),
+              ]
+            : []),
+          new Paragraph({
+            spacing: { before: 60, after: 60 },
             children: [
               new TextRun({ text: 'Facteur de différenciation compétitive verte : ', bold: true, color: PRIMARY_COLOR }),
               new TextRun({ text: project.greenEntrepreneurshipIntegration.differentiationFactor }),
             ],
           }),
           new Paragraph({
-            spacing: { before: 60, after: 120 },
+            spacing: { before: 60, after: 60 },
             children: [
               new TextRun({ text: 'Proposition de valeur circulaire : ', bold: true, color: PRIMARY_COLOR }),
               new TextRun({ text: project.greenEntrepreneurshipIntegration.circularValueProposition }),
             ],
           }),
+          ...(project.greenEntrepreneurshipIntegration.competitiveMoat
+            ? [
+                new Paragraph({
+                  spacing: { before: 60, after: 120 },
+                  children: [
+                    new TextRun({ text: 'Barrière à l\'entrée écologique (Competitive Moat) : ', bold: true, color: PRIMARY_COLOR }),
+                    new TextRun({ text: project.greenEntrepreneurshipIntegration.competitiveMoat }),
+                  ],
+                }),
+              ]
+            : []),
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 180, after: 80 },
+            children: [
+              new TextRun({ text: 'Modèles économiques innovants & Stratégies 9R', bold: true, size: 20, color: SECONDARY_COLOR }),
+            ],
+          }),
           ...project.greenEntrepreneurshipIntegration.innovativeBusinessModels.map(
-            (bm) =>
-              new Paragraph({
+            (bm) => {
+              const details = [
+                bm.archetype ? `Archétype: ${bm.archetype}` : null,
+                bm.strategy9R ? `9R: ${bm.strategy9R}` : null,
+                bm.feasibility ? `Faisabilité: ${bm.feasibility}` : null,
+                bm.targetCustomer ? `Cible: ${bm.targetCustomer}` : null,
+                bm.revenueStream ? `Revenus: ${bm.revenueStream}` : null,
+                bm.paybackPeriod ? `Payback: ${bm.paybackPeriod}` : null,
+              ].filter(Boolean).join(' | ');
+
+              return new Paragraph({
                 spacing: { before: 80, after: 80 },
                 children: [
-                  new TextRun({ text: `• ${bm.title} : `, bold: true, color: '111827' }),
-                  new TextRun({ text: `${bm.description} (${bm.feasibility} — Bénéfice économique : ${bm.economicBenefit})` }),
+                  new TextRun({ text: `• ${bm.title}`, bold: true, color: '111827' }),
+                  new TextRun({ text: details ? ` [${details}]` : '', italics: true, color: TEXT_MUTED }),
+                  new TextRun({ text: `\n  Description : ${bm.description}` }),
+                  new TextRun({ text: `\n  Impact économique : ${bm.economicBenefit}`, bold: true, color: PRIMARY_COLOR }),
                 ],
-              })
+              });
+            }
           ),
+          // Monetization mechanisms table
+          ...(project.greenEntrepreneurshipIntegration.monetizationMechanisms && project.greenEntrepreneurshipIntegration.monetizationMechanisms.length > 0
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 200, after: 80 },
+                  children: [
+                    new TextRun({ text: 'Mécanismes de monétisation circulaire & Cash-Flow', bold: true, size: 20, color: SECONDARY_COLOR }),
+                  ],
+                }),
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        createHeaderCell('Levier & Catégorie'),
+                        createHeaderCell('Description opérationnelle'),
+                        createHeaderCell('Impact Cash-Flow net'),
+                      ],
+                    }),
+                    ...project.greenEntrepreneurshipIntegration.monetizationMechanisms.map((m) =>
+                      new TableRow({
+                        children: [
+                          createDataCell(`${m.name}\n[${m.category}]`, true),
+                          createDataCell(m.description),
+                          createDataCell(m.directCashFlowImpact || m.cashFlowImpact || 'Gain économique vérifié', true),
+                        ],
+                      })
+                    ),
+                  ],
+                }),
+              ]
+            : []),
+          // Industrial Symbiosis table
+          ...(project.greenEntrepreneurshipIntegration.industrialSymbiosis && project.greenEntrepreneurshipIntegration.industrialSymbiosis.length > 0
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 200, after: 80 },
+                  children: [
+                    new TextRun({ text: 'Écologie Industrielle & Territoriale (EIT) — Symbioses', bold: true, size: 20, color: SECONDARY_COLOR }),
+                  ],
+                }),
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        createHeaderCell('Partenaire territorial'),
+                        createHeaderCell('Flux échangé (Matière/Énergie)'),
+                        createHeaderCell('Bénéfice environnemental'),
+                        createHeaderCell('Valeur économique créée'),
+                      ],
+                    }),
+                    ...project.greenEntrepreneurshipIntegration.industrialSymbiosis.map((s) =>
+                      new TableRow({
+                        children: [
+                          createDataCell(s.partner || s.partnerType || 'Acteur territorial', true),
+                          createDataCell(s.fluxType || s.inputOutputFlow || 'Flux valorisé'),
+                          createDataCell(s.environmentalBenefit || s.description),
+                          createDataCell(s.mutualBenefit || s.economicValue || 'Synergie mutuelle', true),
+                        ],
+                      })
+                    ),
+                  ],
+                }),
+              ]
+            : []),
+          // Decoupling metrics table
+          ...(project.greenEntrepreneurshipIntegration.decouplingMetrics && project.greenEntrepreneurshipIntegration.decouplingMetrics.length > 0
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 200, after: 80 },
+                  children: [
+                    new TextRun({ text: 'Indicateurs de découplage ressources (ISO 59020)', bold: true, size: 20, color: SECONDARY_COLOR }),
+                  ],
+                }),
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        createHeaderCell('Indicateur de ressource'),
+                        createHeaderCell('Objectif circulaire'),
+                        createHeaderCell('Méthode / Référence'),
+                        createHeaderCell('Facteur de découplage'),
+                      ],
+                    }),
+                    ...project.greenEntrepreneurshipIntegration.decouplingMetrics.map((d) =>
+                      new TableRow({
+                        children: [
+                          createDataCell(d.indicator || d.metric || 'Indicateur', true),
+                          createDataCell(d.targetValue || d.target || 'N/A', true),
+                          createDataCell(d.methodology || d.baselineLinear || 'ISO 59020'),
+                          createDataCell(d.decouplingFactor || 'Rupture linéaire', true),
+                        ],
+                      })
+                    ),
+                  ],
+                }),
+              ]
+            : []),
 
           // ==========================================
           // 5. Alignement ODD

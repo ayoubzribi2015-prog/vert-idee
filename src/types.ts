@@ -39,12 +39,52 @@ export interface BusinessModelIdea {
   description: string;
   feasibility: string;
   economicBenefit: string;
+  archetype?: string;
+  strategy9R?: string;
+  revenueStream?: string;
+  targetCustomer?: string;
+  paybackPeriod?: string;
+}
+
+export interface CircularMonetizationMechanism {
+  name: string;
+  category: 'Usage & Performance' | 'Boucle Matière & Valorisation' | 'Service & Maintenance' | 'Plateforme & Données' | 'CAPEX' | 'OPEX' | 'Revenus Nouveaux' | 'Économie Fiscale & Subventions' | string;
+  description: string;
+  directCashFlowImpact?: string;
+  cashFlowImpact?: string;
+}
+
+export interface IndustrialSymbiosisSynergy {
+  partner: string;
+  partnerType?: string;
+  fluxType?: 'Matière / Coproduit' | 'Énergie & Chaleur fatale' | 'Eau & Effluents' | 'Logistique & Espaces' | string;
+  inputOutputFlow?: string;
+  description: string;
+  environmentalBenefit?: string;
+  mutualBenefit: string;
+  economicValue?: string;
+}
+
+export interface DecouplingMetric {
+  indicator: string;
+  metric?: string;
+  targetValue: string;
+  target?: string;
+  baselineLinear?: string;
+  decouplingFactor?: string;
+  methodology: string;
 }
 
 export interface GreenEntrepreneurshipIntegration {
-  innovativeBusinessModels: BusinessModelIdea[];
   differentiationFactor: string;
   circularValueProposition: string;
+  innovativeBusinessModels: BusinessModelIdea[];
+  circularArchetype?: string;
+  iso59000Compliance?: string;
+  competitiveMoat?: string;
+  monetizationMechanisms?: CircularMonetizationMechanism[];
+  industrialSymbiosis?: IndustrialSymbiosisSynergy[];
+  decouplingMetrics?: DecouplingMetric[];
 }
 
 export interface SdgTargetDetail {

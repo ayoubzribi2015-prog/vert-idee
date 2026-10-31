@@ -144,22 +144,69 @@ export function generateExpertAuditFallback(
 
       // 4. Intégration de l'entrepreneuriat vert
       greenEntrepreneurshipIntegration: {
+        circularArchetype: 'Transition d\'urgence vers la dépollution, le traitement ZLD et la valorisation matière des résidus',
+        differentiationFactor: 'Actuellement aucun atout écologique distinctif. Le projet supporte un risque de déclassement commercial et d\'interdiction réglementaire immédiat si les passifs environnementaux ne sont pas traités.',
+        circularValueProposition: 'Cesser le prélèvement d\'eau fraîche potable et instaurer une boucle fermée zéro rejet liquide (ZLD) avec neutralisation des effluents.',
+        competitiveMoat: 'Mise en conformité environnementale préalable obligatoire pour préserver la licence sociale d\'opérer et éviter les astreintes administratives.',
+        iso59000Compliance: 'Non conforme ISO 59004:2024. Requiert un plan d\'alignement d\'urgence vers l\'économie circulaire et l\'arrêt des externalités négatives.',
         innovativeBusinessModels: [
           {
             title: 'Station de Dessalement Solaire et Recyclage d\'Eau Dédiée',
-            description: 'Alimenter le lavage avec de l\'eau saumâtre dessalée à l\'énergie solaire pour cesser tout pompage d\'eau potable.',
+            archetype: 'Boucle fermée & Sobriété hydrique',
+            strategy9R: 'R2 (Rethink) & R3 (Re-use)',
+            description: 'Alimenter le lavage avec de l\'eau saumâtre dessalée à l\'énergie solaire pour cesser tout pompage d\'eau potable dans les nappes phréatiques.',
             feasibility: 'Faisabilité technique éprouvée mais exigeant un investissement en capital élevé (CAPEX).',
             economicBenefit: 'Pérennité de la production face au tarissement inéluctable des nappes et réduction du risque de fermeture.',
+            revenueStream: 'Économie directe sur les redevances de pompage et pénalités de prélèvement.',
+            targetCustomer: 'Unité industrielle interne et riverains industriels.',
+            paybackPeriod: '3 à 4 ans.',
           },
           {
             title: 'Valorisation des Phosphogypses en Matériaux de Construction',
+            archetype: 'Symbiose industrielle & Écologie territoriale',
+            strategy9R: 'R8 (Recycle)',
             description: 'Neutralisation et intégration sous contrôle radiologique dans des liants hydrauliques routiers ou plaques stabilisées.',
             feasibility: 'Faisabilité réglementaire complexe nécessitant une certification d\'innocuité toxicologique stricte.',
             economicBenefit: 'Élimination des coûts de stockage géotechnique et création d\'une filière de valorisation de coproduits.',
+            revenueStream: 'Vente de sous-produits stabilisés aux filières cimentières et de génie civil.',
+            targetCustomer: 'Entreprises de BTP et cimenteries régionales.',
+            paybackPeriod: '24 à 36 mois.',
           },
         ],
-        differentiationFactor: 'Actuellement aucun atout écologique distinctif. Le projet doit opérer une rupture technologique complète pour espérer une conformité ESG.',
-        circularValueProposition: 'Cesser le prélèvement d\'eau fraîche potable et instaurer une boucle fermée zéro rejet liquide (ZLD).',
+        monetizationMechanisms: [
+          {
+            name: 'Évitement des amendes et taxes écologiques',
+            category: 'Service & Maintenance',
+            description: 'Suppression des astreintes financières pour rejet d\'effluents acides et dépassement des seuils de pollution.',
+            directCashFlowImpact: '+18% de préservation de marge nette.',
+          },
+          {
+            name: 'Vente de coproduits minéraux neutralisés',
+            category: 'Boucle Matière & Valorisation',
+            description: 'Valorisation des sous-produits pour les assises de chaussées et le terrassement technique.',
+            directCashFlowImpact: 'Flux de trésorerie additionnel stabilisé.',
+          },
+        ],
+        industrialSymbiosis: [
+          {
+            partner: 'Cimenteries et centrales à béton régionales',
+            fluxType: 'Matière / Coproduit',
+            description: 'Substitution partielle du gypse naturel par des coproduits de filtration stabilisés.',
+            mutualBenefit: 'Économie de ressources vierges pour le cimentier et désengorgement des aires de stockage.',
+          },
+        ],
+        decouplingMetrics: [
+          {
+            indicator: 'Taux de recirculation interne des eaux de procédé',
+            targetValue: '≥ 90%',
+            methodology: 'Mesurage volumétrique continu conforme ISO 59020.',
+          },
+          {
+            indicator: 'Tonnage annuel de résidus miniers stabilisés et valorisés',
+            targetValue: '≥ 60 000 t/an',
+            methodology: 'Bilan matière certifié par tiers indépendant.',
+          },
+        ],
       },
 
       // 5. Alignement ODD
@@ -659,25 +706,547 @@ export function generateExpertAuditFallback(
       justTransition: 'Impact sur la transition juste : accompagnement inclusif des acteurs traditionnels vers les pratiques vertes et équité salariale.',
     },
 
-    // 4. Intégration de l'entrepreneuriat vert
-    greenEntrepreneurshipIntegration: {
-      innovativeBusinessModels: [
-        {
-          title: 'Produit-comme-Service & Boucle Circulaire',
-          description: 'Passage d\'une logique de vente de volume à une offre de service durable avec reprise systématique en fin de vie.',
-          feasibility: 'Faisabilité élevée avec un coût marginal maîtrisé.',
-          economicBenefit: 'Revenus réguliers et prévisibles, fidélisation accrue et sécurisation des matières premières.',
-        },
-        {
-          title: 'Valorisation des Crédits Carbone & Évitement d\'Émissions',
-          description: 'Certification de l\'évitement d\'émissions carbone et valorisation auprès de partenaires institutionnels et RSE.',
-          feasibility: 'Faisabilité moyenne nécessitant un protocole de mesure certifié.',
-          economicBenefit: 'Amortissement accéléré des investissements d\'éco-conception.',
-        },
-      ],
-      differentiationFactor: `Positionnement pionnier à ${location} combinant haute performance technique et impact carbone prouvé par ACV.`,
-      circularValueProposition: 'Permettre aux clients de réduire leur empreinte environnementale de plus de 60% sans surcoût d\'usage prohibitif.',
-    },
+    // 4. Intégration de l'entrepreneuriat vert (Normes ISO 59004/59010, EFC, Symbiose EIT & Cadre 9R)
+    greenEntrepreneurshipIntegration: (() => {
+      const isOliveOilOrAgro = isAgriOrFood || /huile|olive|agricol|mdd|conditionnement|aliment/i.test(`${title} ${description}`);
+
+      if (isOliveOilOrAgro) {
+        return {
+          circularArchetype: 'Économie de la fonctionnalité appliquée aux emballages réemployés (PaaS), valorisation des coproduits oléicoles en cascade & traçabilité B2B',
+          differentiationFactor: `Conditionnement d'excellence certifié à ${location} alliant 100% verre consigné réemployable jusqu'à 30 cycles, zéro adultération, traçabilité lot par lot et réduction certifiée de 45% du Scope 3 pour les centrales d'achat MDD européennes et locales.`,
+          circularValueProposition: 'Permettre aux distributeurs et centrales d\'achat (MDD) d\'atteindre leurs objectifs de réduction carbone Scope 3 (directive CSRD) grâce à un emballage consigné à zéro déchet ultime, avec un coût d\'usage optimisé.',
+          competitiveMoat: 'Accès privilégié aux gisements d\'huile d\'olive extra-vierge certifiée, chaîne d\'embouteillage automatisée calibrée pour les bouteilles réemployables et contrats pluriannuels B2B à engagement de volume.',
+          iso59000Compliance: 'Conformité ISO 59004:2024 (Régénération des écosystèmes, préservation maximale de la valeur matière et boucle logistique inversée normée ISO 59010).',
+          innovativeBusinessModels: [
+            {
+              title: 'Système de Consigne Circulaire B2B & Réemploi des Bouteilles en Verre',
+              archetype: 'Économie de la fonctionnalité & Logistique inversée',
+              strategy9R: 'R3 (Re-use) & R4 (Repair)',
+              description: 'Mise en place d\'un parc de bouteilles standardisées en verre lourd (25 cl, 50 cl, 1L) avec collecte, lavage industriel basse température et réemploi garanti jusqu\'à 30 rotations.',
+              feasibility: 'Faisabilité technique et logistique élevée en partenariat avec les plateformes de distribution régionales.',
+              economicBenefit: 'Réduction de 65% des coûts d\'achat d\'emballages neufs dès le second cycle et marge opérationnelle consolidée.',
+              revenueStream: 'Frais de mise à disposition de bouteilles consignées + service de lavage mutualisé.',
+              targetCustomer: 'Centrales d\'achats européennes (MDD) et réseaux de distribution bio.',
+              paybackPeriod: '14 à 18 mois.',
+            },
+            {
+              title: 'Bioraffinerie Circulaire des Coproduits (Grignons & Margines)',
+              archetype: 'Symbiose industrielle & Valorisation en cascade',
+              strategy9R: 'R8 (Recycle) & R9 (Recover)',
+              description: 'Séchage solaire et valorisation des grignons en biocombustible compacté pour alimenter la chaudière de l\'usine et compostage des margines filtrées pour fertilisation biologique.',
+              feasibility: 'Éprouvée, s\'appuyant sur les technologies de filtration membranaire et de granulation.',
+              economicBenefit: 'Autonomie thermique de 80% pour l\'eau chaude de lavage et vente d\'amendements organiques certifiés aux exploitants.',
+              revenueStream: 'Vente de granulés bio-énergétiques et engrais organiques en sacs aux coopératives.',
+              targetCustomer: 'Exploitants oléicoles locaux et chaudières industrielles régionales.',
+              paybackPeriod: '18 à 22 mois.',
+            },
+            {
+              title: 'Contrat Pluriannuel de Performance Qualité & Traçabilité CSRD (PaaS Agricole)',
+              archetype: 'Modèle serviciel & Passeport Numérique Produit (DPP)',
+              strategy9R: 'R2 (Rethink)',
+              description: 'Commercialisation d\'un service d\'embouteillage et de distribution sécurisée avec passeport numérique du produit (DPP) prouvant l\'origine géographique, l\'acidité < 0,3% et l\'empreinte carbone vérifiée.',
+              feasibility: 'Immédiate via QR code dynamique sur étiquette relié à la base de données de lot.',
+              economicBenefit: 'Prime de valorisation de 15% à 20% sur le prix de vente au litre et fidélisation contractuelle sur 3 à 5 ans.',
+              revenueStream: 'Abonnement au service de traçabilité + commission sur volumes conditionnés.',
+              targetCustomer: 'Distributeurs espagnols et italiens recherchant des garanties anti-fraude.',
+              paybackPeriod: 'Inférieur à 12 mois.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Vente d\'huile conditionnée sous MDD avec prime de traçabilité',
+              category: 'Usage & Performance',
+              description: 'Tarification au litre avec prime de qualité analytique et réduction Scope 3 vérifiée.',
+              directCashFlowImpact: '+15% de marge brute par rapport au vrac.',
+            },
+            {
+              name: 'Économies sur la boucle de réemploi des bouteilles en verre',
+              category: 'Boucle Matière & Valorisation',
+              description: 'Économie d\'achat d\'emballages neufs par réutilisation jusqu\'à 30 rotations.',
+              directCashFlowImpact: '-60% sur le poste achats consommables d\'emballage.',
+            },
+            {
+              name: 'Valorisation des coproduits énergétiques et fertilisants',
+              category: 'Boucle Matière & Valorisation',
+              description: 'Vente de granulés de biomasse et compost agricole issu des grignons.',
+              directCashFlowImpact: 'Flux de revenus récurrents et autonomie thermique.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Verreries régionales partenaires',
+              fluxType: 'Matière / Coproduit',
+              description: 'Approvisionnement direct en verre standardisé et recyclage des casses internes en boucle courte.',
+              mutualBenefit: 'Sécurisation des approvisionnements et baisse de l\'empreinte transport.',
+            },
+            {
+              partner: 'Coopératives oléicoles régionales',
+              fluxType: 'Matière / Coproduit',
+              description: 'Réception des huiles brutes et restitution de fertilisants biologiques stabilisés.',
+              mutualBenefit: 'Fidélisation de l\'amont agricole et régénération des sols.',
+            },
+            {
+              partner: 'Plateformes logistiques de distribution',
+              fluxType: 'Logistique & Espaces',
+              description: 'Optimisation des trajets retours pour le rapatriement des bouteilles vides.',
+              mutualBenefit: 'Zéro kilomètre à vide et réduction des coûts logistiques de transport.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Intensité matière de l\'emballage par litre conditionné',
+              targetValue: '≤ 15 g de verre neuf / L (vs 450 g pour le verre perdu)',
+              methodology: 'Mesurage des flux physiques conforme ISO 59020.',
+            },
+            {
+              indicator: 'Taux de rotation moyen des contenants en verre consigné',
+              targetValue: '≥ 15 rotations par bouteille',
+              methodology: 'Traçabilité unitaire code-barres conforme GS1.',
+            },
+            {
+              indicator: 'Taux de valorisation matière et énergétique des coproduits',
+              targetValue: '≥ 95% des résidus réincorporés',
+              methodology: 'Bilan matière annuel certifié.',
+            },
+          ],
+        };
+      }
+
+      if (isPackagingOrPlastic) {
+        return {
+          circularArchetype: 'Boucle fermée bio-assimilable, régénération de polymères naturels et logistique inversée',
+          differentiationFactor: `Substitut 100% bio-sourcé et compostable à domicile à ${location}, éliminant les taxes sur les plastiques non recyclables et les perturbateurs endocriniens.`,
+          circularValueProposition: 'Suppression totale des microplastiques et conformité anticipée aux règlements européens PPWR et directive SUP sans perte de cadence d\'operculage.',
+          competitiveMoat: 'Formulation propriétaire de biopolymère à base de résidus locaux et partenariats exclusifs avec des collecteurs de biomasse.',
+          iso59000Compliance: 'Conforme ISO 59004 (Régénération biologique et gestion des cycles fermés biosourcés).',
+          innovativeBusinessModels: [
+            {
+              title: 'Emballage-comme-Service (PaaS) avec Collecte et Compostage Industriel',
+              archetype: 'Économie de la fonctionnalité & Fin de vie',
+              strategy9R: 'R2 (Rethink) & R8 (Recycle)',
+              description: 'Fourniture d\'emballages associée à un service de collecte des biodéchets et compostage en boucle fermée pour les industriels de l\'agroalimentaire.',
+              feasibility: 'Faisabilité éprouvée auprès des réseaux de distribution engagés.',
+              economicBenefit: 'Transformation d\'une charge de gestion des déchets en flux d\'intrants fertilisants.',
+              revenueStream: 'Abonnement mensuel au service d\'emballage et collecte.',
+              targetCustomer: 'Industriels agroalimentaires et plateformes de restauration collective.',
+              paybackPeriod: '12 à 16 mois.',
+            },
+            {
+              title: 'Licence de Formulation & Granulés Prêts à l\'Emploi pour Extrudeurs',
+              archetype: 'Modèle de plateforme & Éco-conception',
+              strategy9R: 'R2 (Rethink)',
+              description: 'Mise à disposition de compoundings thermoplastiques biosourcés compatibles avec les lignes d\'extrusion standard sans réinvestissement machine.',
+              feasibility: 'Haute, testée sur lignes industrielles conventionnelles.',
+              economicBenefit: 'Scalabilité rapide sans investissement lourd dans de nouvelles usines d\'extrusion.',
+              revenueStream: 'Vente de résines et royalties de licence industrielle.',
+              targetCustomer: 'Transformateurs plasturgistes et fabricants de barquettes.',
+              paybackPeriod: '8 à 12 mois.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Vente de barquettes et films bio-sourcés au volume',
+              category: 'Usage & Performance',
+              description: 'Facturation unitaire dégressive selon volume avec garantie de compostabilité.',
+              directCashFlowImpact: 'Marge brute 25% supérieure aux emballages plastiques fossiles.',
+            },
+            {
+              name: 'Service de logistique inverse et valorisation compost',
+              category: 'Boucle Matière & Valorisation',
+              description: 'Prise en charge des emballages souillés et revente du compost normé.',
+              directCashFlowImpact: 'Flux de trésorerie récurrent additionnel.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Coopératives agricoles locales',
+              fluxType: 'Matière / Coproduit',
+              description: 'Collecte de résidus de récolte (paille, coques, marc) et retour de compost fertilisant.',
+              mutualBenefit: 'Valorisation des déchets agricoles et intrants bioplastiques à bas coût.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Taux de matière d\'origine renouvelable certifiée (C14)',
+              targetValue: '100% biosourcé',
+              methodology: 'Datation radiocarbone ASTM D6866.',
+            },
+            {
+              indicator: 'Réduction de l\'empreinte carbone vs emballages PET/PP fossiles',
+              targetValue: '≥ 70% de réduction',
+              methodology: 'ACV du berceau à la tombe ISO 14040.',
+            },
+          ],
+        };
+      }
+
+      if (isEnergyOrSolar) {
+        return {
+          circularArchetype: 'Tiers-financement de la performance énergétique (PaaS), reconditionnement de seconde vie et autoconsommation collective',
+          differentiationFactor: `Offre d'électricité décarbonée garantie zéro investissement initial pour le client à ${location}, avec monitoring intelligent et maintenance prédictive continue.`,
+          circularValueProposition: 'Réduction immédiate de 25% à 40% de la facture énergétique des sites industriels et couverture contre la volatilité des tarifs réseau.',
+          competitiveMoat: 'Algorithmes propriétaires d\'optimisation de la charge batterie et contrats d\'approvisionnement d\'équipements à haut rendement.',
+          iso59000Compliance: 'Conforme ISO 59010 (Transition vers des modèles d\'affaires énergétiques circulaires et sobres).',
+          innovativeBusinessModels: [
+            {
+              title: 'Contrat de Performance Énergétique (CPE) & Vente de kWh Décarboné à l\'Usage',
+              archetype: 'Économie de la fonctionnalité (PaaS)',
+              strategy9R: 'R2 (Rethink)',
+              description: 'Installation et maintenance de centrales solaires en toiture sans CAPEX client, facturées au kWh autoconsommé avec engagement de performance.',
+              feasibility: 'Excellente, cadre contractuel validé par les banques partenaires.',
+              economicBenefit: 'Revenus d\'abonnement récurrents sécurisés sur 15 à 20 ans et fidélisation client.',
+              revenueStream: 'Facturation mensuelle des kWh solaires produits.',
+              targetCustomer: 'PME, usines et entrepôts logistiques gros consommateurs.',
+              paybackPeriod: '4 à 5 ans pour l\'opérateur.',
+            },
+            {
+              title: 'Reconditionnement & Seconde Vie des Onduleurs et Batteries Stationnaires',
+              archetype: 'Allongement de la durée de vie & Réemploi',
+              strategy9R: 'R4 (Repair) & R6 (Remanufacture)',
+              description: 'Diagnostic de santé des cellules, reconditionnement modulaire et réemploi pour le stockage stationnaire tampon.',
+              feasibility: 'Technologie de diagnostic électronique éprouvée en laboratoire.',
+              economicBenefit: 'Réduction de 45% du coût des systèmes de stockage par rapport aux batteries neuves.',
+              revenueStream: 'Vente de baies de stockage reconditionnées avec garantie 5 ans.',
+              targetCustomer: 'Exploitants de fermes solaires et sites industriels isolés.',
+              paybackPeriod: '16 à 20 mois.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Facturation de l\'électricité solaire à l\'usage',
+              category: 'Usage & Performance',
+              description: 'Vente des kWh solaires à un tarif inférieur de 25% au tarif réseau.',
+              directCashFlowImpact: 'Flux de trésorerie mensuel prévisible et indexé.',
+            },
+            {
+              name: 'Services de flexibilité et effacement réseau',
+              category: 'Plateforme & Données',
+              description: 'Rémunération par le gestionnaire de réseau pour l\'injection lors des pointes de demande.',
+              directCashFlowImpact: 'Revenus complémentaires à haute marge.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Zones industrielles et entreprises riveraines',
+              fluxType: 'Énergie & Chaleur fatale',
+              description: 'Partage de surplus d\'électricité solaire et récupération de chaleur fatale des onduleurs pour le préchauffage d\'eau sanitaire.',
+              mutualBenefit: 'Autoconsommation collective et optimisation des rendements globaux.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Intensité carbone du kWh injecté',
+              targetValue: '≤ 25 g CO2e / kWh',
+              methodology: 'Bilan carbone ACV GHG Protocol Scope 1-2-3.',
+            },
+            {
+              indicator: 'Taux de valorisation en fin de vie des modules et composants',
+              targetValue: '≥ 92% de matière recyclée',
+              methodology: 'Filière agréée de démantèlement PV CYCLE.',
+            },
+          ],
+        };
+      }
+
+      if (isWater) {
+        return {
+          circularArchetype: 'Zéro rejet liquide (ZLD), recyclage en circuit fermé et économie de la fonctionnalité hydrique',
+          differentiationFactor: `Système de recyclage et de dépollution des effluents industriels en boucle fermée à ${location}, sans rejet polluant dans les nappes ni boues toxiques.`,
+          circularValueProposition: 'Autonomie hydrique accrue de 85% pour les sites industriels et élimination intégrale des redevances de pollution et des risques d\'arrêt pour pénurie d\'eau.',
+          competitiveMoat: 'Brevets sur membranes anti-colmatage et dimensionnement spécifique pour la gestion des saumures en climat aride.',
+          iso59000Compliance: 'Conforme ISO 59004 et directives de gestion résiliente de l\'eau OSS / REPSAHEL.',
+          innovativeBusinessModels: [
+            {
+              title: 'Vente d\'Eau Régénérée au m³ & Service ZLD Tout-Compris (Water-as-a-Service)',
+              archetype: 'Économie de la fonctionnalité (PaaS)',
+              strategy9R: 'R2 (Rethink) & R3 (Re-use)',
+              description: 'Déploiement d\'unités modulaires de traitement d\'eau chez les clients industriels, facturées au volume d\'eau recyclée réinjectée en process.',
+              feasibility: 'Faisabilité industrielle confirmée dans les secteurs textile, agroalimentaire et chimique.',
+              economicBenefit: 'Remplacement d\'un coût de rejet par une ressource hydrique interne à coût maîtrisé.',
+              revenueStream: 'Abonnement fixe de maintenance + tarification variable au m³ traité.',
+              targetCustomer: 'Industries de teinture, papeteries, abattoirs et usines agroalimentaires.',
+              paybackPeriod: '18 à 24 mois.',
+            },
+            {
+              title: 'Extraction & Valorisation des Minéraux et Nutriments des Eaux Usées',
+              archetype: 'Symbiose industrielle & Valorisation matière',
+              strategy9R: 'R8 (Recycle)',
+              description: 'Précipitation et récupération d\'azote, phosphore et sels minéraux à haute pureté pour revente aux filières d\'engrais.',
+              feasibility: 'Technologie d\'extraction par cristallisation éprouvée.',
+              economicBenefit: 'Création d\'un nouveau flux de revenus valorisant ce qui était autrefois un déchet polluant.',
+              revenueStream: 'Vente de struvite et sels minéraux purifiés aux distributeurs agricoles.',
+              targetCustomer: 'Fabricants d\'engrais et coopératives agricoles régionales.',
+              paybackPeriod: '2 ans.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Abonnement au service d\'eau régénérée',
+              category: 'Usage & Performance',
+              description: 'Facturation volumétrique de l\'eau recyclée à un tarif 30% inférieur au réseau potable.',
+              directCashFlowImpact: 'Flux de trésorerie récurrent et fidélisant sur 5 à 10 ans.',
+            },
+            {
+              name: 'Économies sur redevances de rejet d\'effluents',
+              category: 'Service & Maintenance',
+              description: 'Suppression intégrale des pénalités environnementales ONAS / agence de bassin.',
+              directCashFlowImpact: 'Amélioration de 12% de la marge nette industrielle.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Sites industriels voisins & agriculteurs périurbains',
+              fluxType: 'Eau & Effluents',
+              description: 'Mise à disposition des surplus d\'eaux épurées pour le lavage technique ou l\'irrigation arboricole.',
+              mutualBenefit: 'Sécurisation de la ressource en eau pour tout le bassin industriel.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Taux de recirculation interne des eaux de procédé',
+              targetValue: '≥ 92% en boucle fermée',
+              methodology: 'Bilan hydrique mensuel certifié.',
+            },
+            {
+              indicator: 'Intensité de prélèvement d\'eau fraîche par unité produite',
+              targetValue: '-85% par rapport au standard du secteur',
+              methodology: 'Comptabilité hydrique ISO 14046.',
+            },
+          ],
+        };
+      }
+
+      if (isTextile) {
+        return {
+          circularArchetype: 'Upcycling en cascade, filature régénérée mono-matière et consigne de recyclage',
+          differentiationFactor: `Ligne textile éco-conçue 100% fibres recyclées locales à ${location}, sans solvants chimiques toxiques, traçable de la fibre au vêtement.`,
+          circularValueProposition: 'Offrir aux marques de mode et donneurs d\'ordres des textiles haut de gamme conformes à la directive européenne sur l\'écoconception (ESPR) et exempts de fast-fashion jetable.',
+          competitiveMoat: 'Gisement exclusif de chutes de coupe industrielles pré-consommation triées optiquement par coloris sans re-teinture polluante.',
+          iso59000Compliance: 'Conforme ISO 59004 (Préservation de l\'intégrité des fibres et architecture démontable).',
+          innovativeBusinessModels: [
+            {
+              title: 'Vestiaire Professionnel en Abonnement avec Entretien & Réparation (Workwear-as-a-Service)',
+              archetype: 'Économie de la fonctionnalité (PaaS)',
+              strategy9R: 'R3 (Re-use) & R4 (Repair)',
+              description: 'Mise à disposition de vêtements de travail techniques, incluant lavage éco-certifié, réparations illimitées et remplacement avec recyclage en fin de vie.',
+              feasibility: 'Haute maturité opérationnelle sur le marché corporate B2B.',
+              economicBenefit: 'Suppression des achats de vêtements jetables pour les entreprises clientes et fidélisation contractuelle pluriannuelle.',
+              revenueStream: 'Abonnement mensuel par collaborateur équipé.',
+              targetCustomer: 'Industries, cliniques, entreprises de maintenance et BTP.',
+              paybackPeriod: '15 à 18 mois.',
+            },
+            {
+              title: 'Filature & Tissage Régénéré à Façon pour Marques Partenaires',
+              archetype: 'Boucle fermée & Matières Premières Secondaires',
+              strategy9R: 'R6 (Remanufacture) & R8 (Recycle)',
+              description: 'Transformation des invendus et chutes textiles des clients en fils régénérés de haute résistance prêts pour de nouvelles collections.',
+              feasibility: 'Éprouvée avec des lignes d\'effilochage mécanique sans eau.',
+              economicBenefit: 'Valorisation des stocks dormants et conformité à l\'interdiction de destruction des invendus.',
+              revenueStream: 'Facturation au kilogramme de fil régénéré livré.',
+              targetCustomer: 'Marques de prêt-à-porter responsables et créateurs européens.',
+              paybackPeriod: '12 mois.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Abonnement au service de vestiaire professionnel',
+              category: 'Usage & Performance',
+              description: 'Revenus récurrents prévisibles sur des contrats de 36 à 48 mois.',
+              directCashFlowImpact: '+22% de rentabilité opérationnelle.',
+            },
+            {
+              name: 'Vente de feutres isolants issus des résidus ultimes',
+              category: 'Boucle Matière & Valorisation',
+              description: 'Revente des poussières et fibres courtes aux industriels de l\'isolation automobile.',
+              directCashFlowImpact: 'Zéro déchet mis en décharge et valorisation résiduelle.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Ateliers de confection régionaux',
+              fluxType: 'Matière / Coproduit',
+              description: 'Collecte quotidienne des chutes de coupe et retour sous forme de rouleaux tissés.',
+              mutualBenefit: 'Filière circulaire locale sans intermédiaire ni frais logistiques longue distance.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Pourcentage de fibres recyclées ou upcyclées',
+              targetValue: '≥ 85% du poids total du produit',
+              methodology: 'Certification Global Recycled Standard (GRS).',
+            },
+            {
+              indicator: 'Économie d\'eau de process par rapport au coton vierge',
+              targetValue: '≥ 95% d\'eau préservée',
+              methodology: 'Bilan ACV comparatif berceau à la porte.',
+            },
+          ],
+        };
+      }
+
+      if (isDigitalOrEdTech) {
+        return {
+          circularArchetype: 'Numérique sobre et frugal, éco-conception logicielle (RGESN) et allongement de la durée de vie du matériel',
+          differentiationFactor: `Architecture logicielle ultra-sobre à ${location} réduisant de 75% l'empreinte serveur et réseau, pleinement opérationnelle sur des terminaux reconditionnés de plus de 8 ans et en basse connectivité.`,
+          circularValueProposition: 'Permettre aux entreprises et institutions de déployer des services numériques critiques sans forcer le renouvellement coûteux du parc matériel, avec un bilan carbone informatique audité et conforme CSRD.',
+          competitiveMoat: 'Moteur logiciel propriétaire sans dépendance aux frameworks énergivores, fonctionnement hors-ligne (PWA) et optimisation du code au niveau octet.',
+          iso59000Compliance: 'Conforme aux standards d\'éco-conception des services numériques (RGESN / ISO 14062 / AFNOR Spec 2201).',
+          innovativeBusinessModels: [
+            {
+              title: 'Abonnement SaaS Sobre & Tarification Équitable à l\'Usage Réel',
+              archetype: 'Économie de la fonctionnalité logicielle',
+              strategy9R: 'R2 (Rethink)',
+              description: 'Accès logiciel facturé en fonction de la valeur délivrée plutôt qu\'au volume de données échangées, incitant à la sobriété algorithmique.',
+              feasibility: 'Immédiate avec des coûts marginaux d\'infrastructure extrêmement bas.',
+              economicBenefit: 'Marge brute supérieure à 85% grâce à des besoins en serveurs divisés par 4.',
+              revenueStream: 'Abonnement mensuel ou annuel au service.',
+              targetCustomer: 'Organismes de formation, établissements scolaires, PME et administrations.',
+              paybackPeriod: 'Moins de 6 mois.',
+            },
+            {
+              title: 'Offre Packagée Matériel Reconditionné + Logiciel Éducatif Garanti 5 Ans',
+              archetype: 'Allongement de durée de vie (R4-R6)',
+              strategy9R: 'R4 (Repair) & R6 (Remanufacture)',
+              description: 'Fourniture de tablettes et ordinateurs reconditionnés sous système d\'exploitation allégé avec la suite logicielle pré-installée.',
+              feasibility: 'Forte, en partenariat avec des reconditionneurs informatiques locaux certifiés.',
+              economicBenefit: 'Coût d\'équipement divisé par 3 pour les écoles et garantie de fonctionnement sans obsolescence.',
+              revenueStream: 'Vente de packs matériels reconditionnés + contrat de maintenance.',
+              targetCustomer: 'Collectivités territoriales, associations et pays émergents.',
+              paybackPeriod: '9 mois.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Licences SaaS éco-conçues',
+              category: 'Usage & Performance',
+              description: 'Abonnement récurrent avec engagements de disponibilité et sobriété.',
+              directCashFlowImpact: 'Forte marge et récurrence de trésorerie.',
+            },
+            {
+              name: 'Prestations d\'audit d\'éco-conception numérique',
+              category: 'Plateforme & Données',
+              description: 'Audit et optimisation de sites web et applications clientes (réduction du poids des requêtes).',
+              directCashFlowImpact: 'Revenus d\'ingénierie à haute valeur ajoutée.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Reconditionneurs de matériel informatique régionaux',
+              fluxType: 'Matière / Coproduit',
+              description: 'Collecte de parcs informatiques réformés, reconditionnement et déploiement avec le logiciel optimisé.',
+              mutualBenefit: 'Création d\'emplois locaux dans le réemploi et offre technologique abordable.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Poids moyen transféré par page ou interaction utilisateur',
+              targetValue: '≤ 250 Ko (vs 2,8 Mo moyenne web)',
+              methodology: 'Audit de performance conforme PageSpeed & Ecoindex.',
+            },
+            {
+              indicator: 'Durée de vie additionnelle des terminaux clients',
+              targetValue: '+4 ans sans obsolescence ressentie',
+              methodology: 'Suivi télémétrique anonymisé de la compatibilité matérielle.',
+            },
+          ],
+        };
+      }
+
+      // Cas général : Éco-innovation & Économie Circulaire
+      return {
+        circularArchetype: 'Modèle hybride Produit-Service (PaaS), écologie industrielle territoriale et découplage absolu matière/revenus',
+        differentiationFactor: `Positionnement pionnier à ${location} combinant haute performance technique, impact carbone prouvé par ACV certifiée et traçabilité inviolable, conforme aux exigences de reporting CSRD (ESRS E5) des donneurs d'ordres.`,
+        circularValueProposition: 'Permettre aux clients de réduire leur empreinte environnementale et leurs coûts totaux de possession (TCO) de plus de 50%, sans risque technique ni compromis opérationnel.',
+        competitiveMoat: 'Maîtrise exclusive de la chaîne d\'approvisionnement circulaire locale, conception modulaire facilitant le désassemblage et certifications de conformité tierce partie.',
+        iso59000Compliance: 'Alignement rigoureux avec la norme ISO 59004:2024 (Préservation de la valeur, régénération des écosystèmes et transparence des filières circulaires).',
+        innovativeBusinessModels: [
+          {
+            title: 'Produit-comme-Service & Boucle Circulaire (Product-as-a-Service)',
+            archetype: 'Économie de la fonctionnalité (EFC)',
+            strategy9R: 'R3 (Re-use) & R4 (Repair)',
+            description: 'Passage d\'une logique de vente de volume linéaire à une mise à disposition avec maintenance préventive, pièces détachées garanties et reprise systématique en fin d\'usage.',
+            feasibility: 'Faisabilité élevée avec un coût marginal d\'opération maîtrisé.',
+            economicBenefit: 'Revenus réguliers et prévisibles, fidélisation accrue sur le long terme et sécurisation des matières premières pour les cycles futurs.',
+            revenueStream: 'Abonnement mensuel d\'usage + option de rachat ou reconditionnement.',
+            targetCustomer: 'Clients B2B industriels, collectivités et particuliers éco-responsables.',
+            paybackPeriod: '12 à 18 mois.',
+          },
+          {
+            title: 'Filière de Remise à Neuf, Rachat & Reconditionnement Garanti',
+            archetype: 'Allongement de durée de vie & Réemploi',
+            strategy9R: 'R6 (Remanufacture) & R7 (Repurpose)',
+            description: 'Rachat systématique des équipements en fin de premier cycle, démontage sélectif, reconditionnement des pièces d\'usure et recommercialisation avec garantie constructeur.',
+            feasibility: 'Éprouvée grâce à une conception modulaire dès la planche à dessin.',
+            economicBenefit: 'Marge unitaire supérieure de 30% par rapport à la vente de produits neufs neufs grâce à la réutilisation des composants nobles.',
+            revenueStream: 'Vente d\'équipements reconditionnés premium et kits d\'upgrade.',
+            targetCustomer: 'Marchés secondaires, PME et structures à budget d\'investissement contraint.',
+            paybackPeriod: '10 à 14 mois.',
+          },
+          {
+            title: 'Valorisation des Coproduits en Symbiose Industrielle Territoriale',
+            archetype: 'Symbiose industrielle (EIT)',
+            strategy9R: 'R8 (Recycle)',
+            description: 'Intégration des sous-produits de fabrication comme intrants matières pour des industries voisines dans une logique de proximité géographique.',
+            feasibility: 'Haute faisabilité via conventions bilatérales avec les industriels du bassin d\'emploi.',
+            economicBenefit: 'Suppression des coûts d\'évacuation des déchets et création d\'une source de revenus nette continue.',
+            revenueStream: 'Vente de matières premières secondaires certifiées.',
+            targetCustomer: 'Entreprises de transformation partenaires du bassin industriel régional.',
+            paybackPeriod: 'Moins de 12 mois.',
+          },
+        ],
+        monetizationMechanisms: [
+          {
+            name: 'Abonnement d\'usage et performance garantie',
+            category: 'Usage & Performance',
+            description: 'Facturation à l\'unité de travail ou au mois avec engagement de disponibilité.',
+            directCashFlowImpact: 'Trésorerie récurrente et prévisibilité financière renforcée.',
+          },
+          {
+            name: 'Marge additionnelle sur composants réemployés',
+            category: 'Boucle Matière & Valorisation',
+            description: 'Économie sur les achats de matières premières vierges par recyclage interne.',
+            directCashFlowImpact: '+15% à +25% de marge brute sur les produits reconditionnés.',
+          },
+          {
+            name: 'Services d\'extension de garantie et maintenance prédictive',
+            category: 'Service & Maintenance',
+            description: 'Contrats de support technique et fourniture de pièces d\'éco-maintenance.',
+            directCashFlowImpact: 'Flux de marge élevé à coût marginal quasi-nul.',
+          },
+        ],
+        industrialSymbiosis: [
+          {
+            partner: 'Plateformes logistiques et distributeurs régionaux',
+            fluxType: 'Logistique & Espaces',
+            description: 'Mutualisation des flux de livraison et rapatriement des produits en fin de cycle pour réemploi.',
+            mutualBenefit: 'Optimisation du taux de remplissage des véhicules et réduction des coûts carbone.',
+          },
+          {
+            partner: 'Industries manufacturières du bassin régional',
+            fluxType: 'Matière / Coproduit',
+            description: 'Échange de flux de matières premières secondaires et sous-produits techniques.',
+            mutualBenefit: 'Substitution de matières vierges importées par des ressources locales sécurisées.',
+          },
+        ],
+        decouplingMetrics: [
+          {
+            indicator: 'Indice de circularité matière (MCI - Material Circularity Indicator)',
+            targetValue: '≥ 0,80 / 1,0',
+            methodology: 'Méthodologie standardisée Ellen MacArthur Foundation & ISO 59020.',
+          },
+          {
+            indicator: 'Taux de réemploi et recyclabilité en fin de vie',
+            targetValue: '≥ 90% en poids',
+            methodology: 'Bilan de démontabilité et caractérisation des filières de recyclage.',
+          },
+          {
+            indicator: 'Ratio Chiffre d\'Affaires / Empreinte Carbone de production',
+            targetValue: '+40% de création de valeur par tonne de CO2 émise',
+            methodology: 'Comptabilité carbone analytique GHG Protocol Scope 1-2-3.',
+          },
+        ],
+      };
+    })(),
 
     // 5. Alignement ODD (spécifique au secteur d'activité selon la méthodologie SDG Compass)
     sdgAlignment: isDigitalOrEdTech
