@@ -13,24 +13,28 @@ import type { ProjectAudit } from '../types.ts';
 export function generateExpertAuditFallback(
   title: string,
   description: string,
-  location: string = 'Tunisie'
+  location: string = 'Tunisie',
+  fullDocumentContent?: string
 ): Omit<ProjectAudit, 'id' | 'createdAt'> {
-  // L'évaluation s'appuie sur la description opérationnelle, le titre et le lieu.
-  const text = `${title} ${description} ${location}`.toLowerCase();
+  // L'évaluation s'appuie sur la description opérationnelle, le titre, le lieu et le contenu des documents importés
+  const text = `${title} ${description} ${location} ${fullDocumentContent || ''}`.toLowerCase();
 
   // Détection des industries lourdes, extractives et très polluantes (ex: Phosphate, Mines, Carrières, Chimie lourde, Pesticides)
   const isHighImpactIndustry = /pesticide|insecticide|produit chimique|chimie|phosphate|phosphogypse|cpg|groupe chimique|lavage.*phosphate|extraction.*phosphate|minier|minière|carrière|carriere|minerai|clinker|cimenterie|bitume|pétrole|petrole|raffinage|gaz fossile|hydrocarbure|acide phosphorique|engrais chimique/.test(text);
 
   // Détection Chaussures de sécurité, Équipements de Protection Individuelle (EPI) et injection de semelles PU/TPU
-  const isFootwearOrSafetyShoes = /chaussur|semelle|soulier|bott|épi\b|epi\b|protection individuelle|sécurité au travail|injection.*chaussur|injection.*semelle/i.test(`${title} ${description}`);
+  const isFootwearOrSafetyShoes = /chaussur|semelle|soulier|bott|épi\b|epi\b|protection individuelle|sécurité au travail|injection.*chaussur|injection.*semelle|polyuréthane.*chaussur|pu.*tpu|embout.*composite|anti-perforation|en iso 20345|satra|ctc|safety.*shoe|footwear|ressemelage|chaussant|tige.*cuir/i.test(text);
 
   // Détection injection plastique conventionnelle (souvent source de greenwashing si score trop haut)
   const isConventionalPlastic = /injection plastique|unité d'injection|usine de plastique|plasturgie/.test(text)
     && !/recyclé|biodégradable|compostable|biosourcé/.test(text)
     && !isFootwearOrSafetyShoes;
 
-  // Détection des autres thématiques (avec exclusion stricte pour éviter les faux positifs)
-  const isAgriOrFood = /(?:agri|aliment|alimentaire|ferme|bio\b|plante|\bsols?\b|recolte|huile|dattes|olive|tomate|agrumes|culture)/i.test(`${title} ${description}`) && !isFootwearOrSafetyShoes;
+  // Détection stricte oléiculture / huile d'olive (uniquement si explicitement mentionnée)
+  const isOliveOil = /huile.*olive|huilerie|moulin.*huile|margine|grignon|oléicol|oleicol|oliveraie/i.test(text) && !isFootwearOrSafetyShoes;
+
+  // Détection agriculture et agroalimentaire générale (exclut rigoureusement le footwear et n'utilise pas des mots isolés comme 'bio' ou 'sol')
+  const isAgriOrFood = /(?:agricol|agricult|agronome|agroaliment|agro-aliment|alimentaire|ferme\b|élevage|elevage|maraîch|maraich|verger|récolte|recolte|culture.*agricole|arboricult|céréal|cereal|semence|viticult|apicult|miel|laitier|fromag)/i.test(text) && !isFootwearOrSafetyShoes && !isOliveOil;
   const isPackagingOrPlastic = /emballage|pack|carton|bouteille|flacon|sachet|biodegradable|dechet|recycl/.test(text) && !isFootwearOrSafetyShoes;
   const isEnergyOrSolar = /energie|solaire|photovolta|panneau|eolien|batterie|hydrogene|biomasse|chaleur|electricite/.test(text) && !isFootwearOrSafetyShoes;
   const isWater = /eau|irrigation|dessalement|pluviale|goutte|purification|assainissement|bassin/.test(text) && !isFootwearOrSafetyShoes;
@@ -954,9 +958,7 @@ export function generateExpertAuditFallback(
         };
       }
 
-      const isOliveOilOrAgro = (isAgriOrFood || /huile.*olive|huilerie|moulin.*huile|margine|grignon/i.test(`${title} ${description}`)) && !isFootwearOrSafetyShoes;
-
-      if (isOliveOilOrAgro) {
+      if (isOliveOil) {
         return {
           circularArchetype: 'Économie de la fonctionnalité appliquée aux emballages réemployés (PaaS), valorisation des coproduits oléicoles en cascade & traçabilité B2B',
           differentiationFactor: `Conditionnement d'excellence certifié à ${location} alliant 100% verre consigné réemployable jusqu'à 30 cycles, zéro adultération, traçabilité lot par lot et réduction certifiée de 45% du Scope 3 pour les centrales d'achat MDD européennes et locales.`,
@@ -1082,6 +1084,104 @@ export function generateExpertAuditFallback(
             {
               indicator: 'Taux de valorisation matière et énergétique des coproduits',
               targetValue: '≥ 95% des résidus réincorporés',
+              methodology: 'Bilan matière annuel certifié.',
+            },
+          ],
+        };
+      }
+
+      if (isAgriOrFood) {
+        return {
+          circularArchetype: 'Agroécologie régénératrice, valorisation des coproduits agricoles en cascade & biofertilisants organiques',
+          differentiationFactor: `Filière agroalimentaire durable et résiliente à ${location}, sans intrants chimiques de synthèse, valorisation 100% circulaire des résidus de récolte et certification d'agriculture biologique/régénératrice.`,
+          circularValueProposition: 'Permettre aux consommateurs et aux centrales de distribution de s\'approvisionner en produits agricoles sains et nutritifs, avec une réduction de 45% de l\'empreinte hydrique et une traçabilité carbone exemplaire du champ à l\'assiette.',
+          competitiveMoat: 'Accès sécurisé à des terres agricoles locales certifiées, maîtrise des techniques de compostage et bio-amendements, et contrats de distribution équitable en circuits courts et export responsable.',
+          iso59000Compliance: 'Conforme ISO 59004:2024 (Régénération des écosystèmes vivants, maintien des nutriments dans les sols et cycles biologiques fermés).',
+          environmentalAssets: [
+            'Régénération biologique des sols par apport de compost organique et biofertilisants naturels sans engrais azotés de synthèse.',
+            'Économie d\'eau d\'irrigation de 35% à 50% grâce au paillage organique, goutte-à-goutte régulé et couverture végétale permanente.',
+            'Suppression totale des pesticides de synthèse (glyphosate, néonicotinoïdes) préservant les pollinisateurs et la biodiversité locale.',
+            'Séquestration nette de carbone dans les sols agricoles (trajectoire 4 pour 1000) et valorisation thermique ou organique de 100% des coproduits.',
+            'Circuits courts de distribution réduisant de plus de 60% les émissions de transport et le gaspillage post-récolte.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Irrigation connectée de précision alimentée par énergie solaire',
+              lever: 'Installation de sondes tensiométriques capacitives et pompage solaire photovoltaïque pour un pilotage hydrique au millimètre.',
+              environmentalGain: 'Économie additionnelle de 25% d\'eau douce brute et neutralisation des émissions Scope 2 du pompage.',
+              economicPayoff: 'Baisse de 40% de la facture énergétique d\'irrigation et sécurisation des rendements en période de sécheresse.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Unité de transformation fermière et séchage solaire des écarts de tri',
+              lever: 'Mise en place d\'un séchoir solaire convectif pour valoriser les surplus et écarts de calibre en fruits séchés, poudres ou conserves.',
+              environmentalGain: 'Zéro gaspillage alimentaire post-récolte et valorisation de 100% de la biomasse produite.',
+              economicPayoff: 'Création d\'une ligne de produits transformés à haute marge (+30% vs produit brut).',
+              priority: 'Haute',
+            },
+            {
+              axis: 'Compostage aérobie contrôlé et lombricompostage sur site',
+              lever: 'Valorisation de tous les résidus culturaux et effluents d\'élevage en biofertilisant organique enrichi pour auto-amendement.',
+              environmentalGain: 'Autonomie fertilisante totale et élimination des achats d\'engrais chimiques importés.',
+              economicPayoff: 'Économie annuelle de 18% sur le poste d\'achats d\'intrants agronomiques.',
+              priority: 'Moyenne',
+            },
+          ],
+          innovativeBusinessModels: [
+            {
+              title: 'Abonnement Récolte Directe & Paniers Bio-Saisonniers (Agri-as-a-Service)',
+              archetype: 'Économie de la fonctionnalité & Circuits courts',
+              strategy9R: 'R2 (Rethink)',
+              description: 'Commercialisation par abonnement saisonnier de paniers de produits frais et transformés directement livrés aux ménages, entreprises et cantines scolaires.',
+              feasibility: 'Haute faisabilité technique et commerciale en zone urbaine et périurbaine.',
+              economicBenefit: 'Trésorerie encaissée en début de saison, suppression des marges d\'intermédiaires grossistes et fidélisation client.',
+              revenueStream: 'Abonnements mensuels récurrents et forfaits entreprises.',
+              targetCustomer: 'Familles urbaines, comités d\'entreprises (RSE) et restauration collective responsable.',
+              paybackPeriod: '6 à 9 mois.',
+            },
+            {
+              title: 'Bioraffinerie Agricole & Production de Biochar Amendement de Sols',
+              archetype: 'Valorisation en cascade & Séquestration carbone',
+              strategy9R: 'R8 (Recycle) & R9 (Recover)',
+              description: 'Pyrolyse douce des résidus lignocellulosiques pour produire du biochar à haute capacité de rétention d\'eau et des bio-fertilisants liquides concentrés.',
+              feasibility: 'Technologie de pyrolyse fermière éprouvée et robuste.',
+              economicBenefit: 'Régénération durable des sols pauvres et génération potentielle de crédits carbone certifiés (Puro.earth / EIC).',
+              revenueStream: 'Vente de biochar amendé et fertilisants bio aux exploitants de la région.',
+              targetCustomer: 'Agriculteurs, pépiniéristes et paysagistes régionaux.',
+              paybackPeriod: '18 à 24 mois.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Vente directe sans intermédiaire avec prime de fraîcheur bio',
+              category: 'Usage & Performance',
+              description: 'Facturation directe au consommateur final ou contrat-cadre avec prime qualité.',
+              directCashFlowImpact: '+35% de marge nette par rapport à la vente au gros.',
+            },
+            {
+              name: 'Économies sur les achats d\'intrants fertilisants et phytosanitaires',
+              category: 'Boucle Matière & Valorisation',
+              description: 'Remplacement de 100% des engrais et pesticides par des préparations naturelles internes.',
+              directCashFlowImpact: '-25% sur les charges opérationnelles de culture.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Élevages et fermes agro-écologiques voisines',
+              fluxType: 'Matière / Coproduit',
+              description: 'Échange de résidus de récolte (fourrage) contre fumiers compostés pour fertilisation.',
+              mutualBenefit: 'Autonomie fertilisante collective et zéro transport longue distance.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Consommation d\'eau d\'irrigation par kg produit',
+              targetValue: '≤ 180 L / kg (vs 350 L moyenne conventionnelle)',
+              methodology: 'Comptabilité hydrique ISO 14046 par parcelles instrumentées.',
+            },
+            {
+              indicator: 'Taux de résidus de récolte recyclés en fertilisants ou énergie',
+              targetValue: '100% de valorisation en cascade',
               methodology: 'Bilan matière annuel certifié.',
             },
           ],

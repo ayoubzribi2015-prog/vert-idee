@@ -1054,12 +1054,13 @@ function resolveLocation(loc?: string | null): string {
   return (loc || '').trim() || DEFAULT_LOCATION;
 }
 
-function normalizeDescriptionKey(desc: string, loc: string, answers?: any, fullDoc?: string): string {
+function normalizeDescriptionKey(title: string, desc: string, loc: string, answers?: any, fullDoc?: string): string {
+  const cleanTitle = (title || '').toLowerCase().trim().replace(/\s+/g, ' ');
   const cleanDesc = (desc || '').toLowerCase().trim().replace(/\s+/g, ' ');
   const cleanLoc = (loc || '').toLowerCase().trim().replace(/\s+/g, ' ');
   const cleanAnswers = answers ? JSON.stringify(answers) : '';
-  const cleanFullDoc = fullDoc ? fullDoc.toLowerCase().trim().slice(0, 500) : '';
-  return `${cleanDesc}:::${cleanLoc}:::${cleanAnswers}:::${cleanFullDoc}`;
+  const cleanFullDoc = fullDoc ? fullDoc.toLowerCase().trim().slice(0, 4000) : '';
+  return `${cleanTitle}:::${cleanDesc}:::${cleanLoc}:::${cleanAnswers}:::${cleanFullDoc}`;
 }
 
 // Expert Ecological Analysis API with EXACTLY the 8 required sections
@@ -1073,9 +1074,9 @@ app.post('/api/analyze', async (req: express.Request, res: express.Response) => 
     }
 
     // Vérification du cache de cohérence déterministe
-    // Si la même description opérationnelle et les mêmes documents ont déjà été évalués,
+    // Si le même projet (titre, description opérationnelle et documents) a déjà été évalué,
     // nous garantissons des scores strictement identiques et une parfaite cohérence sans dérive stochastique
-    const cacheKey = normalizeDescriptionKey(description, resolveLocation(location), req.body && req.body.answers, fullDocumentContent);
+    const cacheKey = normalizeDescriptionKey(title, description, resolveLocation(location), req.body && req.body.answers, fullDocumentContent);
     const cached = auditContentCache.get(cacheKey);
     if (cached && Date.now() - cached.cachedAt < 24 * 60 * 60 * 1000) {
       console.log(`[Audit Engine] Projet équivalent détecté en cache pour "${title}". Application déterministe des scores et du diagnostic.`);
@@ -1163,7 +1164,11 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
 1. Synthèse du projet : Scores d'impacts rigoureusement calibrés (sévères si polluant), avis collégial des experts (STRICTEMENT LIMITÉ À 5 LIGNES MAX / ~40-50 mots directement après le nom du projet) et vision de transformation.
 2. Aspects & impacts environnementaux : Analyse approfondie des aspects et impacts environnementaux (directs et indirects, positifs et négatifs) sur les écosystèmes, l'air, l'eau, le climat, les sols et la biodiversité. Évaluation normée des AES selon la matrice ISO 14001 (F, G, S, M), quantification des impacts par phase du cycle de vie (ACV ISO 14040/14044), écotoxicité (ERA), flux de matière (MFA) et leviers d'atténuation d'impacts.
 3. Aspects & impacts sociaux et sociétaux : Analyse approfondie des impacts sociaux et sociétaux directs et indirects : santé et sécurité des travailleurs, santé publique et riverains (exposition poussières PM, produits toxiques, bruit), création d'emplois locaux pérennes, retombées communautaires, gouvernance partagée éthique (ISO 26000) et accompagnement vers une transition juste.
-4. Intégration de l'entrepreneuriat vert : Analyse économique critique, modèles de rupture technologique et circulaires (normes ISO 59004:2024 / ISO 59020 / Cadre 9R / EFC / CSRD ESRS E5). Renseigner impérativement les ATOUTS ENVIRONNEMENTAUX MAJEURS (éco-avantages compétitifs vérifiables et intrinsèques du modèle) ainsi que les AXES D'AMÉLIORATION PRIORITAIRES & LEVIERS D'ÉCO-TRANSITION (avec levier opérationnel concret, gain environnemental mesuré chiffré, impact économique/ROI et niveau de priorité : 'Stratégique', 'Haute', 'Moyenne').
+4. Intégration de l'entrepreneuriat vert : Analyse économique critique, modèles de rupture technologique et circulaires (normes ISO 59004:2024 / ISO 59020 / Cadre 9R / EFC / CSRD ESRS E5).
+   - RÈGLE ABSOLUE D'ALIGNEMENT SECTORIEL & ANTI-CONFUSION : La Section 4 DOIT correspondre STRICTEMENT et EXCLUSIVEMENT aux activités, produits, matières et procédés réels décrits dans la description et les documents importés du projet.
+     * Pour tout projet de chaussures de sécurité, EPI ou injection de semelles PU/TPU : les modèles circulaires doivent porter sur l'équipement de protection individuelle, les modèles "Safety-Shoe-as-a-Service", la maintenance/ressemelage, l'injection directe sans solvants COV, les polyols biosourcés/recyclés et le recyclage des résines PU/TPU. IL EST STRICTEMENT INTERDIT de renvoyer des modèles d'huile d'olive, de bouteilles de verre ou de secteurs sans rapport !
+     * Pour tout autre projet (agriculture, emballage, textile, énergie, eau, éducation/digital, chimie) : les modèles circulaires, atouts et axes de progrès doivent découler directement des intrants et débouchés spécifiques décrits dans les documents importés.
+   - Renseigner impérativement les ATOUTS ENVIRONNEMENTAUX MAJEURS (éco-avantages compétitifs vérifiables et intrinsèques du modèle) ainsi que les AXES D'AMÉLIORATION PRIORITAIRES & LEVIERS D'ÉCO-TRANSITION (avec levier opérationnel concret, gain environnemental mesuré chiffré, impact économique/ROI et niveau de priorité : 'Stratégique', 'Haute', 'Moyenne').
 5. Alignement ODD (Objectifs de Développement Durable - Méthodologie normée SDG Compass, ONU Agenda 2030, GRI & CSRD/ESRS) :
    - RÈGLE DE MATÉRIALITÉ & NIVEAU DE CONTRIBUTION : Distinguer rigoureusement les contributions 'Majeur' (cœur de métier / impact direct mesurable) des contributions 'Secondaire' (impact indirect / mesures transversales). Éviter le saupoudrage non justifié (tolérance zéro au SDG-washing).
    - CODES OFFICIELS ET INDICATEURS DE L'ONU : Pour chaque ODD retenu, renseigner impérativement les sous-cibles officielles (ex: 12.5, 13.2, 4.4, 6.4), les libellés de l'Agenda 2030, ainsi que l'indicateur officiel ONU associé (ex: 'Indicateur ONU 12.5.1 (Taux de valorisation matière)').
@@ -1301,26 +1306,26 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
             greenEntrepreneurshipIntegration: {
               type: Type.OBJECT,
               properties: {
-                circularArchetype: { type: Type.STRING, description: 'Archétype circulaire dominant selon ISO 59004' },
-                differentiationFactor: { type: Type.STRING, description: 'Facteur clé de différenciation compétitive verte' },
-                circularValueProposition: { type: Type.STRING, description: 'Proposition de valeur circulaire' },
-                competitiveMoat: { type: Type.STRING, description: 'Barrière à l\'entrée écologique (Moat concurrentiel)' },
-                iso59000Compliance: { type: Type.STRING, description: 'Niveau d\'alignement avec la série ISO 59000' },
+                differentiationFactor: { type: Type.STRING },
+                circularValueProposition: { type: Type.STRING },
+                circularArchetype: { type: Type.STRING, description: 'Archétype circulaire dominant (ex: Économie de la fonctionnalité, boucle fermée, etc.)' },
+                competitiveMoat: { type: Type.STRING, description: 'Barrière à l\'entrée écologique et avantage concurrentiel durable' },
+                iso59000Compliance: { type: Type.STRING, description: 'Conformité au cadre normatif ISO 59004/59010/59020' },
                 environmentalAssets: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: 'Atouts environnementaux majeurs du modèle (éco-avantages compétitifs vérifiables et intrinsèques)',
+                  description: 'Atouts environnementaux majeurs vérifiables intrinsèques au modèle',
                 },
                 improvementAxes: {
                   type: Type.ARRAY,
                   items: {
                     type: Type.OBJECT,
                     properties: {
-                      axis: { type: Type.STRING, description: 'Intitulé du chantier d\'amélioration prioritaire' },
-                      lever: { type: Type.STRING, description: 'Levier opérationnel concret mis en œuvre' },
-                      environmentalGain: { type: Type.STRING, description: 'Gain environnemental mesuré et chiffré' },
-                      economicPayoff: { type: Type.STRING, description: 'Impact économique ou rentabilité (ROI)' },
-                      priority: { type: Type.STRING, enum: ['Haute', 'Moyenne', 'Stratégique'], description: 'Niveau de priorité' },
+                      axis: { type: Type.STRING, description: 'Intitulé de l\'axe d\'amélioration' },
+                      lever: { type: Type.STRING, description: 'Levier opérationnel d\'éco-transition' },
+                      environmentalGain: { type: Type.STRING, description: 'Gain environnemental mesurable chiffré' },
+                      economicPayoff: { type: Type.STRING, description: 'Retombée économique ou délai de retour sur investissement' },
+                      priority: { type: Type.STRING, description: 'Niveau de priorité : Stratégique, Haute ou Moyenne' },
                     },
                     required: ['axis', 'lever', 'environmentalGain', 'economicPayoff'],
                   },
@@ -1342,6 +1347,11 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
               },
               required: ['innovativeBusinessModels', 'differentiationFactor', 'circularValueProposition'],
             },
+
+
+
+
+
 
             // 5. Alignement ODD
             sdgAlignment: {
@@ -1548,6 +1558,7 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
       },
     });
 
+
       const textOutput = response.text || '{}';
       parsedData = JSON.parse(textOutput);
 
@@ -1563,7 +1574,7 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
         '[Audit Engine] Moteur expert déterministe activé (ISO 14001 / ISO 14064 / ODD) :'
       );
       // Moteur d'audit expert déterministe : garantit que l'utilisateur reçoit TOUJOURS son rapport complet sans être bloqué
-      parsedData = generateExpertAuditFallback(title, description, resolveLocation(location));
+      parsedData = generateExpertAuditFallback(title, description, resolveLocation(location), fullDocumentContent);
     }
 
     // Mettre en cache déterministe si l'analyse est complète
