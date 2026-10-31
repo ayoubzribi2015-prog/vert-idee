@@ -37,10 +37,10 @@ export function generateExpertAuditFallback(
   const isAgriOrFood = /(?:agricol|agricult|agronome|agroaliment|agro-aliment|alimentaire|ferme\b|élevage|elevage|maraîch|maraich|verger|récolte|recolte|culture.*agricole|arboricult|céréal|cereal|semence|viticult|apicult|miel|laitier|fromag)/i.test(text) && !isFootwearOrSafetyShoes && !isOliveOil;
   const isPackagingOrPlastic = /emballage|pack|carton|bouteille|flacon|sachet|biodegradable|dechet|recycl/.test(text) && !isFootwearOrSafetyShoes;
   const isEnergyOrSolar = /energie|solaire|photovolta|panneau|eolien|batterie|hydrogene|biomasse|chaleur|electricite/.test(text) && !isFootwearOrSafetyShoes;
-  const isWater = /eau|irrigation|dessalement|pluviale|goutte|purification|assainissement|bassin/.test(text) && !isFootwearOrSafetyShoes;
+  const isWater = /station d'épuration|station depuration|dessalement|eaux usées|eaux usees|traitement des eaux|purification de l'eau|assainissement des eaux|osmose inverse/i.test(text) && !isFootwearOrSafetyShoes;
   const isTextile = /textile|coton|vetement|mode|tissu|lin|laine|chutes|couture/.test(text) && !isFootwearOrSafetyShoes;
   const isWasteOrCircularity = /dechet|tri|reemploi|compost|valorisation|upcycling|circulaire|decharge/.test(text) && !isFootwearOrSafetyShoes;
-  const isDigitalOrEdTech = /edtech|educat|formation|appren|ecole|cours|pedagogi|plateforme|application|logiciel|saas|digital|numerique|e-learning|elearning/.test(text) && !isFootwearOrSafetyShoes;
+  const isDigitalOrEdTech = /edtech|educat|formation|appren|ecole|cours|pedagogi|plateforme|application|logiciel|saas|digital|numerique|e-learning|elearning|intelligence artificielle|\bia\b|interface|ecosysteme|gestion|communication|kidora/i.test(text) && !isFootwearOrSafetyShoes;
 
   // CAS SPÉCIFIQUE 1 : INDUSTRIES EXTRACTIVES, MINES & PHOSPHATE (Score Rouge / Alerte Critique)
   if (isHighImpactIndustry) {
@@ -808,6 +808,96 @@ export function generateExpertAuditFallback(
 
     // 4. Intégration de l'entrepreneuriat vert (Normes ISO 59004/59010, EFC, Symbiose EIT & Cadre 9R)
     greenEntrepreneurshipIntegration: (() => {
+      if (isDigitalOrEdTech) {
+        return {
+          circularArchetype: 'Numérique sobre et frugal, éco-conception logicielle (RGESN) et allongement de la durée de vie du matériel',
+          differentiationFactor: `Architecture logicielle ultra-sobre à ${location} réduisant de 75% l'empreinte serveur et réseau, pleinement opérationnelle sur des terminaux reconditionnés de plus de 8 ans et en basse connectivité.`,
+          circularValueProposition: 'Permettre aux entreprises et institutions de déployer des services numériques critiques sans forcer le renouvellement coûteux du parc matériel, avec un bilan carbone informatique audité et conforme CSRD.',
+          competitiveMoat: 'Moteur logiciel propriétaire sans dépendance aux frameworks énergivores, fonctionnement hors-ligne (PWA) et optimisation du code au niveau octet.',
+          iso59000Compliance: 'Conforme aux standards d\'éco-conception des services numériques (RGESN / ISO 14062 / AFNOR Spec 2201).',
+          environmentalAssets: [
+            'Architecture logicielle éco-conçue (RGESN / Green Code) réduisant de 75% les requêtes serveur et la consommation de bande passante.',
+            'Compatibilité garantie sur des équipements reconditionnés anciens (plus de 8 ans), freinant l\'obsolescence matérielle prématurée.',
+            'Fonctionnement hors-ligne autonome (PWA / Edge computing) éliminant la dépendance aux centres de données énergivores.',
+            'Transparence totale et conformité RGPD / CSRD sans traqueurs publicitaires ni scripts superflus.',
+          ],
+          improvementAxes: [
+            {
+              axis: 'Hébergement 100% sur serveurs alimentés par énergies renouvelables à PUE < 1,15',
+              lever: 'Migration vers des centres de données éco-responsables à refroidissement liquide passif sans climatisation active.',
+              environmentalGain: 'Baisse de 60% des émissions de GES liées à l\'hébergement cloud (Scope 3 amont).',
+              economicPayoff: 'Facture d\'hébergement cloud optimisée de 30% grâce à la frugalité architecturale.',
+              priority: 'Stratégique',
+            },
+            {
+              axis: 'Programme de reconditionnement solidaire de terminaux informatiques',
+              lever: 'Partenariat avec des ateliers d\'insertion pour équiper les écoles en ordinateurs reconditionnés sous Linux léger.',
+              environmentalGain: 'Prolongation de 4 ans de la durée de vie des parcs d\'ordinateurs réformés.',
+              economicPayoff: 'Offre packagée matériel + logiciel à coût imbattable pour les institutions éducatives.',
+              priority: 'Haute',
+            },
+          ],
+          innovativeBusinessModels: [
+            {
+              title: 'Abonnement SaaS Sobre & Tarification Équitable à l\'Usage Réel',
+              archetype: 'Économie de la fonctionnalité logicielle',
+              strategy9R: 'R2 (Rethink)',
+              description: 'Accès logiciel facturé en fonction de la valeur délivrée plutôt qu\'au volume de données échangées, incitant à la sobriété algorithmique.',
+              feasibility: 'Immédiate avec des coûts marginaux d\'infrastructure extrêmement bas.',
+              economicBenefit: 'Marge brute supérieure à 85% grâce à des besoins en serveurs divisés par 4.',
+              revenueStream: 'Abonnement mensuel ou annuel au service.',
+              targetCustomer: 'Organismes de formation, établissements scolaires, PME et administrations.',
+              paybackPeriod: 'Moins de 6 mois.',
+            },
+            {
+              title: 'Offre Packagée Matériel Reconditionné + Logiciel Éducatif Garanti 5 Ans',
+              archetype: 'Allongement de durée de vie (R4-R6)',
+              strategy9R: 'R4 (Repair) & R6 (Remanufacture)',
+              description: 'Fourniture de tablettes et ordinateurs reconditionnés sous système d\'exploitation allégé avec la suite logicielle pré-installée.',
+              feasibility: 'Forte, en partenariat avec des reconditionneurs informatiques locaux certifiés.',
+              economicBenefit: 'Coût d\'équipement divisé par 3 pour les écoles et garantie de fonctionnement sans obsolescence.',
+              revenueStream: 'Vente de packs matériels reconditionnés + contrat de maintenance.',
+              targetCustomer: 'Collectivités territoriales, associations et pays émergents.',
+              paybackPeriod: '9 mois.',
+            },
+          ],
+          monetizationMechanisms: [
+            {
+              name: 'Licences SaaS éco-conçues',
+              category: 'Usage & Performance',
+              description: 'Abonnement récurrent avec engagements de disponibilité et sobriété.',
+              directCashFlowImpact: 'Forte marge et récurrence de trésorerie.',
+            },
+            {
+              name: 'Prestations d\'audit d\'éco-conception numérique',
+              category: 'Plateforme & Données',
+              description: 'Audit et optimisation de sites web et applications clientes (réduction du poids des requêtes).',
+              directCashFlowImpact: 'Revenus d\'ingénierie à haute valeur ajoutée.',
+            },
+          ],
+          industrialSymbiosis: [
+            {
+              partner: 'Reconditionneurs de matériel informatique régionaux',
+              fluxType: 'Matière / Coproduit',
+              description: 'Collecte de parcs informatiques réformés, reconditionnement et déploiement avec le logiciel optimisé.',
+              mutualBenefit: 'Création d\'emplois locaux dans le réemploi et offre technologique abordable.',
+            },
+          ],
+          decouplingMetrics: [
+            {
+              indicator: 'Poids moyen transféré par page ou interaction utilisateur',
+              targetValue: '≤ 250 Ko (vs 2,8 Mo moyenne web)',
+              methodology: 'Audit de performance conforme PageSpeed & Ecoindex.',
+            },
+            {
+              indicator: 'Durée de vie additionnelle des terminaux clients',
+              targetValue: '+4 ans sans obsolescence ressentie',
+              methodology: 'Suivi télémétrique anonymisé de la compatibilité matérielle.',
+            },
+          ],
+        };
+      }
+
       if (isFootwearOrSafetyShoes) {
         return {
           circularArchetype: 'Économie de la fonctionnalité appliquée aux EPI (Safety-Shoe-as-a-Service), écoconception modulaire démontable et recyclage matière PU/TPU en boucle fermée',

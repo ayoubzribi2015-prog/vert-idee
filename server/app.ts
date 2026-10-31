@@ -1165,9 +1165,10 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
 2. Aspects & impacts environnementaux : Analyse approfondie des aspects et impacts environnementaux (directs et indirects, positifs et négatifs) sur les écosystèmes, l'air, l'eau, le climat, les sols et la biodiversité. Évaluation normée des AES selon la matrice ISO 14001 (F, G, S, M), quantification des impacts par phase du cycle de vie (ACV ISO 14040/14044), écotoxicité (ERA), flux de matière (MFA) et leviers d'atténuation d'impacts.
 3. Aspects & impacts sociaux et sociétaux : Analyse approfondie des impacts sociaux et sociétaux directs et indirects : santé et sécurité des travailleurs, santé publique et riverains (exposition poussières PM, produits toxiques, bruit), création d'emplois locaux pérennes, retombées communautaires, gouvernance partagée éthique (ISO 26000) et accompagnement vers une transition juste.
 4. Intégration de l'entrepreneuriat vert : Analyse économique critique, modèles de rupture technologique et circulaires (normes ISO 59004:2024 / ISO 59020 / Cadre 9R / EFC / CSRD ESRS E5).
-   - RÈGLE ABSOLUE D'ALIGNEMENT SECTORIEL & ANTI-CONFUSION : La Section 4 DOIT correspondre STRICTEMENT et EXCLUSIVEMENT aux activités, produits, matières et procédés réels décrits dans la description et les documents importés du projet.
-     * Pour tout projet de chaussures de sécurité, EPI ou injection de semelles PU/TPU : les modèles circulaires doivent porter sur l'équipement de protection individuelle, les modèles "Safety-Shoe-as-a-Service", la maintenance/ressemelage, l'injection directe sans solvants COV, les polyols biosourcés/recyclés et le recyclage des résines PU/TPU. IL EST STRICTEMENT INTERDIT de renvoyer des modèles d'huile d'olive, de bouteilles de verre ou de secteurs sans rapport !
-     * Pour tout autre projet (agriculture, emballage, textile, énergie, eau, éducation/digital, chimie) : les modèles circulaires, atouts et axes de progrès doivent découler directement des intrants et débouchés spécifiques décrits dans les documents importés.
+   - RÈGLE ABSOLUE D'ALIGNEMENT SECTORIEL & ANTI-CONFUSION : La Section 4 DOIT correspondre STRICTEMENT, EXCLUSIVEMENT et SANS LA MOINDRE AMBIGUÏTÉ aux activités, produits, services, intrants et procédés réels décrits dans la description et les documents importés du projet.
+     * Pour tout projet numérique, EdTech, intelligence artificielle, formation, application ou SaaS (ex: KidoraIA, plateformes pédagogiques, écosystèmes d'apprentissage) : les modèles circulaires, atouts et axes de progrès doivent porter sur le numérique responsable, l'éco-conception logicielle (RGESN, Green Code, réduction des requêtes et bande passante), l'allongement de la durée de vie des terminaux clients (reconditionné), l'hébergement cloud vert à faible PUE, et l'accessibilité universelle. IL EST STRICTEMENT INTERDIT de renvoyer des modèles d'eau, d'huile d'olive ou de semelles de chaussures !
+     * Pour tout projet de chaussures de sécurité ou EPI : les modèles circulaires doivent porter sur le "Safety-Shoe-as-a-Service", l'injection directe sans COV et le recyclage PU/TPU.
+     * Pour tout autre secteur (agriculture, emballage, textile, énergie, eau, chimie) : les modèles circulaires, atouts et axes de progrès doivent découler directement des spécificités du projet.
    - Renseigner impérativement les ATOUTS ENVIRONNEMENTAUX MAJEURS (éco-avantages compétitifs vérifiables et intrinsèques du modèle) ainsi que les AXES D'AMÉLIORATION PRIORITAIRES & LEVIERS D'ÉCO-TRANSITION (avec levier opérationnel concret, gain environnemental mesuré chiffré, impact économique/ROI et niveau de priorité : 'Stratégique', 'Haute', 'Moyenne').
 5. Alignement ODD (Objectifs de Développement Durable - Méthodologie normée SDG Compass, ONU Agenda 2030, GRI & CSRD/ESRS) :
    - RÈGLE DE MATÉRIALITÉ & NIVEAU DE CONTRIBUTION : Distinguer rigoureusement les contributions 'Majeur' (cœur de métier / impact direct mesurable) des contributions 'Secondaire' (impact indirect / mesures transversales). Éviter le saupoudrage non justifié (tolérance zéro au SDG-washing).
@@ -1340,8 +1341,51 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
                       description: { type: Type.STRING },
                       feasibility: { type: Type.STRING },
                       economicBenefit: { type: Type.STRING },
+                      archetype: { type: Type.STRING },
+                      strategy9R: { type: Type.STRING },
+                      revenueStream: { type: Type.STRING },
+                      targetCustomer: { type: Type.STRING },
+                      paybackPeriod: { type: Type.STRING },
                     },
                     required: ['title', 'description', 'feasibility', 'economicBenefit'],
+                  },
+                },
+                monetizationMechanisms: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      category: { type: Type.STRING },
+                      description: { type: Type.STRING },
+                      directCashFlowImpact: { type: Type.STRING },
+                    },
+                    required: ['name', 'category', 'description', 'directCashFlowImpact'],
+                  },
+                },
+                industrialSymbiosis: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      partner: { type: Type.STRING },
+                      fluxType: { type: Type.STRING },
+                      description: { type: Type.STRING },
+                      mutualBenefit: { type: Type.STRING },
+                    },
+                    required: ['partner', 'fluxType', 'description', 'mutualBenefit'],
+                  },
+                },
+                decouplingMetrics: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      indicator: { type: Type.STRING },
+                      targetValue: { type: Type.STRING },
+                      methodology: { type: Type.STRING },
+                    },
+                    required: ['indicator', 'targetValue', 'methodology'],
                   },
                 },
               },
