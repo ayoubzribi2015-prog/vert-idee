@@ -1038,29 +1038,12 @@ FORMAT DE RÉPONSE STRICT (JSON valide) :
   }
 });
 
-// Cache déterministe pour garantir la cohérence absolue et reproductible des scores
-// Deux soumissions avec la même description opérationnelle reçoivent exactement les mêmes scores
-interface CachedAudit {
-  data: any;
-  cachedAt: number;
-}
-const auditContentCache = new Map<string, CachedAudit>();
-
 // Lieu d'implantation par défaut : si l'utilisateur ne précise aucun lieu, le
 // diagnostic considère que le projet est implanté en Tunisie.
 const DEFAULT_LOCATION = 'Tunisie';
 
 function resolveLocation(loc?: string | null): string {
   return (loc || '').trim() || DEFAULT_LOCATION;
-}
-
-function normalizeDescriptionKey(title: string, desc: string, loc: string, answers?: any, fullDoc?: string): string {
-  const cleanTitle = (title || '').toLowerCase().trim().replace(/\s+/g, ' ');
-  const cleanDesc = (desc || '').toLowerCase().trim().replace(/\s+/g, ' ');
-  const cleanLoc = (loc || '').toLowerCase().trim().replace(/\s+/g, ' ');
-  const cleanAnswers = answers ? JSON.stringify(answers) : '';
-  const cleanFullDoc = fullDoc ? fullDoc.toLowerCase().trim().slice(0, 4000) : '';
-  return `${cleanTitle}:::${cleanDesc}:::${cleanLoc}:::${cleanAnswers}:::${cleanFullDoc}`;
 }
 
 // Expert Ecological Analysis API with EXACTLY the 8 required sections
@@ -1070,42 +1053,6 @@ app.post('/api/analyze', async (req: express.Request, res: express.Response) => 
 
     if (!title || !description) {
       res.status(400).json({ success: false, error: 'Le titre et la description du projet sont obligatoires.' });
-      return;
-    }
-
-    // Vérification du cache de cohérence déterministe
-    // Si le même projet (titre, description opérationnelle et documents) a déjà été évalué,
-    // nous garantissons des scores strictement identiques et une parfaite cohérence sans dérive stochastique
-    const cacheKey = normalizeDescriptionKey(title, description, resolveLocation(location), req.body && req.body.answers, fullDocumentContent);
-    const cached = auditContentCache.get(cacheKey);
-    if (cached && Date.now() - cached.cachedAt < 24 * 60 * 60 * 1000) {
-      console.log(`[Audit Engine] Projet équivalent détecté en cache pour "${title}". Application déterministe des scores et du diagnostic.`);
-      const cloned = JSON.parse(JSON.stringify(cached.data));
-      if (cloned.projectSynthesis && cloned.projectSynthesis.summary) {
-        cloned.projectSynthesis.summary = cloned.projectSynthesis.summary.replace(
-          /Le projet "[^"]+"/g,
-          `Le projet "${title}"`
-        );
-      }
-      const finalSector = cloned.detectedSector || sector || 'Économie Circulaire & Éco-innovation';
-      const auditResult = {
-        id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        title,
-        sector: finalSector,
-        description,
-        location: resolveLocation(location),
-        targetAudience: targetAudience || 'B2B / B2C Éco-responsable',
-        businessModel: businessModel || 'Économie Circulaire & Vente directe',
-        lifeCycleDetails: lifeCycleDetails || '',
-        createdAt: new Date().toISOString(),
-        ...cloned,
-      };
-
-      if (req.body.shouldSave) {
-        saveProjectToFirestore(auditResult);
-      }
-
-      res.json({ success: true, data: auditResult, cached: true });
       return;
     }
 
@@ -1619,14 +1566,6 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
       );
       // Moteur d'audit expert déterministe : garantit que l'utilisateur reçoit TOUJOURS son rapport complet sans être bloqué
       parsedData = generateExpertAuditFallback(title, description, resolveLocation(location), fullDocumentContent);
-    }
-
-    // Mettre en cache déterministe si l'analyse est complète
-    if (parsedData && !parsedData.needsInfo) {
-      auditContentCache.set(cacheKey, {
-        data: parsedData,
-        cachedAt: Date.now(),
-      });
     }
 
     // Build complete project object
