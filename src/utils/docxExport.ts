@@ -71,6 +71,46 @@ export async function generateWordReport(project: ProjectAudit): Promise<Blob> {
           }),
 
           // ==========================================
+          // Description et Présentation du Projet
+          // ==========================================
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: 300, after: 120 },
+            children: [
+              new TextRun({
+                text: 'Présentation & Description du Projet',
+                bold: true,
+                color: SECONDARY_COLOR,
+                size: 24,
+              }),
+            ],
+          }),
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              createKeyValueRow('Nom du projet', project.title),
+              createKeyValueRow('Secteur d\'activité', project.sector),
+              createKeyValueRow('Lieu d\'implantation', project.location || 'Non spécifié (Tunisie)'),
+              ...(project.targetAudience ? [createKeyValueRow('Public cible & Marché', project.targetAudience)] : []),
+              ...(project.businessModel ? [createKeyValueRow('Modèle d\'affaires initial', project.businessModel)] : []),
+              ...(project.lifeCycleDetails ? [createKeyValueRow('Périmètre Cycle de Vie', project.lifeCycleDetails)] : []),
+            ],
+          }),
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 180, after: 80 },
+            children: [
+              new TextRun({
+                text: 'Descriptif opérationnel et technique du projet :',
+                bold: true,
+                color: PRIMARY_COLOR,
+                size: 20,
+              }),
+            ],
+          }),
+          ...createDescriptionParagraphs(project.description),
+
+          // ==========================================
           // 1. Synthèse du projet
           // ==========================================
           new Paragraph({
@@ -961,4 +1001,125 @@ function createScoreRow(title: string, score: number, isTotal = false): TableRow
       createDataCell(appraisal, isTotal),
     ],
   });
+}
+
+function createKeyValueRow(key: string, value: string): TableRow {
+  return new TableRow({
+    children: [
+      new TableCell({
+        width: { size: 30, type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.CLEAR, fill: BG_LIGHT },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: 'E5E7EB' },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: 'E5E7EB' },
+          left: { style: BorderStyle.SINGLE, size: 1, color: 'E5E7EB' },
+          right: { style: BorderStyle.SINGLE, size: 1, color: 'E5E7EB' },
+        },
+        children: [
+          new Paragraph({
+            spacing: { before: 60, after: 60 },
+            children: [
+              new TextRun({
+                text: key,
+                bold: true,
+                size: 18,
+                color: SECONDARY_COLOR,
+              }),
+            ],
+          }),
+        ],
+      }),
+      new TableCell({
+        width: { size: 70, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: 'E5E7EB' },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: 'E5E7EB' },
+          left: { style: BorderStyle.SINGLE, size: 1, color: 'E5E7EB' },
+          right: { style: BorderStyle.SINGLE, size: 1, color: 'E5E7EB' },
+        },
+        children: [
+          new Paragraph({
+            spacing: { before: 60, after: 60 },
+            children: [
+              new TextRun({
+                text: value || 'Non renseigné',
+                size: 18,
+                color: '1F2937',
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+function createDescriptionParagraphs(description?: string): Paragraph[] {
+  if (!description || !description.trim()) {
+    return [
+      new Paragraph({
+        spacing: { before: 60, after: 120 },
+        children: [
+          new TextRun({
+            text: 'Aucune description détaillée renseignée.',
+            italics: true,
+            size: 19,
+            color: TEXT_MUTED,
+          }),
+        ],
+      }),
+    ];
+  }
+
+  const lines = description.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  const paragraphs: Paragraph[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('■') || /^#{1,4}\s/.test(line) || /^(Pillier|\d+\.)\s/i.test(line)) {
+      const cleanTitle = line.replace(/^[#■\s]+/, '').trim();
+      paragraphs.push(
+        new Paragraph({
+          spacing: { before: 140, after: 50 },
+          children: [
+            new TextRun({
+              text: line.startsWith('■') ? line : `■ ${cleanTitle}`,
+              bold: true,
+              color: PRIMARY_COLOR,
+              size: 20,
+            }),
+          ],
+        })
+      );
+    } else if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+      const bulletContent = line.replace(/^[-•*]\s*/, '').trim();
+      paragraphs.push(
+        new Paragraph({
+          spacing: { before: 40, after: 40 },
+          indent: { left: 360 },
+          children: [
+            new TextRun({
+              text: `• ${bulletContent}`,
+              size: 19,
+              color: '1F2937',
+            }),
+          ],
+        })
+      );
+    } else {
+      paragraphs.push(
+        new Paragraph({
+          spacing: { before: 60, after: 60 },
+          children: [
+            new TextRun({
+              text: line,
+              size: 19,
+              color: '1F2937',
+            }),
+          ],
+        })
+      );
+    }
+  }
+
+  return paragraphs;
 }
