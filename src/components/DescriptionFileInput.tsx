@@ -49,14 +49,14 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
-    const validFiles = fileArray.filter((f) => f.size <= 15 * 1024 * 1024);
+    const validFiles = fileArray.filter((f) => f.size <= 3 * 1024 * 1024);
     if (validFiles.length === 0) {
-      setErrorMsg('Les fichiers sélectionnés dépassent la taille maximale autorisée (15 Mo).');
+      setErrorMsg('Les fichiers sélectionnés dépassent la taille maximale recommandée (3 Mo). Veuillez importer des fichiers plus légers.');
       return;
     }
 
     if (fileArray.length > validFiles.length) {
-      setErrorMsg(`${fileArray.length - validFiles.length} fichier(s) dépassent 15 Mo et ont été ignorés.`);
+      setErrorMsg(`${fileArray.length - validFiles.length} fichier(s) dépassent 3 Mo et ont été ignorés pour garantir la fluidité.`);
     }
 
     setIsExtracting(true);
@@ -77,17 +77,6 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
               localText = await file.text();
             } catch (e) {
               console.warn('Local file text read failed:', e);
-            }
-          } else if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
-            try {
-              const { extractText } = await import('unpdf');
-              const buf = await file.arrayBuffer();
-              const res = await extractText(new Uint8Array(buf));
-              if (res && res.text) {
-                localText = Array.isArray(res.text) ? res.text.join('\n\n') : String(res.text);
-              }
-            } catch (pdfErr) {
-              console.warn('Client-side PDF text extraction skipped:', pdfErr);
             }
           }
 
@@ -111,19 +100,33 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
         })
       );
 
-      // Appel de l'API de synthèse collective selon les 3 piliers méthodologiques
-      const res = await fetch('/api/extract-file', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          files: payloadFiles.map(({ filename, mimeType, base64Data, localText }) => ({
-            filename,
-            mimeType,
-            base64Data,
-            localText,
-          })),
-        }),
-      });
+      // Appel de l'API de synthèse collective selon les 3 piliers méthodologiques avec timeout de 60s
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+      let res: Response;
+      try {
+        res = await fetch('/api/extract-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            files: payloadFiles.map(({ filename, mimeType, base64Data, localText }) => ({
+              filename,
+              mimeType,
+              base64Data,
+              localText,
+            })),
+          }),
+          signal: controller.signal,
+        });
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError') {
+          throw new Error('Le traitement des documents a pris trop de temps (délai dépassé de 60s). Veuillez réessayer avec des fichiers plus légers.');
+        }
+        throw new Error('Erreur réseau lors de la communication avec le serveur d\'extraction.');
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const rawText = await res.text();
       let data: any = null;
