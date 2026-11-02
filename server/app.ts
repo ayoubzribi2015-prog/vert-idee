@@ -118,42 +118,46 @@ async function callGeminiStrict(options: {
     );
   }
 
-  const modelName = 'gemini-3.5-flash';
+  const modelsToTry = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-1.5-flash'];
   const timeoutMs = options.timeoutMs || 180000; // 3 minutes
 
-  let timer: NodeJS.Timeout | undefined;
-  const timeoutPromise = new Promise<any>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error("Délai dépassé (300s max) pour la réponse du modèle d'intelligence artificielle.")),
-      timeoutMs
-    );
-  });
+  let lastError: any = null;
 
-  try {
-    const callPromise = ai.models.generateContent({
-      model: modelName,
-      contents: options.contents,
-      config: options.config,
+  for (const modelName of modelsToTry) {
+    let timer: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<any>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Délai dépassé pour le modèle ${modelName}.`)),
+        timeoutMs
+      );
     });
 
-    const result = await Promise.race([callPromise, timeoutPromise]);
-    if (timer) clearTimeout(timer);
+    try {
+      const callPromise = ai.models.generateContent({
+        model: modelName,
+        contents: options.contents,
+        config: options.config,
+      });
 
-    if (!result || !result.text) {
-      throw new Error("Réponse vide ou invalide reçue du modèle d'intelligence artificielle.");
+      const result = await Promise.race([callPromise, timeoutPromise]);
+      if (timer) clearTimeout(timer);
+
+      if (result && result.text) {
+        return {
+          response: { text: result.text },
+          modelUsed: modelName,
+        };
+      }
+    } catch (err: any) {
+      if (timer) clearTimeout(timer);
+      lastError = err;
+      console.info(`[Mode STRICT_IA] Modèle ${modelName} indisponible (${err?.message || err}). Essai du modèle suivant...`);
     }
-
-    return {
-      response: { text: result.text },
-      modelUsed: modelName,
-    };
-  } catch (err: any) {
-    if (timer) clearTimeout(timer);
-    const errMsg = err?.message || String(err);
-    throw new Error(
-      `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${errMsg}). Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`
-    );
   }
+
+  throw new Error(
+    `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${lastError?.message || 'Erreur inconnue'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`
+  );
 }
 
 
