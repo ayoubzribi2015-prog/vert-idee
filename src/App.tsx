@@ -195,7 +195,7 @@ export default function App() {
 
       try {
         const controller = new AbortController();
-        const abortTimeout = setTimeout(() => controller.abort(), 60000);
+        const abortTimeout = setTimeout(() => controller.abort(), 300000);
 
         let res: Response;
         try {

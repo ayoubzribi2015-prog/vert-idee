@@ -62,63 +62,8 @@ app.use((err: any, req: Request, res: Response, next: any) => {
   next(err);
 });
 
-let geminiQuotaExhaustedUntil = 0;
-let gatewayUnavailableUntil = 0;
-
-// Valid model names per Gemini API SDK guidelines - prioritized list of active models
-const DEFAULT_MODELS = [
-  'gemini-3.5-flash',
-  'gemini-flash-lite-latest',
-  'gemini-3.8-flash',
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash-lite',
-  'gemini-flash-latest',
-  'gemini-3.7-flash',
-];
-// Model cooldown tracking to remember quota (429) & overload (503) status
-const modelCooldowns = new Map<string, number>();
-
-let discoveredGeminiModels: string[] = [];
-let geminiModelsExpiresAt = 0;
-
-async function getAvailableGeminiModels(): Promise<string[]> {
-  if (Date.now() < geminiModelsExpiresAt && discoveredGeminiModels.length) return discoveredGeminiModels;
-  const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) throw new Error('GEMINI_API_KEY non configurée.');
-  const available: string[] = [];
-  let pageToken: string | undefined;
-  do {
-    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models');
-    url.searchParams.set('pageSize', '1000');
-    if (pageToken) url.searchParams.set('pageToken', pageToken);
-    const response = await fetch(url, {
-      headers: { 'x-goog-api-key': key },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) {
-      const details = (await response.text()).slice(0, 300);
-      throw new Error(`Impossible de consulter les modèles Gemini (HTTP ${response.status}) : ${details}`);
-    }
-    const data: any = await response.json();
-    for (const model of data.models || []) {
-      if (model.supportedGenerationMethods?.includes('generateContent')) {
-        available.push(String(model.name).replace(/^models\//, ''));
-      }
-    }
-    pageToken = data.nextPageToken;
-  } while (pageToken);
-  if (!available.length) throw new Error('Aucun modèle compatible generateContent accessible à cette clé API.');
-  discoveredGeminiModels = available;
-  geminiModelsExpiresAt = Date.now() + 10 * 60 * 1000;
-  return available;
-}
-
 function hasGeminiKey(): boolean {
   return !!process.env.GEMINI_API_KEY?.trim();
-}
-
-function hasGatewayCredentials(): boolean {
-  return !!(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
 }
 
 // Initialise Gemini
@@ -157,208 +102,60 @@ async function withFirestoreTimeout<T>(operation: () => Promise<T>, timeoutMs = 
   }
 }
 
-function geminiSchemaToJsonSchema(schema: any): any {
-  if (!schema || typeof schema !== 'object') return schema;
-  if (Array.isArray(schema)) return schema.map(geminiSchemaToJsonSchema);
-  const out: any = {};
-  for (const [key, value] of Object.entries(schema)) {
-    if (key === 'type' && typeof value === 'string') out.type = value.toLowerCase();
-    else if (key === 'properties' && value && typeof value === 'object') {
-      out.properties = Object.fromEntries(
-        Object.entries(value as Record<string, any>).map(([k, v]) => [k, geminiSchemaToJsonSchema(v)])
-      );
-    } else if (key === 'items') out.items = geminiSchemaToJsonSchema(value);
-    else if (key === 'propertyOrdering' || key === 'nullable') continue;
-    else out[key] = value;
-  }
-  return out;
-}
-
-function toGatewayMessages(contents: any): ModelMessage[] {
-  if (typeof contents === 'string') return [{ role: 'user', content: contents }];
-  if (!Array.isArray(contents)) return [{ role: 'user', content: String(contents ?? '') }];
-
-  if (contents.every((c) => c && typeof c === 'object' && 'role' in c)) {
-    return contents.map((c: any) => {
-      const text = (c.parts || []).map((p: any) => p?.text || '').join('\n');
-      return c.role === 'model'
-        ? ({ role: 'assistant', content: text } as ModelMessage)
-        : ({ role: 'user', content: text } as ModelMessage);
-    });
-  }
-
-  const parts = contents.map((p: any) =>
-    p?.inlineData
-      ? { type: 'file' as const, data: p.inlineData.data, mediaType: p.inlineData.mimeType }
-      : { type: 'text' as const, text: p?.text || '' }
-  );
-  return [{ role: 'user', content: parts }];
-}
-
-async function generateViaGateway(model: string, contents: any, config: any = {}): Promise<{ text: string }> {
-  const result = await generateText({
-    model,
-    system: config?.systemInstruction,
-    messages: toGatewayMessages(contents),
-    temperature: config?.temperature,
-    seed: config?.seed,
-    maxOutputTokens: config?.maxOutputTokens,
-    ...(config?.responseSchema
-      ? { output: Output.object({ schema: jsonSchema(geminiSchemaToJsonSchema(config.responseSchema)) }) }
-      : {}),
-  });
-  return { text: result.text };
-}
-
 /**
- * Exécute un appel Gemini avec résilience multi-modèles et timeouts stricts
+ * [Mode STRICT_IA] Appel direct de l'IA sans résilience multi-modèles ni fallback.
+ * L'analyse échoue explicitement si l'IA ne répond pas ou si la clé est absente.
  */
-async function generateContentWithResilience(options: {
+async function callGeminiStrict(options: {
   contents: any;
   config?: any;
-  preferredModels?: string[];
-  singleAttemptTimeoutMs?: number;
-  totalTimeoutMs?: number;
+  timeoutMs?: number;
 }): Promise<{ response: { text: string }; modelUsed: string }> {
-  const startTime = Date.now();
-  const singleTimeout = options.singleAttemptTimeoutMs || 18000;
-  const totalTimeout = options.totalTimeoutMs || 60000;
-
-  const models = options.preferredModels || DEFAULT_MODELS;
-  let lastError: any = null;
-
-  const providers: Array<'gemini' | 'gateway'> = [];
-  if (hasGeminiKey() && Date.now() >= geminiQuotaExhaustedUntil) providers.push('gemini');
-  if (hasGatewayCredentials() && Date.now() >= gatewayUnavailableUntil) providers.push('gateway');
-
-  if (providers.length === 0) {
+  const key = process.env.GEMINI_API_KEY?.trim();
+  if (!key) {
     throw new Error(
-      'Aucun fournisseur IA disponible : définissez GEMINI_API_KEY (ou activez Vercel AI Gateway).'
+      "[Mode STRICT_IA] Échec du diagnostic : Clé GEMINI_API_KEY non configurée. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé."
     );
   }
 
-  for (const provider of providers) {
-    let providerModels = [...models];
-    if (provider === 'gemini') {
-      try {
-        const available = await promiseWithTimeout(getAvailableGeminiModels(), 10000, 'Délai de découverte Gemini dépassé');
-        const preferred = models.filter((name) => available.includes(name));
-        const otherFlash = available.filter((name) => /flash/i.test(name) && !preferred.includes(name));
-        providerModels = [...preferred, ...otherFlash];
-        if (!providerModels.length) providerModels = available;
-        // Prioritiser les modèles qui ne sont pas en période de cooldown actif
-        const activeModels = providerModels.filter((name) => (modelCooldowns.get(name) || 0) <= Date.now());
-        const coolingModels = providerModels.filter((name) => (modelCooldowns.get(name) || 0) > Date.now());
-        providerModels = [...activeModels, ...coolingModels].slice(0, 8);
-      } catch (err: any) {
-        lastError = err;
-        console.info('[AI Engine] Découverte des modèles différée, utilisation des modèles configurés.');
-        const activeModels = DEFAULT_MODELS.filter((name) => (modelCooldowns.get(name) || 0) <= Date.now());
-        const coolingModels = DEFAULT_MODELS.filter((name) => (modelCooldowns.get(name) || 0) > Date.now());
-        providerModels = [...activeModels, ...coolingModels];
-      }
+  const modelName = 'gemini-3.5-flash';
+  const timeoutMs = options.timeoutMs || 180000; // 3 minutes
+
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<any>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("Délai dépassé (300s max) pour la réponse du modèle d'intelligence artificielle.")),
+      timeoutMs
+    );
+  });
+
+  try {
+    const callPromise = ai.models.generateContent({
+      model: modelName,
+      contents: options.contents,
+      config: options.config,
+    });
+
+    const result = await Promise.race([callPromise, timeoutPromise]);
+    if (timer) clearTimeout(timer);
+
+    if (!result || !result.text) {
+      throw new Error("Réponse vide ou invalide reçue du modèle d'intelligence artificielle.");
     }
-    for (const modelName of providerModels) {
-      const elapsed = Date.now() - startTime;
-      if (elapsed >= totalTimeout) break;
 
-      // Sauter le modèle s'il est en période de cooldown pour quota atteint
-      const cooldownUntil = modelCooldowns.get(modelName) || 0;
-      if (Date.now() < cooldownUntil) {
-        const remainingSec = Math.ceil((cooldownUntil - Date.now()) / 1000);
-        console.info(`[AI Engine] Modèle "${modelName}" en pause (${remainingSec}s restantes). Passage au modèle suivant.`);
-        continue;
-      }
-
-      const attemptTimeout = Math.min(singleTimeout, Math.max(8000, totalTimeout - elapsed));
-      const label = provider === 'gemini' ? modelName : `google/${modelName}`;
-
-      try {
-        console.log(`[AI Engine] ${provider} → "${label}" (timeout: ${attemptTimeout}ms)...`);
-        const executeCall = () =>
-          provider === 'gemini'
-            ? ai.models
-                .generateContent({ model: modelName, contents: options.contents, config: options.config })
-                .then((r) => ({ text: r?.text || '' }))
-            : generateViaGateway(label, options.contents, options.config);
-
-        let response: { text: string };
-        try {
-          response = await promiseWithTimeout<{ text: string }>(
-            executeCall(),
-            attemptTimeout,
-            `Délai dépassé (${attemptTimeout}ms) pour le modèle ${label}`
-          );
-        } catch (callErr: any) {
-          const callErrMsg = callErr?.message || String(callErr);
-          // Si surcharge 503 temporaire, tenter un court retry avec backoff de 1 seconde
-          if (/503|high demand|overloaded/i.test(callErrMsg) && (Date.now() - startTime + 8000 < totalTimeout)) {
-            console.info(`[AI Engine] Pic de charge temporaire 503 sur "${label}". Réessai rapide dans 1200ms...`);
-            await new Promise((resolve) => setTimeout(resolve, 1200));
-            response = await promiseWithTimeout<{ text: string }>(
-              executeCall(),
-              attemptTimeout,
-              `Délai dépassé (${attemptTimeout}ms) au second essai pour ${label}`
-            );
-          } else {
-            throw callErr;
-          }
-        }
-
-        if (response && response.text) {
-          console.log(`[AI Engine] Succès "${label}" via ${provider} en ${Date.now() - startTime}ms`);
-          return { response, modelUsed: `${provider}:${label}` };
-        }
-      } catch (err: any) {
-        lastError = err;
-        const errMsg = err?.message || String(err);
-
-        const isQuota = /quota|429|exhausted|resource_exhausted/i.test(errMsg);
-        const isUnavailable = /503|high demand|overloaded|service unavailable|temporarily unavailable/i.test(errMsg);
-        const isNotFound = /404|no longer supported|not found|is not supported/i.test(errMsg);
-        const isAuth = /API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
-
-        if (isNotFound) {
-          modelCooldowns.set(modelName, Date.now() + 24 * 3600 * 1000); // Pause 24h pour modèle obsolète (404)
-          console.info(`[AI Engine] Modèle "${label}" non disponible ou obsolète (404). Masqué. Passage au modèle suivant.`);
-          continue;
-        }
-
-        if (isQuota) {
-          let cooldownMs = 30 * 60 * 1000; // 30 min par défaut
-          const matchSeconds = errMsg.match(/retryDelay"?\s*:\s*"?(\d+)s?/i);
-          if (matchSeconds) {
-            cooldownMs = (parseInt(matchSeconds[1], 10) + 10) * 1000;
-          } else {
-            const matchHours = errMsg.match(/retry in (\d+)h/i);
-            if (matchHours) {
-              cooldownMs = (parseInt(matchHours[1], 10) * 3600 + 300) * 1000;
-            }
-          }
-          modelCooldowns.set(modelName, Date.now() + cooldownMs);
-          console.info(`[AI Engine] Quota journalier atteint pour "${label}" (429). Pause de ${Math.round(cooldownMs / 60000)} min. Basculement immédiat vers le modèle suivant.`);
-          continue;
-        }
-
-        if (isUnavailable) {
-          modelCooldowns.set(modelName, Date.now() + 30 * 1000); // Pause courte de 30 secondes pour surcharge 503
-          console.info(`[AI Engine] Surcharge temporaire pour "${label}" (503). Pause de 30s. Basculement immédiat vers le modèle suivant.`);
-          continue;
-        }
-
-        if (isAuth) {
-          modelCooldowns.set(modelName, Date.now() + 60 * 60 * 1000);
-          console.info(`[AI Engine] Permissions insuffisantes ou accès restreint pour "${label}" (403/Auth). Pause de ce modèle. Basculement immédiat vers le modèle suivant.`);
-          continue;
-        }
-
-        console.info(`[AI Engine] ${provider} "${label}" non disponible (${errMsg.slice(0, 80)}). Essai du modèle suivant...`);
-      }
-    }
+    return {
+      response: { text: result.text },
+      modelUsed: modelName,
+    };
+  } catch (err: any) {
+    if (timer) clearTimeout(timer);
+    const errMsg = err?.message || String(err);
+    throw new Error(
+      `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${errMsg}). Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`
+    );
   }
-
-  throw lastError || new Error('Les modèles IA ont mis trop de temps ou sont indisponibles.');
 }
+
 
 // Firebase Storage for shared/default projects (legacy support with memory fallback)
 const GLOBAL_PROJECTS_COLLECTION = 'global_projects';
@@ -396,14 +193,12 @@ async function saveProjectToFirestore(project: any): Promise<void> {
 app.get('/api/ai-status', async (req: express.Request, res: express.Response) => {
   const status: Record<string, any> = {
     geminiKeyConfigured: hasGeminiKey(),
-    gatewayConfigured: hasGatewayCredentials(),
   };
   if (req.query.probe === '1') {
     try {
-      const { response, modelUsed } = await generateContentWithResilience({
+      const { response, modelUsed } = await callGeminiStrict({
         contents: 'Réponds uniquement par "OK".',
-        singleAttemptTimeoutMs: 10000,
-        totalTimeoutMs: 25000,
+        timeoutMs: 25000,
       });
       status.probe = { ok: true, modelUsed, reply: response.text.slice(0, 40) };
     } catch (err: any) {
@@ -750,9 +545,8 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
     // 3. Troisième tentative : Gemini Multimodal pour PDF scannés ou à rendu graphique
     if ((!extractedText || extractedText.trim().length < 25) && base64Data) {
       try {
-        const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 12000,
-          totalTimeoutMs: 15000,
+        const { response: aiRes } = await callGeminiStrict({
+          timeoutMs: 30000,
           contents: [
             {
               inlineData: {
@@ -785,9 +579,8 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
         const wordMime = ext === '.docx' || mimeType?.includes('openxmlformats')
           ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
           : 'application/msword';
-        const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 12000,
-          totalTimeoutMs: 15000,
+        const { response: aiRes } = await callGeminiStrict({
+          timeoutMs: 30000,
           contents: [
             {
               inlineData: {
@@ -829,9 +622,8 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
         const excelMime = ext === '.xlsx' || mimeType?.includes('openxmlformats')
           ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           : 'application/vnd.ms-excel';
-        const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 12000,
-          totalTimeoutMs: 15000,
+        const { response: aiRes } = await callGeminiStrict({
+          timeoutMs: 30000,
           contents: [
             {
               inlineData: {
@@ -855,9 +647,8 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
     if (base64Data) {
       try {
         const cleanMime = mimeType && mimeType.startsWith('image/') ? mimeType : (ext === '.png' ? 'image/png' : 'image/jpeg');
-        const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 12000,
-          totalTimeoutMs: 15000,
+        const { response: aiRes } = await callGeminiStrict({
+          timeoutMs: 30000,
           contents: [
             {
               inlineData: {
@@ -985,14 +776,13 @@ FORMAT DE RÉPONSE STRICT (JSON valide uniquement) :
   "richDescription": "■ 1. Vue d'ensemble du projet & Problématique adressée\\n...\\n\\n■ 2. Solution technique, intrants & Procédés sobres\\n...\\n\\n■ 3. Proposition de valeur & Modèle circulaire\\n..."
 }`;
 
-        const { response: aiRes } = await generateContentWithResilience({
+        const { response: aiRes } = await callGeminiStrict({
           contents: singlePassPrompt,
           config: {
             temperature: 0.1,
             responseMimeType: 'application/json',
           },
-          singleAttemptTimeoutMs: 14000,
-          totalTimeoutMs: 18000,
+          timeoutMs: 60000,
         });
 
         if (aiRes && aiRes.text) {
@@ -1198,11 +988,9 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
     let parsedData: any = null;
 
     try {
-      const { response, modelUsed } = await generateContentWithResilience({
+      const { response, modelUsed } = await callGeminiStrict({
         contents: userPrompt,
-        preferredModels: DEFAULT_MODELS,
-        singleAttemptTimeoutMs: 20000,
-        totalTimeoutMs: 70000,
+        timeoutMs: 180000, // 3 minutes timeout for deep analysis
         config: {
           systemInstruction: systemPrompt,
           maxOutputTokens: 8192,
@@ -1710,34 +1498,25 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
     let reply = '';
 
     try {
-      const { response, modelUsed } = await generateContentWithResilience({
+      const { response, modelUsed } = await callGeminiStrict({
         contents,
-        preferredModels: DEFAULT_MODELS,
-        singleAttemptTimeoutMs: 15000,
-        totalTimeoutMs: 25000,
+        timeoutMs: 60000,
         config: {
           systemInstruction,
           temperature: 0.7,
         },
       });
       reply = response.text || 'Désolé, je n\'ai pas pu générer de réponse.';
-      console.log(`[Chat Engine] Réponse conversationnelle générée avec ${modelUsed}`);
+      console.log(`[Chat Engine - Mode STRICT_IA] Réponse générée avec ${modelUsed}`);
+      res.json({ success: true, reply });
     } catch (aiErr: any) {
-      console.info(
-        '[Chat Engine] Réponse experte déterministe générée.'
-      );
-      reply =
-        `### Conseil de l'Éco-Conseiller Vert'Idée\n\n` +
-        `Pour votre projet ${projectContext?.title ? `**« ${projectContext.title} »**` : 'd\'entrepreneuriat vert'},\n\n` +
-        `Concernant votre demande : *« ${message} »* :\n\n` +
-        `1. **Optimisation de l'empreinte & ACV :** Ciblez les postes les plus émetteurs dès la conception (matières bio-sourcées ou recyclées en circuits courts, réduction des consommations énergétiques).\n` +
-        `2. **Partenaires & Pépinières :** Appuyez-vous sur les structures locales comme l'**APII** et le réseau des pépinières **RNPE** pour bénéficier d'un hébergement, d'un coaching et d'allègements fiscaux d'amorçage.\n` +
-        `3. **Dispositifs de financement vert :** Explorez le Fonds de Transition Énergétique (**FTE / ANME**), les programmes de l'Union Européenne (**SwitchMed / Green Deal**) et les prêts d'honneur à impact.\n` +
-        `4. **Labellisation & Crédibilité :** Préparez un dossier pour un label reconnu (**ISO 14001**, **B-Corp**, **Écolabel**) afin d'accélérer vos contrats B2B et justifier de votre impact environnemental réel.\n\n` +
-        `*Note : Les serveurs de calcul IA centraux connaissent actuellement un pic passager de forte affluence (503), mais vos données et diagnostics demeurent 100% sécurisés et consultables.*`;
+      console.error('[Chat Engine - Mode STRICT_IA] Échec :', aiErr?.message);
+      res.status(503).json({
+        success: false,
+        error: `[Mode STRICT_IA] L'assistant n'a pas pu répondre (${aiErr?.message || 'Erreur IA'}). Aucun fallback autorisé.`,
+      });
+      return;
     }
-
-    res.json({ success: true, reply });
   } catch (err: any) {
     console.error('Error in /api/chat:', err);
     res.status(500).json({

@@ -16,50 +16,19 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    // --- Validation Functions ---
-    function isValidUser(data) {
-      return isOwner(data.uid)
-        && data.email is string
-        && data.email.size() <= 256;
-    }
-
-    function isValidProjectAudit(data) {
-      return isOwner(data.userId)
-        && data.id is string
-        && data.id.size() <= 128
-        && data.title is string
-        && data.title.size() <= 2000
-        && data.description is string
-        && data.description.size() <= 500000;
-    }
-
     // Global projects: shared history (only server writes)
     match /global_projects/{projectId} {
       allow read: if true;
       allow write: if false; // Reserved for Admin SDK
     }
 
-    // User profiles
+    // User profiles and private projects
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidUser(incoming());
+      allow create, update: if isOwner(userId);
       
-      // User's private projects
       match /projects/{projectId} {
-        allow list, get: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidProjectAudit(incoming());
-        allow update: if isOwner(userId) && isValidProjectAudit(incoming())
-          && incoming().id == existing().id
-          && incoming().userId == existing().userId;
-        allow delete: if isOwner(userId);
+        allow list, get, create, update, delete: if isOwner(userId);
       }
     }
 
