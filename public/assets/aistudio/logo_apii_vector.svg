@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" width="100%" height="100%">
+  <!-- Outer Oval Ring -->
+  <ellipse cx="180" cy="100" rx="160" ry="80" fill="none" stroke="#0050c8" stroke-width="11" />
+
+  <!-- Left Loop ('a' / 'p') -->
+  <path fill="#0050c8" d="M 110 100 C 110 72, 132 50, 160 50 C 166 50, 172 52, 176 56 L 176 73 C 172 69, 166 66, 160 66 C 141 66, 126 81, 126 100 C 126 119, 141 134, 160 134 C 166 134, 172 131, 176 127 L 176 144 C 172 148, 166 150, 160 150 C 132 150, 110 128, 110 100 Z" />
+  <ellipse cx="160" cy="100" rx="20" ry="20" fill="#0050c8" />
+
+  <!-- Right Loop ('p' / 'i') -->
+  <path fill="#0050c8" d="M 250 100 C 250 72, 228 50, 200 50 C 194 50, 188 52, 184 56 L 184 73 C 188 69, 194 66, 200 66 C 219 66, 234 81, 234 100 C 234 119, 219 134, 200 134 C 194 134, 188 131, 184 127 L 184 144 C 188 148, 194 150, 200 150 C 228 150, 250 128, 250 100 Z" />
+  <ellipse cx="200" cy="100" rx="20" ry="20" fill="#0050c8" />
+
+  <!-- Central 'i' Dot -->
+  <ellipse cx="180" cy="38" rx="19" ry="13" fill="#0050c8" />
+
+  <!-- Central 'i' Stem & Flared Pedestal -->
+  <path fill="#0050c8" d="M 168 56 L 192 56 L 192 122 L 206 138 L 154 138 L 168 122 Z" />
+
+  <!-- Text Line 1: Agence de Promotion -->
+  <text x="180" y="204" fill="#0050c8" font-size="20" font-weight="800" font-family="system-ui, -apple-system, sans-serif" text-anchor="middle" letter-spacing="0.2">
+    Agence de Promotion
+  </text>
+
+  <!-- Text Line 2: de l'Industrie et de l'Innovation -->
+  <text x="180" y="232" fill="#0050c8" font-size="17" font-weight="700" font-family="system-ui, -apple-system, sans-serif" text-anchor="middle" letter-spacing="-0.2">
+    de l’Industrie et de l’Innovation
+  </text>
+</svg>

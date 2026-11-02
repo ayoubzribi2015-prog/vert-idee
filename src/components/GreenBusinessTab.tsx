@@ -32,6 +32,7 @@ export const GreenBusinessTab: React.FC<GreenBusinessTabProps> = ({ integration 
           </div>
         </div>
 
+
         {/* Normative alignment banner if available */}
         {(integration.circularArchetype || integration.iso59000Compliance) && (
           <div className="mt-4 p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-emerald-950">

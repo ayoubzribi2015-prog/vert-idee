@@ -67,7 +67,7 @@ let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
 
 // Valid model names per Gemini API SDK guidelines - prioritizes models with active quota
-const DEFAULT_MODELS = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'];
 // Model cooldown tracking to remember quota (429) & overload (503) status
 const modelCooldowns = new Map<string, number>();
 
@@ -289,7 +289,14 @@ async function generateContentWithResilience(options: {
 
         const isQuota = /quota|429|exhausted|resource_exhausted/i.test(errMsg);
         const isUnavailable = /503|high demand|overloaded|service unavailable|temporarily unavailable/i.test(errMsg);
+        const isNotFound = /404|no longer supported|not found|is not supported/i.test(errMsg);
         const isAuth = /API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
+
+        if (isNotFound) {
+          modelCooldowns.set(modelName, Date.now() + 24 * 3600 * 1000); // Pause 24h pour modèle obsolète (404)
+          console.info(`[AI Engine] Modèle "${label}" non disponible ou obsolète (404). Masqué. Passage au modèle suivant.`);
+          continue;
+        }
 
         if (isQuota) {
           let cooldownMs = 60 * 60 * 1000; // 1h par défaut
@@ -1104,6 +1111,11 @@ Si la requête contient la rubrique 'CONTENU INTÉGRAL ET EXHAUSTIF DES DOCUMENT
 4. Le titre commercial ou nom de marque (ex: "grandii", "t3allem", ou tout autre libellé) n'est qu'un identifiant arbitraire. Il NE DOIT EN AUCUN CAS faire varier les scores ni l'analyse d'impact.
 5. Si deux projets présentent la même description opérationnelle et les mêmes caractéristiques, le Collège d'Experts DOIT impérativement attribuer des scores strictement identiques et reproductibles. Toute divergence de notation due au nom du projet est une erreur méthodologique inacceptable.
 
+*** RÈGLE DE JUSTIFICATION TECHNIQUE ET SOURÇAGE (OBLIGATION DE TRAÇABILITÉ) ***
+Chaque conclusion, score, avis d'expert ou affirmation technique émis par le Collège des Experts DOIT impérativement être justifié par une référence explicite aux données fournies.
+Pour toute analyse ou score, l'expert doit inclure la mention : "[Source : (Description ou Document)] : [Référence précise]" (ex: "Score circularité 80/100 [Source : Document 1, page 2] : Le procédé de cuisson valorise 100% des résidus de gypse").
+Toute affirmation non sourcée par une donnée explicite du projet est un manquement grave à l'intégrité technique.
+
 1. ANALYSE PRÉLIMINAIRE : Vérifie si les informations fournies (titre, description, lieu, documents joints) sont suffisantes pour réaliser un audit environnemental complet ET crédible.
    - SI INSUFFISANT (notamment pour les projets industriels lourds, plasturgie, chimie, mines, sans détails sur les intrants, l'énergie ou les effluents) : Tu DOIS impérativement répondre avec { "needsInfo": true, "questions": [{ "id": "...", "question": "...", "options": [...] }] }.
    - Pose entre 3 et 5 questions à choix multiples pertinentes pour lever les doutes sur le greenwashing (ex: provenance de la matière, type d'énergie, consommation d'eau et circuit de recyclage).
@@ -1111,7 +1123,7 @@ Si la requête contient la rubrique 'CONTENU INTÉGRAL ET EXHAUSTIF DES DOCUMENT
 2. ANALYSE DÉTAILLÉE : Si suffisant, tu es constitué de QUATRE Experts Seniors Indépendants réalisant une revue critique sans la moindre complaisance, couvrant exhaustivement tous les volets du projet :
    - **Expert 1 (Spécialiste Senior Empreinte Carbone & ACV - Normes ISO 14067:2018, ISO 14064-1:2018, GHG Protocol & MFA Institut Agro)** : Quantification normée de l'Empreinte Carbone Produit (ECP) par unité fonctionnelle ou déclarée (ISO 14067), décomposition rigoureuse selon les 6 catégories d'émissions ISO 14064-1 (Cat 1 directe, Cat 2 énergie importée, Cat 3 transport, Cat 4 intrants/emballages, Cat 5 usage/fin de vie), comptabilisation séparée du carbone biogénique et exclusion stricte de toute compensation carbone fictive.
    - **Expert 2 (Risques Industriels, Écotoxicologie ERA & AES ISO 14001 - Guide OSS & Institut Agro)** : Évaluation de la criticité des impacts selon la matrice normée **Criticité (C) = [Fréquence (F) × Gravité (G) × Sensibilité du Milieu (S)] / Maîtrise Opérationnelle (M)**, l'évaluation des risques écotoxiques (ERA), le stress hydrique (OSS), la santé des riverains et la conformité réglementaire (CITET, CSRD, Taxonomie UE).
-   - **Expert 3 (Stratégie d'Entrepreneuriat Vert & Modèles Circulaires)** : Analyse approfondie de la viabilité économique de la transition écologique, de l'économie de la fonctionnalité, de l'écoconception des modèles d'affaires (business models circulaires) et de la substitution durable des ressources (référentiel GreenGate.tn).
+   - **Expert 3 (Expert Senior en Entrepreneuriat Vert & Modèles Circulaires - Master 2 / Doctorat, >10 ans d'expérience dans le conseil RSE & incubation)** : Pilote la structuration des modèles d'affaires circulaires (écoconception, économie de la fonctionnalité PaaS, écologie industrielle & symbioses territoriales, gestion/valorisation des déchets, réemploi 9R), la modélisation financière et viabilité économique, le suivi-évaluation (M&E) des KPI d'impacts (tonnes CO2 évitées, déchets valorisés, emplois verts), et l'ingénierie financière pour l'accès aux financements verts (ANME/FTE, SwitchMed, FODEP, BERD Climat, capital-risque vert & fonds à impact).
    - **Expert 4 (Détecteur Avancé Anti-Greenwashing & Vérification des Allégations)** : Chasse implacable aux revendications environnementales trompeuses (greenwashing), analyse critique de la matérialité des gains annoncés face aux impacts cachés (amont/aval), exigence de preuves mesurables (ACV certifiée, traçabilité des intrants, labels authentiques).
 
 *** RÈGLE ÉTHIQUE & SÉCURITÉ ABSOLUE : TOLÉRANCE ZÉRO AU GREENWASHING ***
@@ -1129,7 +1141,7 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
 1. Synthèse du projet : Scores d'impacts rigoureusement calibrés (sévères si polluant), avis collégial des experts (STRICTEMENT LIMITÉ À 5 LIGNES MAX / ~40-50 mots directement après le nom du projet) et vision de transformation.
 2. Aspects & impacts environnementaux : Analyse approfondie des aspects et impacts environnementaux (directs et indirects, positifs et négatifs) sur les écosystèmes, l'air, l'eau, le climat, les sols et la biodiversité. Évaluation normée des AES selon la matrice ISO 14001 (F, G, S, M), quantification des impacts par phase du cycle de vie (ACV ISO 14040/14044), écotoxicité (ERA), flux de matière (MFA) et leviers d'atténuation d'impacts.
 3. Aspects & impacts sociaux et sociétaux : Analyse approfondie des impacts sociaux et sociétaux directs et indirects : santé et sécurité des travailleurs, santé publique et riverains (exposition poussières PM, produits toxiques, bruit), création d'emplois locaux pérennes, retombées communautaires, gouvernance partagée éthique (ISO 26000) et accompagnement vers une transition juste.
-4. Intégration de l'entrepreneuriat vert : Analyse économique critique, modèles de rupture technologique et circulaires (normes ISO 59004:2024 / ISO 59020 / Cadre 9R / EFC / CSRD ESRS E5).
+4. Intégration de l'entrepreneuriat vert (Pilôté par l'Expert Senior en Entrepreneuriat Vert & Modèles Circulaires - Master 2/Doctorat, >10 ans d'exp.) : Analyse économique critique, viabilité financière, ingénierie d'accès aux financements verts (ANME, SwitchMed, BERD, FODEP, fonds climat), suivi-évaluation M&E des KPI d'impacts, et structuration des modèles de rupture circulaires (normes ISO 59004:2024 / ISO 59020 / Cadre 9R / EFC / CSRD ESRS E5).
    - RÈGLE ABSOLUE D'ALIGNEMENT SECTORIEL & ANTI-CONFUSION : La Section 4 DOIT correspondre STRICTEMENT, EXCLUSIVEMENT et SANS LA MOINDRE AMBIGUÏTÉ aux activités, produits, services, intrants et procédés réels décrits dans la description et les documents importés du projet.
      * Pour tout projet numérique, EdTech, intelligence artificielle, formation, application ou SaaS (ex: KidoraIA, plateformes pédagogiques, écosystèmes d'apprentissage) : les modèles circulaires, atouts et axes de progrès doivent porter sur le numérique responsable, l'éco-conception logicielle (RGESN, Green Code, réduction des requêtes et bande passante), l'allongement de la durée de vie des terminaux clients (reconditionné), l'hébergement cloud vert à faible PUE, et l'accessibilité universelle. IL EST STRICTEMENT INTERDIT de renvoyer des modèles d'eau, d'huile d'olive ou de semelles de chaussures !
      * Pour tout projet de chaussures de sécurité ou EPI : les modèles circulaires doivent porter sur le "Safety-Shoe-as-a-Service", l'injection directe sans COV et le recyclage PU/TPU.

@@ -24,7 +24,12 @@ export const LogoAPII: React.FC<{ className?: string }> = ({ className = '' }) =
     title="Accéder au portail officiel APII - Agence de Promotion de l'Industrie et de l'Innovation (ouvre dans un nouvel onglet)"
   >
     <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center shrink-0 border border-stone-200 overflow-hidden p-0.5 group-hover:scale-105 transition-transform">
-      <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-full h-full object-contain" />
+      <img
+        src="/assets/aistudio/Logo_APII_4be2db23.jpg"
+        alt="APII"
+        className="w-full h-full object-contain"
+        style={{ margin: '-4px', padding: '-4px' }}
+      />
     </div>
     <div className="leading-tight text-left">
       <div className="flex items-center gap-1.5">
@@ -47,7 +52,12 @@ export const LogoRNPE: React.FC<{ className?: string }> = ({ className = '' }) =
     title="Accéder au portail officiel RNPE - Réseau National des Pépinières d'Entreprises (ouvre dans un nouvel onglet)"
   >
     <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center shrink-0 border border-stone-200 overflow-hidden p-1 group-hover:scale-105 transition-transform">
-      <img src="/assets/aistudio/logo_rnpe_official.png" alt="RNPE" className="w-full h-full object-contain" />
+      <img
+        src="/assets/aistudio/logo_rnpe_official.png"
+        alt="RNPE"
+        className="w-full h-full object-contain"
+        style={{ marginLeft: '-1px' }}
+      />
     </div>
     <div className="leading-tight text-left">
       <div className="flex items-center gap-1.5">
@@ -144,7 +154,12 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center justify-center p-1 shadow-2xs transition-all cursor-pointer"
                 title="APII - Ouvrir dans un nouvel onglet"
               >
-                <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-full h-full object-contain" />
+                <img
+                  src="/assets/aistudio/Logo_APII_4be2db23.jpg"
+                  alt="APII"
+                  className="object-contain"
+                  style={{ width: '60px', height: '50px' }}
+                />
               </a>
               <a
                 href="https://www.tunisieindustrie.nat.tn/fr/pepinieres.asp"
