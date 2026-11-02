@@ -38,6 +38,17 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Synchronisation : effacement complet des fichiers et du contenu si le champ description est vidé
+  React.useEffect(() => {
+    if (!value || !value.trim()) {
+      setImportedFiles([]);
+      setHasExtractedSummary(false);
+      if (onFullContentChange) {
+        onFullContentChange('');
+      }
+    }
+  }, [value]);
+
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} o`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} Ko`;
@@ -176,7 +187,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
         name: f.name,
         size: formatFileSize(f.size),
       }));
-      setImportedFiles((prev) => [...prev, ...newChips]);
+      setImportedFiles(newChips);
     } catch (err: any) {
       console.error('Batch file import error:', err);
       setErrorMsg(err.message || "Erreur lors de l'importation des documents.");

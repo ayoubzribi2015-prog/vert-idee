@@ -67,11 +67,9 @@ let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
 
 // Valid model names per Gemini API SDK guidelines - prioritizes models with active quota
-const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
-// Model cooldown tracking to remember quota (429) exhaustion and prevent repeated failures
+const DEFAULT_MODELS = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+// Model cooldown tracking to remember quota (429) & overload (503) status
 const modelCooldowns = new Map<string, number>();
-// Pre-register gemini-3.8-flash cooldown based on free-tier limit reset
-modelCooldowns.set('gemini-3.8-flash', Date.now() + 9 * 3600 * 1000);
 
 let discoveredGeminiModels: string[] = [];
 let geminiModelsExpiresAt = 0;
@@ -290,6 +288,7 @@ async function generateContentWithResilience(options: {
         const errMsg = err?.message || String(err);
 
         const isQuota = /quota|429|exhausted|resource_exhausted/i.test(errMsg);
+        const isUnavailable = /503|high demand|overloaded|service unavailable|temporarily unavailable/i.test(errMsg);
         const isAuth = /API key|API_KEY|PERMISSION_DENIED|401|403|credit card|customer_verification/i.test(errMsg);
 
         if (isQuota) {
@@ -305,6 +304,12 @@ async function generateContentWithResilience(options: {
           }
           modelCooldowns.set(modelName, Date.now() + cooldownMs);
           console.info(`[AI Engine] Quota journalier atteint pour "${label}" (429). Pause de ${Math.round(cooldownMs / 60000)} min. Basculement immédiat vers le modèle suivant.`);
+          continue;
+        }
+
+        if (isUnavailable) {
+          modelCooldowns.set(modelName, Date.now() + 2 * 60 * 1000); // Pause de 2 minutes pour surcharge 503
+          console.info(`[AI Engine] Surcharge temporaire pour "${label}" (503). Pause de 2 min. Basculement immédiat vers le modèle suivant.`);
           continue;
         }
 
@@ -1092,10 +1097,12 @@ Ta mission repose sur les méthodologies de référence internationales et natio
 *** OBLIGATION D'ANALYSE DÉTAILLÉE DU CONTENU DES DOCUMENTS IMPORTÉS ***
 Si la requête contient la rubrique 'CONTENU INTÉGRAL ET EXHAUSTIF DES DOCUMENTS IMPORTÉS (PDF, Word, Excel, Images JPG/PNG)', le Collège des 4 Experts DOIT impérativement fonder son audit (scores d'impacts, ACV, bilan carbone, ODD, risques) sur l'ENSEMBLE des données chiffrées, techniques, logistiques et financières contenues dans ce texte intégral, et non pas uniquement sur la description synthétique. L'analyse doit tirer pleinement parti de toutes les précisions opérationnelles fournies dans ces documents joints.
 
-*** RÈGLE DE STABILITÉ ET DÉTERMINISME DU SCORING (OBLIGATION SCIENTIFIQUE ABSOLUE) ***
-1. INDÉPENDANCE TOTALE VIS-À-VIS DU NOM / MARQUE : L'évaluation environnementale et les scores (environnemental, social, circularité, maturité carbone et score global) reposent EXCLUSIVEMENT et STRICTEMENT sur la nature des activités réelles, les intrants, les procédés de fabrication ou de service, les flux de matière et d'énergie, et les externalités décrits dans la DESCRIPTION et les DOCUMENTS IMPORTÉS.
-2. Le titre commercial ou nom de marque (ex: "grandii", "t3allem", ou tout autre libellé) n'est qu'un identifiant arbitraire. Il NE DOIT EN AUCUN CAS faire varier les scores ni l'analyse d'impact.
-3. Si deux projets présentent la même description opérationnelle et les mêmes caractéristiques, le Collège d'Experts DOIT impérativement attribuer des scores strictement identiques et reproductibles. Toute divergence de notation due au nom du projet est une erreur méthodologique inacceptable.
+*** RÈGLE ABSOLUE D'ISOLATION ET D'INDÉPENDANCE DE L'AUDIT DE PROJET ***
+1. INDÉPENDANCE ABSOLUE DES ANCIENS PROJETS : Chaque audit est réalisé de manière 100% autonome et isolée. L'analyse, les 8 sections, les scores et les modèles circulaires DOIVENT découler EXCLUSIVEMENT du titre, de la description et du contenu des documents joints transmis DANS LA PRÉSENTE REQUÊTE.
+2. INTERDICTION STRICTE DE CONFUSION INTER-PROJETS : Il est strictement interdit d'injecter, de mélanger ou d'associer des données, procédés, produits ou termes issus d'autres projets ou sessions d'analyse précédentes.
+3. INDÉPENDANCE TOTALE VIS-À-VIS DU NOM / MARQUE : L'évaluation environnementale et les scores (environnemental, social, circularité, maturité carbone et score global) reposent EXCLUSIVEMENT et STRICTEMENT sur la nature des activités réelles, les intrants, les procédés de fabrication ou de service, les flux de matière et d'énergie, et les externalités décrits dans la DESCRIPTION et les DOCUMENTS IMPORTÉS ACTUELS.
+4. Le titre commercial ou nom de marque (ex: "grandii", "t3allem", ou tout autre libellé) n'est qu'un identifiant arbitraire. Il NE DOIT EN AUCUN CAS faire varier les scores ni l'analyse d'impact.
+5. Si deux projets présentent la même description opérationnelle et les mêmes caractéristiques, le Collège d'Experts DOIT impérativement attribuer des scores strictement identiques et reproductibles. Toute divergence de notation due au nom du projet est une erreur méthodologique inacceptable.
 
 1. ANALYSE PRÉLIMINAIRE : Vérifie si les informations fournies (titre, description, lieu, documents joints) sont suffisantes pour réaliser un audit environnemental complet ET crédible.
    - SI INSUFFISANT (notamment pour les projets industriels lourds, plasturgie, chimie, mines, sans détails sur les intrants, l'énergie ou les effluents) : Tu DOIS impérativement répondre avec { "needsInfo": true, "questions": [{ "id": "...", "question": "...", "options": [...] }] }.
