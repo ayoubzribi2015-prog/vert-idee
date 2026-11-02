@@ -60,14 +60,14 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
-    const validFiles = fileArray.filter((f) => f.size <= 3 * 1024 * 1024);
+    const validFiles = fileArray.filter((f) => f.size <= 10 * 1024 * 1024);
     if (validFiles.length === 0) {
-      setErrorMsg('Les fichiers sélectionnés dépassent la taille maximale recommandée (3 Mo). Veuillez importer des fichiers plus légers.');
+      setErrorMsg('Les fichiers sélectionnés dépassent la taille maximale autorisée (10 Mo). Veuillez importer des fichiers plus légers.');
       return;
     }
 
     if (fileArray.length > validFiles.length) {
-      setErrorMsg(`${fileArray.length - validFiles.length} fichier(s) dépassent 3 Mo et ont été ignorés pour garantir la fluidité.`);
+      setErrorMsg(`${fileArray.length - validFiles.length} fichier(s) dépassent 10 Mo et ont été ignorés pour garantir la fluidité.`);
     }
 
     setIsExtracting(true);
@@ -78,7 +78,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
     );
 
     try {
-      // Préparation et conversion Base64 de l'ensemble des fichiers
+      // Préparation et conversion Base64 uniquement si nécessaire (les fichiers texte sont envoyés directement en brut)
       const payloadFiles = await Promise.all(
         validFiles.map(async (file) => {
           const isTextLike = /\.(txt|md|csv|tsv|json|rtf|log)$/i.test(file.name) || file.type.startsWith('text/');
@@ -91,15 +91,18 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
             }
           }
 
-          const reader = new FileReader();
-          const base64 = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => {
-              const result = reader.result as string;
-              resolve(result.split(',')[1] || result);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
+          let base64 = '';
+          if (!isTextLike) {
+            const reader = new FileReader();
+            base64 = await new Promise<string>((resolve, reject) => {
+              reader.onload = () => {
+                const result = reader.result as string;
+                resolve(result.split(',')[1] || result);
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+          }
 
           return {
             filename: file.name,
@@ -111,9 +114,9 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
         })
       );
 
-      // Appel de l'API de synthèse collective selon les 3 piliers méthodologiques avec timeout de 60s
+      // Appel de l'API de synthèse collective selon les 3 piliers méthodologiques avec timeout étendu de 300s (5 minutes)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const timeoutId = setTimeout(() => controller.abort(), 300000);
 
       let res: Response;
       try {
@@ -132,7 +135,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
         });
       } catch (fetchErr: any) {
         if (fetchErr?.name === 'AbortError') {
-          throw new Error('Le traitement des documents a pris trop de temps (délai dépassé de 60s). Veuillez réessayer avec des fichiers plus légers.');
+          throw new Error('Le traitement des documents a pris trop de temps (délai de 5 minutes dépassé). Veuillez vérifier votre connexion ou réessayer avec un document moins volumineux.');
         }
         throw new Error('Erreur réseau lors de la communication avec le serveur d\'extraction.');
       } finally {
@@ -145,7 +148,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
         data = JSON.parse(rawText);
       } catch {
         if (res.status === 413) {
-          throw new Error('Les documents dépassent la taille maximale autorisée (15 Mo).');
+          throw new Error('Les documents dépassent la taille maximale autorisée (50 Mo cumulés).');
         }
         if (res.status === 504 || res.status === 502) {
           throw new Error('Le délai de lecture a expiré. Veuillez vérifier que les fichiers ne sont pas corrompus.');
@@ -390,7 +393,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
 
       {/* Format tip */}
       <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
-        <span>Sélectionnez ou glissez plusieurs fichiers simultanément (PDF, Word, Excel, TXT)</span>
+        <span>Sélectionnez ou glissez plusieurs fichiers simultanément (PDF, Word, Excel, TXT, Images — jusqu'à 10 Mo par fichier)</span>
         {value.length > 0 && (
           <span className="font-mono-numbers text-slate-400">
             {value.length} caractères

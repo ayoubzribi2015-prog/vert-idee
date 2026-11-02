@@ -51,7 +51,7 @@ app.use((err: any, req: Request, res: Response, next: any) => {
   if (err && (err.type === 'entity.too.large' || err.status === 413)) {
     return res.status(413).json({
       success: false,
-      error: 'Le fichier envoyé est trop volumineux. La taille maximale autorisée est de 15 Mo.',
+      error: 'Le payload envoyé est trop volumineux. La taille maximale recommandée est de 10 Mo par document.',
     });
   }
   if (err instanceof SyntaxError && 'body' in err) {
@@ -726,8 +726,8 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
     if ((!extractedText || extractedText.trim().length < 25) && base64Data) {
       try {
         const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 18000,
-          totalTimeoutMs: 25000,
+          singleAttemptTimeoutMs: 12000,
+          totalTimeoutMs: 15000,
           contents: [
             {
               inlineData: {
@@ -761,8 +761,8 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
           ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
           : 'application/msword';
         const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 18000,
-          totalTimeoutMs: 25000,
+          singleAttemptTimeoutMs: 12000,
+          totalTimeoutMs: 15000,
           contents: [
             {
               inlineData: {
@@ -805,8 +805,8 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
           ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           : 'application/vnd.ms-excel';
         const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 18000,
-          totalTimeoutMs: 25000,
+          singleAttemptTimeoutMs: 12000,
+          totalTimeoutMs: 15000,
           contents: [
             {
               inlineData: {
@@ -831,8 +831,8 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
       try {
         const cleanMime = mimeType && mimeType.startsWith('image/') ? mimeType : (ext === '.png' ? 'image/png' : 'image/jpeg');
         const { response: aiRes } = await generateContentWithResilience({
-          singleAttemptTimeoutMs: 18000,
-          totalTimeoutMs: 25000,
+          singleAttemptTimeoutMs: 12000,
+          totalTimeoutMs: 15000,
           contents: [
             {
               inlineData: {
@@ -881,24 +881,27 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
       return;
     }
 
-    const extractedFiles: Array<{ filename: string; text: string }> = [];
+    // Traitement parallèle et extraction de texte de tous les fichiers
+    const extractedFiles: Array<{ filename: string; text: string }> = (
+      await Promise.all(
+        rawFiles.map(async (item: any) => {
+          if (!item.base64Data && !item.localText) return null;
+          const buffer = item.base64Data ? Buffer.from(item.base64Data, 'base64') : Buffer.from(item.localText || '');
+          let text = await extractRawTextFromFile(buffer, item.filename, item.mimeType, item.base64Data);
 
-    for (const item of rawFiles) {
-      if (!item.base64Data && !item.localText) continue;
-      const buffer = item.base64Data ? Buffer.from(item.base64Data, 'base64') : Buffer.from(item.localText || '');
-      let text = await extractRawTextFromFile(buffer, item.filename, item.mimeType, item.base64Data);
+          if ((!text || text.trim().length === 0) && item.localText && item.localText.trim().length > 0) {
+            text = item.localText.trim();
+          }
 
-      if ((!text || text.trim().length === 0) && item.localText && item.localText.trim().length > 0) {
-        text = item.localText.trim();
-      }
+          if (!text || text.trim().length === 0) {
+            const cleanName = (item.filename || 'Document').replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+            text = `Projet issu du document : ${cleanName}.\nDescription : Document joint concernant le fonctionnement, les intrants et les objectifs écologiques du projet.`;
+          }
 
-      if (!text || text.trim().length === 0) {
-        const cleanName = (item.filename || 'Document').replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
-        text = `Projet issu du document : ${cleanName}.\nDescription : Document joint concernant le fonctionnement, les intrants et les objectifs écologiques du projet.`;
-      }
-
-      extractedFiles.push({ filename: item.filename || 'Document', text: text.trim() });
-    }
+          return { filename: item.filename || 'Document', text: text.trim() };
+        })
+      )
+    ).filter((f): f is { filename: string; text: string } => !!f);
 
     if (extractedFiles.length === 0) {
       res.status(400).json({
@@ -916,81 +919,60 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
           .map((f, i) => `=== DOCUMENT ${i + 1} SUR ${extractedFiles.length} : ${f.filename} ===\n${f.text}`)
           .join('\n\n');
 
-    // Analyse locale heuristique de référence (secours immédiat garanti)
+    // Analyse locale heuristique de référence (secours immédiat garanti à 0ms)
     const fallbackData = extractRichDescriptionFallback(combinedSourceText, extractedFiles[0].filename);
     let finalDescription = fallbackData.richDescription;
     let suggestedTitle = fallbackData.suggestedTitle;
     let suggestedLocation = fallbackData.suggestedLocation;
     let isAIEnhanced = false;
 
-    // Préparation pour l'IA (jusqu'à 35 000 caractères)
+    // Préparation pour l'IA (jusqu'à 32 000 caractères)
     let preparedSource = combinedSourceText;
-    if (combinedSourceText.length > 35000) {
-      const head = combinedSourceText.slice(0, 16000);
+    if (combinedSourceText.length > 32000) {
+      const head = combinedSourceText.slice(0, 15000);
       const midStart = Math.floor(combinedSourceText.length * 0.4);
-      const middle = combinedSourceText.slice(midStart, midStart + 12000);
-      const tail = combinedSourceText.slice(-7000);
+      const middle = combinedSourceText.slice(midStart, midStart + 11000);
+      const tail = combinedSourceText.slice(-6000);
       preparedSource = `[Synthèse amont & Contexte] :\n${head}\n\n[Procédés & Données techniques] :\n${middle}\n\n[Résultats & Conclusions] :\n${tail}`;
     }
 
     if (combinedSourceText.length > 50) {
       try {
-        // --- PREMIÈRE PASSE : Extraction brute et factuelle en éliminant tout bruit structurel ---
-        const pass1Prompt = `Tu es un assistant de retranscription factuelle. Ton rôle est de lire les documents importés (${fileLabels}) et d'extraire uniquement le contenu rédactionnel et informatif utile du projet.
+        // --- PASSE UNIQUE OPTIMISÉE : Extraction, filtrage et structuration directe en 3 piliers ---
+        const singlePassPrompt = `Tu es un expert en analyse de projets industriels, environnementaux et économiques.
+À partir des documents importés (${fileLabels}), extrais les informations utiles (en ignorant tables des matières, index, numéros de page, en-têtes et métadonnées) et synthétise directement une description complète et professionnelle selon les 3 rubriques obligatoires.
 
-CONSIGNES STRICTES DE FILTRAGE :
-1. EXCLUSION TOTALE DES SOMMAIRES ET TABLES DES MATIÈRES : Ignore et jette toutes les lignes de tables des matières, listes de chapitres, index, titres de rubriques isolés (ex: "Table des matières", "6 Besoins prioritaires...", "4 Proposition de valeur...", "1 / 15", "Plan d'affaires Confidentiel").
-2. EXCLUSION DES EN-TÊTES ET PIEDS DE PAGE : Ignore les en-têtes de pages, numéros de page (ex: "2 / 15", "3 / 15"), mentions de copyright et métadonnées de document.
-3. CONSERVATION UNIQUEMENT DU CORPS DU TEXTE : Extrais uniquement les phrases explicatives du fond du projet (problématique, description de la solution, fonctionnalités, public cible, modèle économique, intrants).
+CONSIGNES STRICTES DE RÉDACTION :
+1. RESPECT ABSOLU DES 3 RUBRIQUES EXACTES :
+   ■ 1. Vue d'ensemble du projet & Problématique adressée
+   ■ 2. Solution technique, intrants & Procédés sobres
+   ■ 3. Proposition de valeur & Modèle circulaire
+2. QUALITÉ RÉDACTIONNELLE : Rédige des phrases complètes, fluides et professionnelles avec toutes les données techniques et chiffrées trouvées (volumes, investissements, capacité, intrants, prix, normes, certifications).
+3. FIDÉLITÉ FACTUELLE TOTALE : Interdiction d'inventer des allégations non présentes dans les données sources.
 
-TEXTE BRUT DES DOCUMENTS À FILTRER :
-${preparedSource}`;
+TEXTE SOURCE DES DOCUMENTS :
+${preparedSource}
 
-        const { response: pass1Res } = await generateContentWithResilience({
-          contents: pass1Prompt,
-          config: {
-            temperature: 0.0,
-          },
-          singleAttemptTimeoutMs: 15000,
-          totalTimeoutMs: 22000,
-        });
-
-        const rawExtractedFacts = pass1Res?.text || combinedSourceText;
-
-        // --- DEUXIÈME PASSE : Relecture, polissage et structuration rigoureuse en 3 piliers ---
-        const pass2Prompt = `Tu es un éditeur et relecteur expert en projets industriels et écologiques. À partir des éléments factuels extraits des documents, rédige une description claire, fluide, parfaitement articulée et formalisée strictement selon les 3 rubriques ci-dessous.
-
-CONSIGNES STRICTES POUR LA SECONDE LECTURE :
-1. RESPECT ABSOLUE DES 3 RUBRIQUES (les libellés exacts doivent être conservés) :
-   - ■ 1. Vue d'ensemble du projet & Problématique adressée
-   - ■ 2. Solution technique, intrants & Procédés sobres
-   - ■ 3. Proposition de valeur & Modèle circulaire
-2. QUALITÉ RÉDACTIONNELLE (ZÉRO PHRASE INCOMPLÈTE) : Rédige chaque section avec des phrases complètes (Sujet, Verbe, Complément), bien ponctuées et soignées. Élimine toute phrase coupée, tout style télégraphique et toute approximation.
-3. FIDÉLITÉ FACTUELLE TOTALE : Interdiction totale d'inventer des allégations écologiques, des chiffres ou des labels non présents dans les données sources. Restitue fidèlement la réalité exacte du projet.
-
-ÉLÉMENTS FACTUELS À STRUCTURER :
-${rawExtractedFacts}
-
-FORMAT DE RÉPONSE STRICT (JSON valide) :
+FORMAT DE RÉPONSE STRICT (JSON valide uniquement) :
 {
-  "suggestedTitle": "Titre clair et explicite du projet",
-  "suggestedLocation": "Lieu ou région explicitement mentionné dans le document (ou chaîne vide si non précisé)",
-  "richDescription": "Texte complet structuré avec les 3 rubriques exactes..."
+  "suggestedTitle": "Titre clair et fidèle du projet",
+  "suggestedLocation": "Lieu ou région explicitement mentionné (ou chaîne vide si non précisé)",
+  "richDescription": "■ 1. Vue d'ensemble du projet & Problématique adressée\\n...\\n\\n■ 2. Solution technique, intrants & Procédés sobres\\n...\\n\\n■ 3. Proposition de valeur & Modèle circulaire\\n..."
 }`;
 
-        const { response: pass2Res } = await generateContentWithResilience({
-          contents: pass2Prompt,
+        const { response: aiRes } = await generateContentWithResilience({
+          contents: singlePassPrompt,
           config: {
-            temperature: 0.0,
+            temperature: 0.1,
             responseMimeType: 'application/json',
           },
-          singleAttemptTimeoutMs: 18000,
-          totalTimeoutMs: 25000,
+          singleAttemptTimeoutMs: 14000,
+          totalTimeoutMs: 18000,
         });
 
-        if (pass2Res && pass2Res.text) {
+        if (aiRes && aiRes.text) {
           try {
-            const parsed = JSON.parse(pass2Res.text);
+            const parsed = JSON.parse(aiRes.text);
             if (parsed.richDescription && parsed.richDescription.trim().length > 60) {
               finalDescription = parsed.richDescription.trim();
               isAIEnhanced = true;
@@ -1002,7 +984,7 @@ FORMAT DE RÉPONSE STRICT (JSON valide) :
               suggestedLocation = parsed.suggestedLocation.trim();
             }
           } catch (jsonErr) {
-            const cleanText = pass2Res.text.replace(/^```json\s*|\s*```$/g, '').trim();
+            const cleanText = aiRes.text.replace(/^```json\s*|\s*```$/g, '').trim();
             try {
               const retryParsed = JSON.parse(cleanText);
               if (retryParsed.richDescription) {
@@ -1020,7 +1002,7 @@ FORMAT DE RÉPONSE STRICT (JSON valide) :
           }
         }
       } catch (sumErr: any) {
-        console.info('[File Extract] Synthèse sémantique locale appliquée.');
+        console.info('[File Extract] Utilisation de l\'analyse heuristique locale (secours rapide) :', sumErr?.message);
       }
     }
 
