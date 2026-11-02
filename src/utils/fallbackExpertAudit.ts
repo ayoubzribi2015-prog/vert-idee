@@ -25,22 +25,28 @@ export function generateExpertAuditFallback(
   // Détection Chaussures de sécurité, Équipements de Protection Individuelle (EPI) et injection de semelles PU/TPU
   const isFootwearOrSafetyShoes = /chaussur|semelle|soulier|bott|épi\b|epi\b|protection individuelle|sécurité au travail|injection.*chaussur|injection.*semelle|polyuréthane.*chaussur|pu.*tpu|embout.*composite|anti-perforation|en iso 20345|satra|ctc|safety.*shoe|footwear|ressemelage|chaussant|tige.*cuir/i.test(text);
 
+  // Détection Médical / Dispositifs Médicaux / Santé / Orthopédie / Plâtre médical
+  const isMedicalOrPharma = /plâtre|platre|médical|medical|orthopéd|orthoped|santé|sante|hôpital|hopital|clinique|pharmaceu|médicament|medicament|dispositif médical|gaze|pansement|stérile|sterile|officine|gypse|bande.*orthopéd/i.test(text) && !isFootwearOrSafetyShoes;
+
   // Détection injection plastique conventionnelle (souvent source de greenwashing si score trop haut)
   const isConventionalPlastic = /injection plastique|unité d'injection|usine de plastique|plasturgie/.test(text)
     && !/recyclé|biodégradable|compostable|biosourcé/.test(text)
-    && !isFootwearOrSafetyShoes;
+    && !isFootwearOrSafetyShoes
+    && !isMedicalOrPharma;
 
   // Détection stricte oléiculture / huile d'olive (uniquement si explicitement mentionnée)
-  const isOliveOil = /huile.*olive|huilerie|moulin.*huile|margine|grignon|oléicol|oleicol|oliveraie/i.test(text) && !isFootwearOrSafetyShoes;
+  const isOliveOil = /huile.*olive|huilerie|moulin.*huile|margine|grignon|oléicol|oleicol|oliveraie/i.test(text) && !isFootwearOrSafetyShoes && !isMedicalOrPharma;
 
-  // Détection agriculture et agroalimentaire générale (exclut rigoureusement le footwear et n'utilise pas des mots isolés comme 'bio' ou 'sol')
-  const isAgriOrFood = /(?:agricol|agricult|agronome|agroaliment|agro-aliment|alimentaire|ferme\b|élevage|elevage|maraîch|maraich|verger|récolte|recolte|culture.*agricole|arboricult|céréal|cereal|semence|viticult|apicult|miel|laitier|fromag)/i.test(text) && !isFootwearOrSafetyShoes && !isOliveOil;
-  const isPackagingOrPlastic = /emballage|pack|carton|bouteille|flacon|sachet|biodegradable|dechet|recycl/.test(text) && !isFootwearOrSafetyShoes;
-  const isEnergyOrSolar = /energie|solaire|photovolta|panneau|eolien|batterie|hydrogene|biomasse|chaleur|electricite/.test(text) && !isFootwearOrSafetyShoes;
-  const isWater = /station d'épuration|station depuration|dessalement|eaux usées|eaux usees|traitement des eaux|purification de l'eau|assainissement des eaux|osmose inverse/i.test(text) && !isFootwearOrSafetyShoes;
-  const isTextile = /textile|coton|vetement|mode|tissu|lin|laine|chutes|couture/.test(text) && !isFootwearOrSafetyShoes;
-  const isWasteOrCircularity = /dechet|tri|reemploi|compost|valorisation|upcycling|circulaire|decharge/.test(text) && !isFootwearOrSafetyShoes;
-  const isDigitalOrEdTech = /edtech|educat|formation|appren|ecole|cours|pedagogi|plateforme|application|logiciel|saas|digital|numerique|e-learning|elearning|intelligence artificielle|\bia\b|interface|ecosysteme|gestion|communication|kidora/i.test(text) && !isFootwearOrSafetyShoes;
+  // Détection agriculture et agroalimentaire générale (exclut rigoureusement le footwear)
+  const isAgriOrFood = /(?:agricol|agricult|agronome|agroaliment|agro-aliment|alimentaire|ferme\b|élevage|elevage|maraîch|maraich|verger|récolte|recolte|culture.*agricole|arboricult|céréal|cereal|semence|viticult|apicult|miel|laitier|fromag)/i.test(text) && !isFootwearOrSafetyShoes && !isOliveOil && !isMedicalOrPharma;
+  const isPackagingOrPlastic = /emballage|pack|carton|bouteille|flacon|sachet|biodegradable|dechet|recycl/.test(text) && !isFootwearOrSafetyShoes && !isMedicalOrPharma;
+  const isEnergyOrSolar = /energie|solaire|photovolta|panneau|eolien|batterie|hydrogene|biomasse|chaleur|electricite/.test(text) && !isFootwearOrSafetyShoes && !isMedicalOrPharma;
+  const isWater = /station d'épuration|station depuration|dessalement|eaux usées|eaux usees|traitement des eaux|purification de l'eau|assainissement des eaux|osmose inverse/i.test(text) && !isFootwearOrSafetyShoes && !isMedicalOrPharma;
+  const isTextile = /textile|coton|vetement|mode|tissu|lin|laine|chutes|couture/.test(text) && !isFootwearOrSafetyShoes && !isMedicalOrPharma;
+  const isWasteOrCircularity = /dechet|tri|reemploi|compost|valorisation|upcycling|circulaire|decharge/.test(text) && !isFootwearOrSafetyShoes && !isMedicalOrPharma;
+
+  // Détection Numérique / EdTech STRICTE (mots d'apprentissage / software spécifiques, EXCLUSION des mots communs 'communication', 'gestion', 'interface', 'application')
+  const isDigitalOrEdTech = /(?:edtech|e-learning|elearning|plateforme (?:web|pédagogique|numérique|saas)|logiciel|saas\b|intelligence artificielle|\bIA\b|numérique|digital|kidora)/i.test(text) && !isFootwearOrSafetyShoes && !isMedicalOrPharma;
 
   // CAS SPÉCIFIQUE 1 : INDUSTRIES EXTRACTIVES, MINES & PHOSPHATE (Score Rouge / Alerte Critique)
   if (isHighImpactIndustry) {
@@ -552,6 +558,15 @@ export function generateExpertAuditFallback(
     socScore = 88;
     circScore = 82;
     carbScore = 80;
+  } else if (isMedicalOrPharma) {
+    sector = 'Dispositifs Médicaux & Santé Éco-responsable';
+    functionalUnit = '1 000 pièces de bandes de plâtre orthopédique stériles (ISO 13485)';
+    baselineCO2 = 11.5;
+    targetCO2 = 3.2;
+    envScore = 82;
+    socScore = 90;
+    circScore = 78;
+    carbScore = 80;
   } else if (isDigitalOrEdTech) {
     sector = 'Numérique Responsable & Éco-conception Digitale';
     functionalUnit = '1 compte utilisateur actif annuel sur infrastructure sobre';
@@ -634,12 +649,18 @@ export function generateExpertAuditFallback(
     location,
     targetAudience: isFootwearOrSafetyShoes
       ? 'B2B (Entreprises du BTP, Industries manufacturières, Mines, Transport, Énergie, Logistique) & Marchés Publics'
+      : isMedicalOrPharma
+      ? 'B2B (Hôpitaux, Cliniques, Officines, Grossistes Répartiteurs & Distributeurs Médicaux) & Praticiens Orthopédistes'
       : 'B2B (Industriels, Coopératives, Distributeurs) & B2C Éco-responsables',
     businessModel: isFootwearOrSafetyShoes
       ? 'Vente directe B2B, mise à disposition d\'EPI comme service (Safety-as-a-Service) et boucle fermée de reprise matière'
+      : isMedicalOrPharma
+      ? 'Vente directe B2B, circuits courts d\'approvisionnement en gypse et recyclage des emballages'
       : 'Économie de la fonctionnalité, vente directe et boucle circulaire',
     lifeCycleDetails: isFootwearOrSafetyShoes
       ? 'ACV berceau-à-la-tombe : injection directe des semelles PU/TPU sans solvants, polyols biosourcés/recyclés et recyclabilité matière démontable.'
+      : isMedicalOrPharma
+      ? 'ACV berceau-à-la-porte : cuisson du gypse naturel local, coulage sur gaze coton, stérilisation médicale certifiée ISO 13485 et recyclage des emballages.'
       : 'ACV optimisée de l\'approvisionnement local des intrants renouvelables jusqu\'à la fin de vie vertueuse.',
 
     // 1. Synthèse du projet
@@ -653,9 +674,13 @@ export function generateExpertAuditFallback(
       },
       summary: isFootwearOrSafetyShoes
         ? `AVIS TRÈS FAVORABLE DU COLLÈGE DES EXPERTS (${globalScore}/100) : Le projet "${title}" à ${location} démontre un impact sociétal majeur sur la santé-sécurité des travailleurs industriels (norme EN ISO 20345) couplé à une démarche exemplaire d'éco-conception : suppression des colles solvantées toxiques par procédé d'injection directe, réduction de plus de 65% de l'empreinte carbone et engagement dans une boucle de reprise matière des semelles en fin de vie.`
+        : isMedicalOrPharma
+        ? `AVIS TRÈS FAVORABLE DU COLLÈGE DES EXPERTS (${globalScore}/100) : Le projet "${title}" à ${location} démontre une pertinence sanitaire et écologique élevée : valorisation du gypse naturel local, substitution des importations de dispositifs orthopédiques, stérilisation médicale certifiée ISO 13485 et emballages éco-conçus 100% recyclables.`
         : `AVIS FAVORABLE DU COLLÈGE DES EXPERTS (${globalScore}/100) : Le projet "${title}" à ${location} démontre une pertinence écologique élevée et une démarche crédible d'économie circulaire et d'ACV vérifiable.`,
       vision: isFootwearOrSafetyShoes
         ? `S'imposer comme le fabricant de référence d'EPI et chaussures de sécurité éco-conçues et recyclables en Tunisie et à l'export, combinant zéro accident de travail et décarbonation certifiée de la chaîne d'approvisionnement.`
+        : isMedicalOrPharma
+        ? `Devenir l'unité industrielle de référence en Tunisie et à l'export pour la production éco-responsable de dispositifs orthopédiques stériles conformes aux normes ISO 13485, ISO 14001 et ISO 9001.`
         : `Devenir la référence régionale en matière d'éco-conception dans le secteur "${sector}" à ${location} avec une traçabilité carbone exemplaire d'ici 3 ans.`,
     },
 
