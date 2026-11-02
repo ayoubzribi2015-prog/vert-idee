@@ -48,7 +48,6 @@ import { GreenAssistantTab } from './components/GreenAssistantTab';
 import { MobileSectionNav } from './components/MobileSectionNav';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { generateWordReport } from './utils/docxExport';
-import { generateExpertAuditFallback } from './utils/fallbackExpertAudit';
 import {
   auth,
   signInWithGoogle,
@@ -196,14 +195,19 @@ export default function App() {
 
       try {
         const controller = new AbortController();
-        const abortTimeout = setTimeout(() => controller.abort(), 45000);
+        const abortTimeout = setTimeout(() => controller.abort(), 60000);
 
         let res: Response;
         try {
-          res = await fetch('/api/analyze', {
+          res = await fetch(`/api/analyze?_ts=${Date.now()}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            cache: 'no-store',
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+            },
+            body: JSON.stringify({ ...payload, _requestTimestamp: Date.now() }),
             signal: controller.signal,
           });
         } finally {
@@ -259,32 +263,11 @@ export default function App() {
         return;
       }
 
-      // Client-Side Fallback Execution (100% resilient for Cloudflare Pages / Render static / Offline deployments)
-      console.log('Activation du Collège d\'Experts client-side pour la génération du diagnostic.');
-      const titleInput = formData?.title || payload?.title || 'Mon Projet Éco-responsable';
-      const descInput = formData?.description || payload?.description || '';
-      const locInput = formData?.location || payload?.location || 'Tunisie';
-
-      const fallbackAudit = generateExpertAuditFallback(titleInput, descInput, locInput);
-      const newProject: ProjectAudit = {
-        id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        createdAt: new Date().toISOString(),
-        ...fallbackAudit,
-      };
-
-      if (user) {
-        await saveUserProject(user.uid, newProject);
-        setProjects((prev) => [newProject, ...prev.filter((p) => p.id !== newProject.id)]);
-      } else {
-        setProjects([newProject]);
-      }
-
-      setActiveProjectId(newProject.id);
-      setIsModalOpen(false);
-      setInfoRequest(null);
-      setOriginalFormData(null);
-      setActiveTab('synthesis');
-      setToastMessage('Diagnostic réalisé avec succès par le Collège d\'Experts Vert\'Idée !');
+      // Mode STRICT_IA : L'analyse échoue explicitement si l'IA ne répond pas (aucun fallback autorisé)
+      const failureReason =
+        result?.error ||
+        `Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`;
+      throw new Error(`[Mode STRICT_IA] Échec du diagnostic : ${failureReason}`);
     } catch (err: any) {
       console.error('Analysis error:', err);
       setErrorMessage(err?.message || "Échec de l'expertise environnementale.");

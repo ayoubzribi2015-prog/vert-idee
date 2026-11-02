@@ -7,7 +7,6 @@ import path from 'path';
 import dotenv from 'dotenv';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
-import { generateExpertAuditFallback } from '../src/utils/fallbackExpertAudit.ts';
 import firebaseConfig from '../firebase-applet-config.json';
 
 dotenv.config({ path: ['.env.development.local', '.env.local', '.env'], quiet: true });
@@ -1052,6 +1051,12 @@ function resolveLocation(loc?: string | null): string {
 // Expert Ecological Analysis API with EXACTLY the 8 required sections
 app.post('/api/analyze', async (req: express.Request, res: express.Response) => {
   try {
+    // Élimination totale de tout cache de cohérence ou de mise en mémoire tampon HTTP
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+
     const { title, description, location, sector, targetAudience, businessModel, lifeCycleDetails, fullDocumentContent } = req.body;
 
     if (!title || !description) {
@@ -1086,12 +1091,11 @@ Ta mission repose sur les méthodologies de référence internationales et natio
 *** OBLIGATION D'ANALYSE DÉTAILLÉE DU CONTENU DES DOCUMENTS IMPORTÉS ***
 Si la requête contient la rubrique 'CONTENU INTÉGRAL ET EXHAUSTIF DES DOCUMENTS IMPORTÉS (PDF, Word, Excel, Images JPG/PNG)', le Collège des 4 Experts DOIT impérativement fonder son audit (scores d'impacts, ACV, bilan carbone, ODD, risques) sur l'ENSEMBLE des données chiffrées, techniques, logistiques et financières contenues dans ce texte intégral, et non pas uniquement sur la description synthétique. L'analyse doit tirer pleinement parti de toutes les précisions opérationnelles fournies dans ces documents joints.
 
-*** RÈGLE ABSOLUE D'ISOLATION ET D'INDÉPENDANCE DE L'AUDIT DE PROJET ***
-1. INDÉPENDANCE ABSOLUE DES ANCIENS PROJETS : Chaque audit est réalisé de manière 100% autonome et isolée. L'analyse, les 8 sections, les scores et les modèles circulaires DOIVENT découler EXCLUSIVEMENT du titre, de la description et du contenu des documents joints transmis DANS LA PRÉSENTE REQUÊTE.
+*** RÈGLE ABSOLUE D'ISOLATION ET D'INDÉPENDANCE DE L'AUDIT DE PROJET (AUCUN CACHE DE COHÉRENCE) ***
+1. INDÉPENDANCE ABSOLUE DES ANCIENS PROJETS : Chaque audit est réalisé de manière 100% autonome, dynamique et isolée sans aucun cache de cohérence ni mémoire intermédiaire. L'analyse, les 8 sections, les scores et les modèles circulaires DOIVENT découler EXCLUSIVEMENT et directement des données transmises DANS LA PRÉSENTE REQUÊTE.
 2. INTERDICTION STRICTE DE CONFUSION INTER-PROJETS : Il est strictement interdit d'injecter, de mélanger ou d'associer des données, procédés, produits ou termes issus d'autres projets ou sessions d'analyse précédentes.
 3. INDÉPENDANCE TOTALE VIS-À-VIS DU NOM / MARQUE : L'évaluation environnementale et les scores (environnemental, social, circularité, maturité carbone et score global) reposent EXCLUSIVEMENT et STRICTEMENT sur la nature des activités réelles, les intrants, les procédés de fabrication ou de service, les flux de matière et d'énergie, et les externalités décrits dans la DESCRIPTION et les DOCUMENTS IMPORTÉS ACTUELS.
-4. Le titre commercial ou nom de marque (ex: "grandii", "t3allem", ou tout autre libellé) n'est qu'un identifiant arbitraire. Il NE DOIT EN AUCUN CAS faire varier les scores ni l'analyse d'impact.
-5. Si deux projets présentent la même description opérationnelle et les mêmes caractéristiques, le Collège d'Experts DOIT impérativement attribuer des scores strictement identiques et reproductibles. Toute divergence de notation due au nom du projet est une erreur méthodologique inacceptable.
+4. Le titre commercial ou nom de marque (ex: "grandii", "t3allem", ou tout autre libellé) n'est qu'un identifiant administratif. Il NE DOIT EN AUCUN CAS biaiser les scores ni l'analyse d'impact.
 
 *** RÈGLE DE JUSTIFICATION TECHNIQUE ET SOURÇAGE (OBLIGATION DE TRAÇABILITÉ) ***
 Chaque conclusion, score, avis d'expert ou affirmation technique émis par le Collège des Experts DOIT impérativement être justifié par une référence explicite aux données fournies.
@@ -1162,7 +1166,7 @@ ${fullDocumentContent.trim().slice(0, 50000)}
 }
 ${req.body && req.body.answers ? `- Informations complémentaires fournies (Q&R) : ${JSON.stringify(req.body.answers)}` : ''}
 
-Consigne stricte de cotation : Calcule les scores avec une impartialité totale, en te basant sur la description et le contenu des documents importés ci-dessus. Deux projets ayant les mêmes caractéristiques doivent impérativement recevoir des scores identiques.
+Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, exclusivement fondé sur la description et le contenu des documents fournis dans cette demande spécifique (sans aucun cache de cohérence ni contrainte d'alignement historique).
 `;
 
     let parsedData: any = null;
@@ -1175,8 +1179,7 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
         totalTimeoutMs: 40000,
         config: {
           systemInstruction: systemPrompt,
-          temperature: 0.1,
-          seed: 42,
+          temperature: 0.2,
           maxOutputTokens: 8192,
           responseMimeType: 'application/json',
           responseSchema: {
@@ -1572,13 +1575,22 @@ Consigne stricte de cotation : Calcule les scores avec une impartialité totale,
         return;
       }
 
-      console.log(`[Audit Engine] Diagnostic analysé avec succès via ${modelUsed} !`);
+      console.log(`[Audit Engine - Mode STRICT_IA] Diagnostic analysé avec succès via ${modelUsed} !`);
     } catch (aiErr: any) {
-      console.info(
-        '[Audit Engine] Moteur expert déterministe activé (ISO 14001 / ISO 14064 / ODD) :'
-      );
-      // Moteur d'audit expert déterministe : garantit que l'utilisateur reçoit TOUJOURS son rapport complet sans être bloqué
-      parsedData = generateExpertAuditFallback(title, description, resolveLocation(location), fullDocumentContent);
+      console.error('[Audit Engine - Mode STRICT_IA] Échec de l\'analyse IA (aucun fallback autorisé) :', aiErr?.message);
+      res.status(503).json({
+        success: false,
+        error: `[Mode STRICT_IA] L'analyse a échoué car le modèle IA n'a pas répondu ou est indisponible (${aiErr?.message || 'Erreur IA'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe/hors ligne ont été éliminés : aucun fallback n'est autorisé.`,
+      });
+      return;
+    }
+
+    if (!parsedData || !parsedData.projectSynthesis) {
+      res.status(502).json({
+        success: false,
+        error: '[Mode STRICT_IA] La réponse de l\'IA est incomplète ou non conforme. Aucun fallback déterministe n\'est autorisé.',
+      });
+      return;
     }
 
     // Build complete project object

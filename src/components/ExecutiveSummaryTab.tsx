@@ -60,15 +60,20 @@ export const ExecutiveSummaryTab: React.FC<ExecutiveSummaryTabProps> = ({ projec
             Évaluation paritaire du Collège des Experts Environnementaux (ACV ISO 14040, risques industriels & ancrage territorial)
           </p>
         </div>
-        <span className={`px-2.5 py-1 rounded-md text-xs font-bold border w-fit ${
-          isCriticalRisk
-            ? 'bg-rose-50 text-rose-800 border-rose-300'
-            : isModerateRisk
-            ? 'bg-amber-50 text-amber-900 border-amber-300'
-            : 'bg-[#edf5f0] text-[#063428] border-stone-300'
-        }`}>
-          {isCriticalRisk ? 'Alerte Risque Écologique Majeur' : 'Double Revue d\'Experts Certifiée'}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="px-2.5 py-1 rounded-md text-xs font-bold border bg-emerald-50 text-emerald-900 border-emerald-300 shadow-2xs">
+            Mode STRICT_IA
+          </span>
+          <span className={`px-2.5 py-1 rounded-md text-xs font-bold border w-fit ${
+            isCriticalRisk
+              ? 'bg-rose-50 text-rose-800 border-rose-300'
+              : isModerateRisk
+              ? 'bg-amber-50 text-amber-900 border-amber-300'
+              : 'bg-[#edf5f0] text-[#063428] border-stone-300'
+          }`}>
+            {isCriticalRisk ? 'Alerte Risque Écologique Majeur' : 'Double Revue d\'Experts Certifiée'}
+          </span>
+        </div>
       </div>
 
       {/* Main Grid: Executive Summary & Overall Score */}
