@@ -244,10 +244,18 @@ export default function App() {
         const newProject: ProjectAudit = result.data;
 
         if (user) {
-          await saveUserProject(user.uid, newProject);
-          setProjects((prev) => [newProject, ...prev.filter((p) => p.id !== newProject.id)]);
+          try {
+            await saveUserProject(user.uid, newProject);
+            setProjects((prev) => [newProject, ...prev.filter((p) => p.id !== newProject.id)]);
+            setToastMessage(`Diagnostic IA enregistré dans votre compte Cloud (${user.email}) !`);
+          } catch (cloudErr: any) {
+            console.warn('Erreur lors de la synchronisation cloud Firestore :', cloudErr);
+            setProjects((prev) => [newProject, ...prev.filter((p) => p.id !== newProject.id)]);
+            setToastMessage('Diagnostic IA généré avec succès !');
+          }
         } else {
           setProjects([newProject]);
+          setToastMessage('Diagnostic IA certifié généré avec succès en Mode STRICT_IA !');
         }
 
         setActiveProjectId(newProject.id);
@@ -255,11 +263,6 @@ export default function App() {
         setInfoRequest(null);
         setOriginalFormData(null);
         setActiveTab('synthesis');
-        setToastMessage(
-          user
-            ? `Diagnostic enregistré dans votre compte Cloud Gmail (${user.email}) !`
-            : 'Diagnostic finalisé ! Connectez-vous avec Gmail pour activer la sauvegarde dans l\'historique.'
-        );
         return;
       }
 

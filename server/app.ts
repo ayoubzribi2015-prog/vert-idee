@@ -65,8 +65,16 @@ app.use((err: any, req: Request, res: Response, next: any) => {
 let geminiQuotaExhaustedUntil = 0;
 let gatewayUnavailableUntil = 0;
 
-// Valid model names per Gemini API SDK guidelines - prioritizes models with active quota
-const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+// Valid model names per Gemini API SDK guidelines - prioritized list of active models
+const DEFAULT_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest',
+  'gemini-3.8-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-flash-latest',
+  'gemini-3.7-flash',
+];
 // Model cooldown tracking to remember quota (429) & overload (503) status
 const modelCooldowns = new Map<string, number>();
 
@@ -213,8 +221,8 @@ async function generateContentWithResilience(options: {
   totalTimeoutMs?: number;
 }): Promise<{ response: { text: string }; modelUsed: string }> {
   const startTime = Date.now();
-  const singleTimeout = options.singleAttemptTimeoutMs || 15000;
-  const totalTimeout = options.totalTimeoutMs || 30000;
+  const singleTimeout = options.singleAttemptTimeoutMs || 18000;
+  const totalTimeout = options.totalTimeoutMs || 60000;
 
   const models = options.preferredModels || DEFAULT_MODELS;
   let lastError: any = null;
@@ -230,22 +238,24 @@ async function generateContentWithResilience(options: {
   }
 
   for (const provider of providers) {
-    let providerModels = models;
+    let providerModels = [...models];
     if (provider === 'gemini') {
       try {
         const available = await promiseWithTimeout(getAvailableGeminiModels(), 10000, 'Délai de découverte Gemini dépassé');
         const preferred = models.filter((name) => available.includes(name));
-        providerModels = preferred.length ? preferred : available.filter((name) => /flash/i.test(name));
+        const otherFlash = available.filter((name) => /flash/i.test(name) && !preferred.includes(name));
+        providerModels = [...preferred, ...otherFlash];
         if (!providerModels.length) providerModels = available;
-        // Filtrer les modèles temporairement en pause suite à un dépassement de quota (429)
+        // Prioritiser les modèles qui ne sont pas en période de cooldown actif
         const activeModels = providerModels.filter((name) => (modelCooldowns.get(name) || 0) <= Date.now());
-        providerModels = activeModels.length > 0 ? activeModels : providerModels;
-        providerModels = providerModels.slice(0, 3);
+        const coolingModels = providerModels.filter((name) => (modelCooldowns.get(name) || 0) > Date.now());
+        providerModels = [...activeModels, ...coolingModels].slice(0, 8);
       } catch (err: any) {
         lastError = err;
         console.info('[AI Engine] Découverte des modèles différée, utilisation des modèles configurés.');
         const activeModels = DEFAULT_MODELS.filter((name) => (modelCooldowns.get(name) || 0) <= Date.now());
-        providerModels = activeModels.length > 0 ? activeModels : DEFAULT_MODELS;
+        const coolingModels = DEFAULT_MODELS.filter((name) => (modelCooldowns.get(name) || 0) > Date.now());
+        providerModels = [...activeModels, ...coolingModels];
       }
     }
     for (const modelName of providerModels) {
@@ -255,28 +265,45 @@ async function generateContentWithResilience(options: {
       // Sauter le modèle s'il est en période de cooldown pour quota atteint
       const cooldownUntil = modelCooldowns.get(modelName) || 0;
       if (Date.now() < cooldownUntil) {
-        const remainingMin = Math.ceil((cooldownUntil - Date.now()) / 60000);
-        console.info(`[AI Engine] Modèle "${modelName}" en pause de quota (${remainingMin} min). Passage au modèle suivant.`);
+        const remainingSec = Math.ceil((cooldownUntil - Date.now()) / 1000);
+        console.info(`[AI Engine] Modèle "${modelName}" en pause (${remainingSec}s restantes). Passage au modèle suivant.`);
         continue;
       }
 
-      const attemptTimeout = Math.min(singleTimeout, totalTimeout - elapsed);
+      const attemptTimeout = Math.min(singleTimeout, Math.max(8000, totalTimeout - elapsed));
       const label = provider === 'gemini' ? modelName : `google/${modelName}`;
 
       try {
         console.log(`[AI Engine] ${provider} → "${label}" (timeout: ${attemptTimeout}ms)...`);
-        const call: Promise<{ text: string }> =
+        const executeCall = () =>
           provider === 'gemini'
             ? ai.models
                 .generateContent({ model: modelName, contents: options.contents, config: options.config })
                 .then((r) => ({ text: r?.text || '' }))
             : generateViaGateway(label, options.contents, options.config);
 
-        const response = await promiseWithTimeout<{ text: string }>(
-          call,
-          attemptTimeout,
-          `Délai dépassé (${attemptTimeout}ms) pour le modèle ${label}`
-        );
+        let response: { text: string };
+        try {
+          response = await promiseWithTimeout<{ text: string }>(
+            executeCall(),
+            attemptTimeout,
+            `Délai dépassé (${attemptTimeout}ms) pour le modèle ${label}`
+          );
+        } catch (callErr: any) {
+          const callErrMsg = callErr?.message || String(callErr);
+          // Si surcharge 503 temporaire, tenter un court retry avec backoff de 1 seconde
+          if (/503|high demand|overloaded/i.test(callErrMsg) && (Date.now() - startTime + 8000 < totalTimeout)) {
+            console.info(`[AI Engine] Pic de charge temporaire 503 sur "${label}". Réessai rapide dans 1200ms...`);
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            response = await promiseWithTimeout<{ text: string }>(
+              executeCall(),
+              attemptTimeout,
+              `Délai dépassé (${attemptTimeout}ms) au second essai pour ${label}`
+            );
+          } else {
+            throw callErr;
+          }
+        }
 
         if (response && response.text) {
           console.log(`[AI Engine] Succès "${label}" via ${provider} en ${Date.now() - startTime}ms`);
@@ -298,10 +325,10 @@ async function generateContentWithResilience(options: {
         }
 
         if (isQuota) {
-          let cooldownMs = 60 * 60 * 1000; // 1h par défaut
+          let cooldownMs = 30 * 60 * 1000; // 30 min par défaut
           const matchSeconds = errMsg.match(/retryDelay"?\s*:\s*"?(\d+)s?/i);
           if (matchSeconds) {
-            cooldownMs = (parseInt(matchSeconds[1], 10) + 15) * 1000;
+            cooldownMs = (parseInt(matchSeconds[1], 10) + 10) * 1000;
           } else {
             const matchHours = errMsg.match(/retry in (\d+)h/i);
             if (matchHours) {
@@ -314,16 +341,15 @@ async function generateContentWithResilience(options: {
         }
 
         if (isUnavailable) {
-          modelCooldowns.set(modelName, Date.now() + 2 * 60 * 1000); // Pause de 2 minutes pour surcharge 503
-          console.info(`[AI Engine] Surcharge temporaire pour "${label}" (503). Pause de 2 min. Basculement immédiat vers le modèle suivant.`);
+          modelCooldowns.set(modelName, Date.now() + 30 * 1000); // Pause courte de 30 secondes pour surcharge 503
+          console.info(`[AI Engine] Surcharge temporaire pour "${label}" (503). Pause de 30s. Basculement immédiat vers le modèle suivant.`);
           continue;
         }
 
         if (isAuth) {
-          console.info(`[AI Engine] Clé API ou permissions insuffisantes pour "${label}".`);
-          if (provider === 'gemini') geminiQuotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
-          else gatewayUnavailableUntil = Date.now() + 10 * 60 * 1000;
-          break;
+          modelCooldowns.set(modelName, Date.now() + 60 * 60 * 1000);
+          console.info(`[AI Engine] Permissions insuffisantes ou accès restreint pour "${label}" (403/Auth). Pause de ce modèle. Basculement immédiat vers le modèle suivant.`);
+          continue;
         }
 
         console.info(`[AI Engine] ${provider} "${label}" non disponible (${errMsg.slice(0, 80)}). Essai du modèle suivant...`);
@@ -376,8 +402,8 @@ app.get('/api/ai-status', async (req: express.Request, res: express.Response) =>
     try {
       const { response, modelUsed } = await generateContentWithResilience({
         contents: 'Réponds uniquement par "OK".',
-        singleAttemptTimeoutMs: 8000,
-        totalTimeoutMs: 12000,
+        singleAttemptTimeoutMs: 10000,
+        totalTimeoutMs: 25000,
       });
       status.probe = { ok: true, modelUsed, reply: response.text.slice(0, 40) };
     } catch (err: any) {
@@ -1175,11 +1201,10 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       const { response, modelUsed } = await generateContentWithResilience({
         contents: userPrompt,
         preferredModels: DEFAULT_MODELS,
-        singleAttemptTimeoutMs: 25000,
-        totalTimeoutMs: 40000,
+        singleAttemptTimeoutMs: 20000,
+        totalTimeoutMs: 70000,
         config: {
           systemInstruction: systemPrompt,
-          temperature: 0.2,
           maxOutputTokens: 8192,
           responseMimeType: 'application/json',
           responseSchema: {
