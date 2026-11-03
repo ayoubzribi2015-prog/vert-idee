@@ -6,7 +6,7 @@ async function callGeminiChat(
   apiKey: string,
   model: string,
   systemInstruction: string,
-  contents: Array<{ role: 'user' | 'model'; parts: [{ text: string }] }>
+  contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }>
 ): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
@@ -105,22 +105,25 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
     const contents: Array<{ role: 'user' | 'model'; parts: [{ text: string }] }> = [];
     if (Array.isArray(history)) {
       for (const item of history) {
-        if (!item || typeof item.text !== 'string') continue;
+        if (!item || typeof (item.content ?? item.text) !== 'string') continue;
+        const text = String(item.content ?? item.text).trim();
+        if (!text) continue;
         const role = item.role === 'model' || item.role === 'assistant' ? 'model' : 'user';
-        contents.push({ role, parts: [{ text: item.text }] });
+        contents.push({ role, parts: [{ text }] });
       }
     }
     contents.push({ role: 'user', parts: [{ text: message }] });
 
     const apiKey = env?.GEMINI_API_KEY?.trim();
     let reply: string | null = null;
+    let modelUsed: string | null = null;
 
     if (apiKey) {
       const candidates = (await discoverGeminiModels(apiKey, env?.GEMINI_MODEL)).models;
       for (const model of candidates) {
         try {
           reply = await callGeminiChat(apiKey, model, systemInstruction, contents);
-          if (reply) break;
+          if (reply) { modelUsed = model; break; }
         } catch (chatErr) {
           console.warn(`[Cloudflare Chat] Modèle ${model} échoué :`, chatErr);
         }
@@ -128,15 +131,12 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
     }
 
     if (!reply) {
-      reply = getFallbackReply(message, projectContext);
+      return Response.json({ success: false, error: 'Gemini est indisponible. Aucune réponse de secours déterministe n’a été présentée comme une réponse IA.', code: 'GEMINI_CHAT_UNAVAILABLE' }, { status: 503 });
     }
 
-    return Response.json({ success: true, reply });
+    return Response.json({ success: true, reply, aiMetadata: { provider: 'Google Gemini', model: modelUsed, mode: 'STRICT_IA' } });
   } catch (err: any) {
     console.error('Error in /api/chat:', err);
-    return Response.json({
-      success: true,
-      reply: getFallbackReply('Demande d\'assistance'),
-    });
+    return Response.json({ success: false, error: err?.message || 'Erreur interne du service Gemini.', code: 'GEMINI_CHAT_ERROR' }, { status: 500 });
   }
 };
