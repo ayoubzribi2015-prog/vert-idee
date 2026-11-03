@@ -1,14 +1,14 @@
 // Découverte des modèles Gemini réellement accessibles avec la clé configurée.
 // Partagé par les Pages Functions (chat, extract-file, generate, ai-status).
 
-export const DEFAULT_GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+// Aucun nom de modèle fictif : seuls les modèles confirmés par ListModels sont utilisés.
 
 const LIST_URL = 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export type ModelDiscovery = {
   models: string[];
-  source: 'listModels' | 'default';
+  source: 'listModels' | 'unavailable';
   listModelsStatus: number | null;
   error?: string;
 };
@@ -42,7 +42,7 @@ export async function discoverGeminiModels(apiKey: string, preferred?: string): 
     try {
       const res = await fetch(LIST_URL, { headers: { 'x-goog-api-key': apiKey }, signal: controller.signal });
       if (!res.ok) {
-        base = { models: DEFAULT_GEMINI_MODELS, source: 'default', listModelsStatus: res.status, error: `ListModels HTTP ${res.status}` };
+        base = { models: [], source: 'unavailable', listModelsStatus: res.status, error: `ListModels HTTP ${res.status}` };
       } else {
         const data: any = await res.json();
         const found = ((data?.models as any[]) || [])
@@ -52,10 +52,10 @@ export async function discoverGeminiModels(apiKey: string, preferred?: string): 
           .sort((a, b) => rank(a) - rank(b));
         base = found.length
           ? { models: found.slice(0, 6), source: 'listModels', listModelsStatus: res.status }
-          : { models: DEFAULT_GEMINI_MODELS, source: 'default', listModelsStatus: res.status, error: 'Aucun modèle generateContent accessible avec cette clé' };
+          : { models: [], source: 'unavailable', listModelsStatus: res.status, error: 'Aucun modèle generateContent accessible avec cette clé' };
       }
     } catch (err: any) {
-      base = { models: DEFAULT_GEMINI_MODELS, source: 'default', listModelsStatus: null, error: err?.name === 'AbortError' ? 'ListModels timeout' : 'ListModels injoignable' };
+      base = { models: [], source: 'unavailable', listModelsStatus: null, error: err?.name === 'AbortError' ? 'ListModels timeout' : 'ListModels injoignable' };
     } finally {
       clearTimeout(timer);
     }
@@ -66,7 +66,7 @@ export async function discoverGeminiModels(apiKey: string, preferred?: string): 
   const pref = preferred?.trim() ? clean(preferred.trim()) : '';
   // GEMINI_MODEL passe en premier seulement s'il est accessible (ou si la liste n'a pas pu être lue).
   const models =
-    pref && (base.source === 'default' || base.models.includes(pref))
+    pref && base.source === 'listModels' && base.models.includes(pref)
       ? [pref, ...base.models.filter((m) => m !== pref)]
       : base.models;
   return { ...base, models };
