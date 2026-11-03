@@ -941,8 +941,8 @@ Toute affirmation non sourcée par une donnée explicite du projet est un manque
    - Les scores d'impact DOIVENT ÊTRE CRITIQUEMENT BAS : Score global entre 15 et 32/100, Score environnemental entre 12 et 25/100, Score circularité entre 10 et 22/100.
    - IL EST STRICTEMENT INTERDIT de prétendre que ce projet est "vertueux", "éco-responsable" ou relève de l'"économie circulaire" sans preuves massives (ex: circuit fermé eau ZLD, 100% recyclé certifié, solaire dédié).
    - DÉTAILLE EXPLICITEMENT LES AES MAJEURS ET LES RISQUES CRITIQUES RÉELS (Pollution nappes, poussières PM10, sur-émissions CO2).
-3. PROJETS CONVENTIONNELS OU NUMÉRIQUES : Attribue des notes réalistes, cohérentes et modérées (40 à 65/100 pour l'environnement, valorise le volet social si inclusion/éducation).
-4. VRAIES ÉCO-INNOVATIONS VÉRIFIABLES (Agroécologie régénératrice, biomatériaux compostables, énergies renouvelables certifiées, valorisation circulaire de biodéchets) : Attribue des scores élevés mérités (75 à 90/100) avec justification des gains nets et de la résilience locale (Guide OSS).
+3. PROJETS CONVENTIONNELS : Attribue des notes réalistes, cohérentes et modérées (40 à 70/100 pour l'environnement). Si le projet présente des pratiques traditionnelles (ex: huilerie), il doit être évalué sur sa gestion réelle des déchets (margines) et de l'énergie, sans surévaluer le caractère 'traditionnel' comme une innovation écologique intrinsèque.
+4. VRAIES ÉCO-INNOVATIONS VÉRIFIABLES (Agroécologie régénératrice, biomatériaux compostables, énergies renouvelables certifiées, valorisation circulaire de biodéchets) : Attribue des scores élevés (75 à 90/100) UNIQUEMENT si le projet démontre une rupture écologique significative et mesurable, avec justification des gains nets et de la résilience locale (Guide OSS).
 
 Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT les 8 sections officielles :
 1. Synthèse du projet : Scores d'impacts rigoureusement calibrés (sévères si polluant), avis collégial des experts (STRICTEMENT LIMITÉ À 5 LIGNES MAX / ~40-50 mots directement après le nom du projet) et vision de transformation.
