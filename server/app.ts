@@ -118,8 +118,8 @@ async function callGeminiStrict(options: {
     );
   }
 
-  const modelsToTry = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-1.5-flash'];
-  const timeoutMs = options.timeoutMs || 180000; // 3 minutes
+  const modelsToTry = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.6', 'gemini-3.6-flash', 'gemini-3.1-flash-lite'];
+  const timeoutMs = options.timeoutMs || 300000; // 5 minutes
 
   let lastError: any = null;
 
@@ -151,7 +151,8 @@ async function callGeminiStrict(options: {
     } catch (err: any) {
       if (timer) clearTimeout(timer);
       lastError = err;
-      console.info(`[Mode STRICT_IA] Modèle ${modelName} indisponible (${err?.message || err}). Essai du modèle suivant...`);
+      console.error(`[Mode STRICT_IA] Modèle ${modelName} a échoué:`, err);
+      console.info(`[Mode STRICT_IA] Essai du modèle suivant...`);
     }
   }
 
@@ -945,6 +946,7 @@ Toute affirmation non sourcée par une donnée explicite du projet est un manque
 
 Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT les 8 sections officielles :
 1. Synthèse du projet : Scores d'impacts rigoureusement calibrés (sévères si polluant), avis collégial des experts (STRICTEMENT LIMITÉ À 5 LIGNES MAX / ~40-50 mots directement après le nom du projet) et vision de transformation.
+   - NOTE IMPORTANTE SUR LE 'SCORE ENVIRONNEMENTAL GLOBAL' : Ce score DOIT intégrer l'évaluation de l'IA elle-même si elle est au cœur du projet. Le Collège des Experts doit justifier si l'IA utilisée est frugale (modèle adapté, usage nécessaire, hébergement sobre) et si le bénéfice environnemental démontrable du projet dépasse l'empreinte carbone et les ressources consommées par l'entraînement et l'inférence de l'IA (principe du bilan net positif). L'usage de l'IA sans besoin précis ou sans gain environnemental supérieur aux coûts (énergie, eau, métaux) doit réduire ce score.
 2. Aspects & impacts environnementaux : Analyse approfondie des aspects et impacts environnementaux (directs et indirects, positifs et négatifs) sur les écosystèmes, l'air, l'eau, le climat, les sols et la biodiversité. Évaluation normée des AES selon la matrice ISO 14001 (F, G, S, M), quantification des impacts par phase du cycle de vie (ACV ISO 14040/14044), écotoxicité (ERA), flux de matière (MFA) et leviers d'atténuation d'impacts.
 3. Aspects & impacts sociaux et sociétaux : Analyse approfondie des impacts sociaux et sociétaux directs et indirects : santé et sécurité des travailleurs, santé publique et riverains (exposition poussières PM, produits toxiques, bruit), création d'emplois locaux pérennes, retombées communautaires, gouvernance partagée éthique (ISO 26000) et accompagnement vers une transition juste.
 4. Intégration de l'entrepreneuriat vert (Pilôté par l'Expert Senior en Entrepreneuriat Vert & Modèles Circulaires - Master 2/Doctorat, >10 ans d'exp.) : Analyse économique critique, viabilité financière, ingénierie d'accès aux financements verts (ANME, SwitchMed, BERD, FODEP, fonds climat), suivi-évaluation M&E des KPI d'impacts, et structuration des modèles de rupture circulaires (normes ISO 59004:2024 / ISO 59020 / Cadre 9R / EFC / CSRD ESRS E5).
