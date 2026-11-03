@@ -95,21 +95,126 @@ async function withFirestoreTimeout<T>(operation: () => Promise<T>, timeoutMs = 
   }
 }
 
-// Endpoint proxy vers Gemini (Remplace l'usage direct du SDK @google/genai)
-app.post('/api/generate', async (req: express.Request, res: express.Response) => {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) {
-    return res.status(500).json({ error: 'API key not configured' });
+// Utilitaires de normalisation stricts pour l'API REST v1beta de Google Gemini
+export function formatContentsForGeminiRest(raw: any): Array<{ role?: string; parts: any[] }> {
+  if (!raw) return [{ role: 'user', parts: [{ text: '' }] }];
+
+  if (typeof raw === 'string') {
+    return [{ role: 'user', parts: [{ text: raw }] }];
   }
 
-  const { model, contents, systemInstruction, generationConfig } = req.body;
-  if (!contents) {
-    return res.status(400).json({ error: 'Field "contents" is required' });
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    if (Array.isArray(raw.parts)) {
+      return [{ role: raw.role || 'user', parts: raw.parts }];
+    }
+    if (raw.text) {
+      return [{ role: raw.role || 'user', parts: [{ text: raw.text }] }];
+    }
+    if (raw.inlineData) {
+      return [{ role: 'user', parts: [{ inlineData: raw.inlineData }] }];
+    }
   }
 
-  const payload: any = { contents };
-  if (systemInstruction) payload.systemInstruction = systemInstruction;
-  if (generationConfig) payload.generationConfig = generationConfig;
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return [{ role: 'user', parts: [{ text: '' }] }];
+
+    const isContentArray = raw.every(
+      (item) => item && typeof item === 'object' && Array.isArray(item.parts)
+    );
+    if (isContentArray) {
+      return raw.map((item) => ({
+        role: item.role || 'user',
+        parts: item.parts.map((p: any) => (typeof p === 'string' ? { text: p } : p)),
+      }));
+    }
+
+    const isPartsArray = raw.every(
+      (item) =>
+        typeof item === 'string' ||
+        (item && (item.text !== undefined || item.inlineData !== undefined || item.functionCall || item.functionResponse))
+    );
+    if (isPartsArray) {
+      const parts = raw.map((item) => (typeof item === 'string' ? { text: item } : item));
+      return [{ role: 'user', parts }];
+    }
+
+    return raw.map((item) => {
+      if (typeof item === 'string') {
+        return { role: 'user', parts: [{ text: item }] };
+      }
+      if (item && Array.isArray(item.parts)) {
+        return { role: item.role || 'user', parts: item.parts };
+      }
+      if (item && item.text) {
+        return { role: item.role || 'user', parts: [{ text: item.text }] };
+      }
+      if (item && item.inlineData) {
+        return { role: 'user', parts: [{ inlineData: item.inlineData }] };
+      }
+      return { role: 'user', parts: [item] };
+    });
+  }
+
+  return [{ role: 'user', parts: [{ text: String(raw) }] }];
+}
+
+export function formatSystemInstructionForGeminiRest(raw: any): { role?: string; parts: Array<{ text: string }> } | undefined {
+  if (!raw) return undefined;
+  if (typeof raw === 'string') {
+    if (!raw.trim()) return undefined;
+    return { parts: [{ text: raw }] };
+  }
+  if (typeof raw === 'object') {
+    if (Array.isArray(raw.parts)) {
+      return raw;
+    }
+    if (raw.text) {
+      return { parts: [{ text: raw.text }] };
+    }
+  }
+  return { parts: [{ text: String(raw) }] };
+}
+
+export function extractTextFromGeminiResponse(data: any): string | null {
+  if (!data) return null;
+  const candidate = data.candidates?.[0];
+  if (!candidate?.content?.parts) return null;
+  const parts = candidate.content.parts;
+  const textParts = parts.filter((p: any) => p && typeof p.text === 'string' && !p.thought);
+  if (textParts.length > 0) {
+    return textParts.map((p: any) => p.text).join('');
+  }
+  const anyText = parts.map((p: any) => p?.text || '').join('');
+  return anyText.length > 0 ? anyText : null;
+}
+
+export async function executeGenerate({
+  apiKey,
+  model,
+  contents,
+  systemInstruction,
+  generationConfig,
+  signal,
+}: {
+  apiKey: string;
+  model: string;
+  contents: any;
+  systemInstruction?: any;
+  generationConfig?: any;
+  signal?: AbortSignal;
+}): Promise<{ ok: boolean; status: number; data: any; text?: string; error?: string }> {
+  const formattedContents = formatContentsForGeminiRest(contents);
+  const formattedSystem = formatSystemInstructionForGeminiRest(systemInstruction);
+
+  let cleanConfig: any = undefined;
+  if (generationConfig && typeof generationConfig === 'object') {
+    const { systemInstruction: _, ...rest } = generationConfig;
+    if (Object.keys(rest).length > 0) cleanConfig = rest;
+  }
+
+  const payload: any = { contents: formattedContents };
+  if (formattedSystem) payload.systemInstruction = formattedSystem;
+  if (cleanConfig) payload.generationConfig = cleanConfig;
 
   try {
     const upstream = await fetch(
@@ -118,17 +223,55 @@ app.post('/api/generate', async (req: express.Request, res: express.Response) =>
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify(payload),
+        signal,
       }
     );
-    const data = await upstream.json();
-    res.status(upstream.status).json(data);
+
+    const data = await upstream.json().catch(() => ({}));
+
+    if (upstream.ok) {
+      const text = extractTextFromGeminiResponse(data);
+      return { ok: true, status: upstream.status, data, text: text || '' };
+    }
+
+    const errorMsg = data?.error?.message || `Erreur HTTP ${upstream.status}`;
+    return { ok: false, status: upstream.status, data, error: errorMsg };
   } catch (err: any) {
-    res.status(502).json({ error: err.message });
+    return {
+      ok: false,
+      status: err?.name === 'AbortError' ? 504 : 502,
+      data: null,
+      error: err?.message || 'Erreur réseau vers Gemini',
+    };
   }
+}
+
+// Endpoint proxy vers Gemini (POST /api/generate)
+app.post('/api/generate', async (req: express.Request, res: express.Response) => {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY non configurée' });
+  }
+
+  const { model, contents, systemInstruction, generationConfig } = req.body;
+  if (!contents) {
+    return res.status(400).json({ error: 'Champ "contents" obligatoire' });
+  }
+
+  const modelName = model || 'gemini-3.8-flash';
+  const result = await executeGenerate({
+    apiKey,
+    model: modelName,
+    contents,
+    systemInstruction,
+    generationConfig,
+  });
+
+  return res.status(result.status).json(result.data || { error: result.error });
 });
 
 /**
- * [Mode STRICT_IA] Appel proxy de l'IA sans résilience multi-modèles ni fallback.
+ * [Mode STRICT_IA] Appel de l'IA sans résilience multi-modèles superflue ni fallback.
  * L'analyse échoue explicitement si l'IA ne répond pas ou si la clé est absente.
  */
 async function callGeminiStrict(options: {
@@ -139,55 +282,52 @@ async function callGeminiStrict(options: {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
-      "[Mode STRICT_IA] Échec du diagnostic : Clé GEMINI_API_KEY non configurée. Aucun fallback autorisé."
+      "[Mode STRICT_IA] Échec du diagnostic : Clé GEMINI_API_KEY non configurée. Conformément au Mode STRICT_IA, aucun fallback n'est autorisé."
     );
   }
 
   const discovery = await discoverGeminiModels(apiKey, process.env.GEMINI_MODEL);
-  const modelsToTry = discovery.models;
-  const timeoutMs = options.timeoutMs || 300000; // 5 minutes
+  const modelsToTry = (discovery.models && discovery.models.length > 0)
+    ? discovery.models
+    : ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
 
+  const timeoutMs = options.timeoutMs || 300000; // 5 minutes
   let lastError: any = null;
 
   for (const modelName of modelsToTry) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-      const response = await fetch('http://localhost:3000/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: modelName,
-          contents: options.contents,
-          systemInstruction: options.config?.systemInstruction,
-          generationConfig: {
-            ...options.config,
-            systemInstruction: undefined, // déjà passé au-dessus
-          }
-        }),
+    try {
+      const result = await executeGenerate({
+        apiKey,
+        model: modelName,
+        contents: options.contents,
+        systemInstruction: options.config?.systemInstruction,
+        generationConfig: options.config,
         signal: controller.signal,
       });
 
       clearTimeout(timer);
 
-      const result = await response.json();
-      
-      if (response.ok && result?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      if (result.ok && result.text) {
         return {
-          response: { text: result.candidates[0].content.parts[0].text },
+          response: { text: result.text },
           modelUsed: modelName,
         };
       }
-      lastError = new Error(result?.error?.message || `Erreur HTTP ${response.status}`);
+
+      lastError = new Error(result.error || `Erreur HTTP ${result.status}`);
+      console.error(`[Mode STRICT_IA] Modèle ${modelName} a échoué: ${lastError.message}`);
     } catch (err: any) {
+      clearTimeout(timer);
       lastError = err;
-      console.error(`[Mode STRICT_IA] Modèle ${modelName} a échoué:`, err);
+      console.error(`[Mode STRICT_IA] Modèle ${modelName} exception:`, err);
     }
   }
 
   throw new Error(
-    `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${lastError?.message || 'Erreur inconnue'}). Aucun fallback autorisé.`
+    `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${lastError?.message || 'Erreur inconnue'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`
   );
 }
 
@@ -812,7 +952,7 @@ FORMAT DE RÉPONSE STRICT (JSON valide uniquement) :
 }`;
 
         const { response: aiRes } = await callGeminiStrict({
-          contents: singlePassPrompt,
+          contents: { parts: [{ text: singlePassPrompt }] },
           config: {
             temperature: 0.1,
             responseMimeType: 'application/json',
@@ -1514,7 +1654,7 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
 `;
 
     // Build contents from history
-    const contents: Array<{ role: 'user' | 'model'; parts: [{ text: string }] }> = [];
+    const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
 
     if (Array.isArray(history)) {
       for (const item of history.slice(-8)) {

@@ -19,6 +19,11 @@ const clean = (name: string) => name.replace(/^models\//, '');
 
 // Les modèles « flash » récents d'abord : rapides et adaptés au JSON et au chat.
 function rank(name: string): number {
+  if (name.includes('gemini-3.8-flash')) return 1;
+  if (name.includes('gemini-3.5-flash-lite')) return 2;
+  if (name.includes('gemini-3.6') && !name.includes('flash')) return 3;
+  if (name.includes('gemini-3.6-flash')) return 4;
+  if (name.includes('gemini-3.1-flash-lite')) return 5;
   if (!/gemini/i.test(name)) return 99;
   if (/(image|tts|embedding|aqa|live|audio|vision|robotics|computer|thinking-exp)/i.test(name)) return 90;
   let score = 10;

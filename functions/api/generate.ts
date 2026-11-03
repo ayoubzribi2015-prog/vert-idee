@@ -38,13 +38,35 @@ export const onRequestPost = async ({ request, env }: Context): Promise<Response
     return respond({ error: 'Invalid JSON body' }, 400);
   }
 
-  if (!Array.isArray(body?.contents) || body.contents.length === 0) {
+  if (!body?.contents) {
     return respond({ error: 'Field "contents" is required' }, 400);
   }
 
+  const formatContents = (raw: any): any[] => {
+    if (typeof raw === 'string') return [{ role: 'user', parts: [{ text: raw }] }];
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) return [{ role: 'user', parts: [{ text: '' }] }];
+      if (raw.every((i) => i && typeof i === 'object' && Array.isArray(i.parts))) return raw;
+      if (raw.every((i) => typeof i === 'string' || (i && (i.text !== undefined || i.inlineData !== undefined)))) {
+        return [{ role: 'user', parts: raw.map((i) => (typeof i === 'string' ? { text: i } : i)) }];
+      }
+      return raw.map((i) => (typeof i === 'string' ? { role: 'user', parts: [{ text: i }] } : i));
+    }
+    if (typeof raw === 'object' && Array.isArray(raw.parts)) return [raw];
+    return [{ role: 'user', parts: [{ text: String(raw) }] }];
+  };
+
+  const formatSystem = (raw: any): any => {
+    if (!raw) return undefined;
+    if (typeof raw === 'string') return { parts: [{ text: raw }] };
+    if (typeof raw === 'object' && Array.isArray(raw.parts)) return raw;
+    return { parts: [{ text: String(raw) }] };
+  };
+
   // Seuls ces champs sont relayés ; le modèle est choisi côté serveur uniquement.
-  const payload: Record<string, unknown> = { contents: body.contents };
-  if (body.systemInstruction) payload.systemInstruction = body.systemInstruction;
+  const payload: Record<string, unknown> = { contents: formatContents(body.contents) };
+  const systemInstruction = formatSystem(body.systemInstruction);
+  if (systemInstruction) payload.systemInstruction = systemInstruction;
   if (body.generationConfig) payload.generationConfig = body.generationConfig;
 
   const models = (await discoverGeminiModels(apiKey, env.GEMINI_MODEL)).models;

@@ -28,9 +28,7 @@ export const onRequestGet = async ({ request, env }: Context): Promise<Response>
 
   if (new URL(request.url).searchParams.get('probe') === '1') {
     const model = discovery.models[0];
-    if (!model) {
-      out.probe = { ok: false, message: discovery.error || 'Aucun modèle Gemini accessible via ListModels.' };
-    } else try {
+    try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
