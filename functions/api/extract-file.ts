@@ -1,3 +1,4 @@
+import { discoverGeminiModels } from '../../src/utils/geminiModels.ts';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { unzipSync, strFromU8 } from 'fflate';
 
@@ -537,12 +538,7 @@ async function synthesizeWithFallbacks(
   apiKey: string,
   preferredModel?: string
 ): Promise<Summary | null> {
-  const models = [
-    ...(preferredModel ? [preferredModel.replace(/^models\//, '')] : []),
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.8-flash',
-  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
+  const models = (await discoverGeminiModels(apiKey, preferredModel)).models;
 
   const multimodalFile = uploads.find(
     (u) =>

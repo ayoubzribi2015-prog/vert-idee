@@ -1,6 +1,6 @@
-type Context = { request: Request; env: { GEMINI_API_KEY?: string; GEMINI_MODEL?: string } };
+import { discoverGeminiModels } from '../../src/utils/geminiModels.ts';
 
-const defaultModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+type Context = { request: Request; env: { GEMINI_API_KEY?: string; GEMINI_MODEL?: string } };
 
 async function callGeminiChat(
   apiKey: string,
@@ -116,7 +116,7 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
     let reply: string | null = null;
 
     if (apiKey) {
-      const candidates = env?.GEMINI_MODEL ? [env.GEMINI_MODEL, ...defaultModels] : defaultModels;
+      const candidates = (await discoverGeminiModels(apiKey, env?.GEMINI_MODEL)).models;
       for (const model of candidates) {
         try {
           reply = await callGeminiChat(apiKey, model, systemInstruction, contents);
