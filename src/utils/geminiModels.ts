@@ -1,14 +1,25 @@
-// Découverte des modèles Gemini réellement accessibles avec la clé configurée.
-// Partagé par les Pages Functions (chat, extract-file, generate, ai-status).
+// Découverte et hiérarchisation stricte des modèles Gemini selon le classement imposé :
+// 1. gemini-3.8-flash
+// 2. gemini-3.5-flash-lite
+// 3. gemini-3.6
+// 4. gemini-3.6-flash
+// 5. gemini-3.1-flash-lite
+// On commence avec 1. gemini-3.8-flash puis on passe au modèle suivant uniquement si le modèle actuel rencontre un problème.
 
-// Aucun nom de modèle fictif : seuls les modèles confirmés par ListModels sont utilisés.
+export const ORDERED_GEMINI_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6',
+  'gemini-3.6-flash',
+  'gemini-3.1-flash-lite',
+] as const;
 
 const LIST_URL = 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export type ModelDiscovery = {
   models: string[];
-  source: 'listModels' | 'unavailable';
+  source: 'listModels' | 'default';
   listModelsStatus: number | null;
   error?: string;
 };
@@ -17,22 +28,14 @@ let cache: { key: string; at: number; value: ModelDiscovery } | null = null;
 
 const clean = (name: string) => name.replace(/^models\//, '');
 
-// Les modèles « flash » récents d'abord : rapides et adaptés au JSON et au chat.
-function rank(name: string): number {
-  if (name.includes('gemini-3.8-flash')) return 1;
-  if (name.includes('gemini-3.5-flash-lite')) return 2;
-  if (name.includes('gemini-3.6') && !name.includes('flash')) return 3;
-  if (name.includes('gemini-3.6-flash')) return 4;
-  if (name.includes('gemini-3.1-flash-lite')) return 5;
-  if (!/gemini/i.test(name)) return 99;
-  if (/(image|tts|embedding|aqa|live|audio|vision|robotics|computer|thinking-exp)/i.test(name)) return 90;
-  let score = 10;
-  if (/flash/i.test(name)) score -= 5;
-  if (/lite/i.test(name)) score += 1;
-  if (/(preview|exp)/i.test(name)) score += 2;
-  const version = name.match(/gemini-(\d+(?:\.\d+)?)/i);
-  if (version) score -= Math.min(parseFloat(version[1]), 9) / 10;
-  return score;
+function getModelRank(name: string): number {
+  const lower = name.toLowerCase();
+  if (lower === 'gemini-3.8-flash' || lower.includes('gemini-3.8-flash')) return 1;
+  if (lower === 'gemini-3.5-flash-lite' || lower.includes('gemini-3.5-flash-lite')) return 2;
+  if (lower === 'gemini-3.6' || (lower.includes('gemini-3.6') && !lower.includes('flash'))) return 3;
+  if (lower === 'gemini-3.6-flash' || lower.includes('gemini-3.6-flash')) return 4;
+  if (lower === 'gemini-3.1-flash-lite' || lower.includes('gemini-3.1-flash-lite')) return 5;
+  return 99;
 }
 
 export async function discoverGeminiModels(apiKey: string, preferred?: string): Promise<ModelDiscovery> {
@@ -47,32 +50,63 @@ export async function discoverGeminiModels(apiKey: string, preferred?: string): 
     try {
       const res = await fetch(LIST_URL, { headers: { 'x-goog-api-key': apiKey }, signal: controller.signal });
       if (!res.ok) {
-        base = { models: [], source: 'unavailable', listModelsStatus: res.status, error: `ListModels HTTP ${res.status}` };
+        base = {
+          models: [...ORDERED_GEMINI_MODELS],
+          source: 'default',
+          listModelsStatus: res.status,
+          error: `ListModels HTTP ${res.status}`,
+        };
       } else {
         const data: any = await res.json();
         const found = ((data?.models as any[]) || [])
           .filter((m) => Array.isArray(m?.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
           .map((m) => clean(String(m.name || '')))
-          .filter((n) => n && rank(n) < 90)
-          .sort((a, b) => rank(a) - rank(b));
-        base = found.length
-          ? { models: found.slice(0, 6), source: 'listModels', listModelsStatus: res.status }
-          : { models: [], source: 'unavailable', listModelsStatus: res.status, error: 'Aucun modèle generateContent accessible avec cette clé' };
+          .filter((n) => n && getModelRank(n) < 90)
+          .sort((a, b) => getModelRank(a) - getModelRank(b));
+
+        // Si des modèles de la hiérarchie ont été validés via ListModels, on les utilise selon le classement exact
+        // Sinon, on garantit les 5 modèles imposés dans l'ordre strict
+        const models = found.length > 0 ? found : [...ORDERED_GEMINI_MODELS];
+        base = {
+          models,
+          source: found.length > 0 ? 'listModels' : 'default',
+          listModelsStatus: res.status,
+        };
       }
     } catch (err: any) {
-      base = { models: [], source: 'unavailable', listModelsStatus: null, error: err?.name === 'AbortError' ? 'ListModels timeout' : 'ListModels injoignable' };
+      base = {
+        models: [...ORDERED_GEMINI_MODELS],
+        source: 'default',
+        listModelsStatus: null,
+        error: err?.name === 'AbortError' ? 'ListModels timeout' : 'ListModels injoignable',
+      };
     } finally {
       clearTimeout(timer);
     }
-    // Les échecs ne sont pas mis en cache longtemps : on réessaie vite.
-    cache = { key: apiKey, at: base.source === 'listModels' ? now : now - CACHE_TTL_MS + 30_000, value: base };
+    cache = { key: apiKey, at: now, value: base };
   }
 
-  const pref = preferred?.trim() ? clean(preferred.trim()) : '';
-  // GEMINI_MODEL passe en premier seulement s'il est accessible (ou si la liste n'a pas pu être lue).
-  const models =
-    pref && base.source === 'listModels' && base.models.includes(pref)
-      ? [pref, ...base.models.filter((m) => m !== pref)]
-      : base.models;
-  return { ...base, models };
+  // Toujours s'assurer que les modèles sont dans l'ordre exact demandé :
+  // 1. gemini-3.8-flash, 2. gemini-3.5-flash-lite, 3. gemini-3.6, 4. gemini-3.6-flash, 5. gemini-3.1-flash-lite
+  const orderedList = [...ORDERED_GEMINI_MODELS];
+  const finalModels: string[] = [];
+
+  for (const target of orderedList) {
+    // Si la liste découverte contient ce modèle (ou un alias), on le place
+    const match = base.models.find((m) => m === target || m.includes(target));
+    if (match && !finalModels.includes(match)) {
+      finalModels.push(match);
+    } else if (!finalModels.includes(target)) {
+      finalModels.push(target);
+    }
+  }
+
+  // Ajouter d'éventuels autres modèles découverts à la fin
+  for (const m of base.models) {
+    if (!finalModels.includes(m)) {
+      finalModels.push(m);
+    }
+  }
+
+  return { ...base, models: finalModels };
 }

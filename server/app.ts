@@ -1,4 +1,4 @@
-import { discoverGeminiModels } from '../src/utils/geminiModels';
+import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../src/utils/geminiModels';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -289,7 +289,7 @@ async function callGeminiStrict(options: {
   const discovery = await discoverGeminiModels(apiKey, process.env.GEMINI_MODEL);
   const modelsToTry = (discovery.models && discovery.models.length > 0)
     ? discovery.models
-    : ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+    : [...ORDERED_GEMINI_MODELS];
 
   const timeoutMs = options.timeoutMs || 300000; // 5 minutes
   let lastError: any = null;
@@ -299,6 +299,7 @@ async function callGeminiStrict(options: {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      console.log(`[Mode STRICT_IA] Tentative avec le modèle : ${modelName}`);
       const result = await executeGenerate({
         apiKey,
         model: modelName,
@@ -311,6 +312,7 @@ async function callGeminiStrict(options: {
       clearTimeout(timer);
 
       if (result.ok && result.text) {
+        console.log(`[Mode STRICT_IA] Succès avec le modèle : ${modelName}`);
         return {
           response: { text: result.text },
           modelUsed: modelName,
@@ -318,11 +320,11 @@ async function callGeminiStrict(options: {
       }
 
       lastError = new Error(result.error || `Erreur HTTP ${result.status}`);
-      console.error(`[Mode STRICT_IA] Modèle ${modelName} a échoué: ${lastError.message}`);
+      console.warn(`[Mode STRICT_IA] Le modèle ${modelName} a rencontré un problème (${lastError.message}). Passage au modèle suivant dans le classement...`);
     } catch (err: any) {
       clearTimeout(timer);
       lastError = err;
-      console.error(`[Mode STRICT_IA] Modèle ${modelName} exception:`, err);
+      console.warn(`[Mode STRICT_IA] Le modèle ${modelName} a échoué (${err?.message}). Passage au modèle suivant dans le classement...`);
     }
   }
 
@@ -366,8 +368,11 @@ async function saveProjectToFirestore(project: any): Promise<void> {
 }
 
 app.get('/api/ai-status', async (req: express.Request, res: express.Response) => {
+  const apiKey = process.env.GEMINI_API_KEY?.trim() || '';
+  const discovery = apiKey ? await discoverGeminiModels(apiKey, process.env.GEMINI_MODEL) : null;
   const status: Record<string, any> = {
     geminiKeyConfigured: hasGeminiKey(),
+    models: discovery?.models || [...ORDERED_GEMINI_MODELS],
   };
   if (req.query.probe === '1') {
     try {
@@ -910,11 +915,10 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
           .map((f, i) => `=== DOCUMENT ${i + 1} SUR ${extractedFiles.length} : ${f.filename} ===\n${f.text}`)
           .join('\n\n');
 
-    // Analyse locale heuristique de référence (secours immédiat garanti à 0ms)
-    const fallbackData = extractRichDescriptionFallback(combinedSourceText, extractedFiles[0].filename);
-    let finalDescription = fallbackData.richDescription;
-    let suggestedTitle = fallbackData.suggestedTitle;
-    let suggestedLocation = fallbackData.suggestedLocation;
+    // En Mode STRICT_IA : La synthèse en 3 piliers doit impérativement provenir du modèle IA.
+    let finalDescription = '';
+    let suggestedTitle = '';
+    let suggestedLocation = '';
     let isAIEnhanced = false;
 
     // Préparation pour l'IA (jusqu'à 32 000 caractères)
@@ -928,9 +932,8 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
     }
 
     if (combinedSourceText.length > 50) {
-      try {
-        // --- PASSE UNIQUE OPTIMISÉE : Extraction, filtrage et structuration directe en 3 piliers ---
-        const singlePassPrompt = `Tu es un expert en analyse de projets industriels, environnementaux et économiques.
+      // --- PASSE UNIQUE OPTIMISÉE : Extraction, filtrage et structuration directe en 3 piliers par l'IA ---
+      const singlePassPrompt = `Tu es un expert en analyse de projets industriels, environnementaux et économiques.
 À partir des documents importés (${fileLabels}), extrais les informations utiles (en ignorant tables des matières, index, numéros de page, en-têtes et métadonnées) et synthétise directement une description complète et professionnelle selon les 3 rubriques obligatoires.
 
 CONSIGNES STRICTES DE RÉDACTION :
@@ -951,49 +954,54 @@ FORMAT DE RÉPONSE STRICT (JSON valide uniquement) :
   "richDescription": "■ 1. Vue d'ensemble du projet & Problématique adressée\\n...\\n\\n■ 2. Solution technique, intrants & Procédés sobres\\n...\\n\\n■ 3. Proposition de valeur & Modèle circulaire\\n..."
 }`;
 
-        const { response: aiRes } = await callGeminiStrict({
-          contents: { parts: [{ text: singlePassPrompt }] },
-          config: {
-            temperature: 0.1,
-            responseMimeType: 'application/json',
-          },
-          timeoutMs: 60000,
-        });
+      const { response: aiRes } = await callGeminiStrict({
+        contents: { parts: [{ text: singlePassPrompt }] },
+        config: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+        },
+        timeoutMs: 60000,
+      });
 
-        if (aiRes && aiRes.text) {
+      if (aiRes && aiRes.text) {
+        try {
+          const parsed = JSON.parse(aiRes.text);
+          if (parsed.richDescription && parsed.richDescription.trim().length > 60) {
+            finalDescription = parsed.richDescription.trim();
+            isAIEnhanced = true;
+          }
+          if (parsed.suggestedTitle && parsed.suggestedTitle.trim()) {
+            suggestedTitle = parsed.suggestedTitle.trim();
+          }
+          if (parsed.suggestedLocation && parsed.suggestedLocation.trim()) {
+            suggestedLocation = parsed.suggestedLocation.trim();
+          }
+        } catch (jsonErr) {
+          const cleanText = aiRes.text.replace(/^```json\s*|\s*```$/g, '').trim();
           try {
-            const parsed = JSON.parse(aiRes.text);
-            if (parsed.richDescription && parsed.richDescription.trim().length > 60) {
-              finalDescription = parsed.richDescription.trim();
+            const retryParsed = JSON.parse(cleanText);
+            if (retryParsed.richDescription) {
+              finalDescription = retryParsed.richDescription.trim();
               isAIEnhanced = true;
             }
-            if (parsed.suggestedTitle && parsed.suggestedTitle.trim()) {
-              suggestedTitle = parsed.suggestedTitle.trim();
-            }
-            if (parsed.suggestedLocation && parsed.suggestedLocation.trim()) {
-              suggestedLocation = parsed.suggestedLocation.trim();
-            }
-          } catch (jsonErr) {
-            const cleanText = aiRes.text.replace(/^```json\s*|\s*```$/g, '').trim();
-            try {
-              const retryParsed = JSON.parse(cleanText);
-              if (retryParsed.richDescription) {
-                finalDescription = retryParsed.richDescription.trim();
-                isAIEnhanced = true;
-              }
-              if (retryParsed.suggestedTitle) suggestedTitle = retryParsed.suggestedTitle.trim();
-              if (retryParsed.suggestedLocation) suggestedLocation = retryParsed.suggestedLocation.trim();
-            } catch {
-              if (cleanText.length > 80) {
-                finalDescription = cleanText;
-                isAIEnhanced = true;
-              }
+            if (retryParsed.suggestedTitle) suggestedTitle = retryParsed.suggestedTitle.trim();
+            if (retryParsed.suggestedLocation) suggestedLocation = retryParsed.suggestedLocation.trim();
+          } catch {
+            if (cleanText.length > 80) {
+              finalDescription = cleanText;
+              isAIEnhanced = true;
             }
           }
         }
-      } catch (sumErr: any) {
-        console.info('[File Extract] Utilisation de l\'analyse heuristique locale (secours rapide) :', sumErr?.message);
       }
+    }
+
+    if (!isAIEnhanced || !finalDescription) {
+      res.status(503).json({
+        success: false,
+        error: `[Mode STRICT_IA] Échec de la synthèse documentaire : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`,
+      });
+      return;
     }
 
     // Mise en forme claire et aérée avec double saut de ligne entre les 3 piliers
@@ -1009,24 +1017,15 @@ FORMAT DE RÉPONSE STRICT (JSON valide uniquement) :
       rawFullText: combinedSourceText,
       suggestedTitle,
       suggestedLocation,
-      isAIEnhanced,
+      isAIEnhanced: true,
       processedFilesCount: extractedFiles.length,
       charCount: finalDescription.length,
     });
   } catch (err: any) {
-    console.error('Error in /api/extract-file (recovered via fallback):', err);
-    const rawFiles = Array.isArray(req.body?.files) ? req.body.files : [];
-    const fallbackText = rawFiles.map((f: any) => f.localText || '').filter(Boolean).join('\n\n') || 'Document importé pris en compte pour l\'analyse environnementale.';
-    res.json({
-      success: true,
-      filename: 'Document importé',
-      extractedText: `■ 1. Vue d'ensemble du projet & Problématique adressée\nDocument technique importé.\n\n■ 2. Solution technique, intrants & Procédés sobres\n${fallbackText.slice(0, 2000)}\n\n■ 3. Proposition de valeur & Modèle circulaire\nModèle d'entrepreneuriat vert et d'économie circulaire.`,
-      rawFullText: fallbackText,
-      suggestedTitle: 'Projet d\'Entrepreneuriat Vert',
-      suggestedLocation: 'Tunisie',
-      isAIEnhanced: false,
-      processedFilesCount: rawFiles.length || 1,
-      charCount: fallbackText.length,
+    console.error('[Mode STRICT_IA] Error in /api/extract-file:', err);
+    res.status(503).json({
+      success: false,
+      error: `[Mode STRICT_IA] Échec du traitement documentaire : ${err?.message || 'Le modèle d\'intelligence artificielle est indisponible'}. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`,
     });
   }
 });

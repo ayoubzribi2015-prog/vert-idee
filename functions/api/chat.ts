@@ -128,15 +128,18 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
     }
 
     if (!reply) {
-      reply = getFallbackReply(message, projectContext);
+      return Response.json({
+        success: false,
+        error: `[Mode STRICT_IA] L'assistant n'a pas pu répondre : Le modèle IA est indisponible. Conformément au Mode STRICT_IA, aucun fallback n'est autorisé.`,
+      }, { status: 503 });
     }
 
     return Response.json({ success: true, reply });
   } catch (err: any) {
-    console.error('Error in /api/chat:', err);
+    console.error('[Mode STRICT_IA] Error in /api/chat:', err);
     return Response.json({
-      success: true,
-      reply: getFallbackReply('Demande d\'assistance'),
-    });
+      success: false,
+      error: `[Mode STRICT_IA] L'assistant n'a pas pu répondre : ${err?.message || 'Erreur IA'}. Conformément au Mode STRICT_IA, aucun fallback n'est autorisé.`,
+    }, { status: 503 });
   }
 };

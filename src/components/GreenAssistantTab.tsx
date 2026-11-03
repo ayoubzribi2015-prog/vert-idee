@@ -77,23 +77,25 @@ export const GreenAssistantTab: React.FC<GreenAssistantTabProps> = ({ project })
         });
 
         const raw = await res.text();
-        if (res.ok && raw.trim()) {
+        if (raw.trim()) {
           data = JSON.parse(raw);
         }
-      } catch (fetchErr) {
-        console.warn('Chat API fetch error:', fetchErr);
+        if (!res.ok) {
+          throw new Error(data?.error || `Erreur serveur (${res.status})`);
+        }
+      } catch (fetchErr: any) {
+        throw fetchErr;
       }
 
       if (data && data.success && data.reply) {
         setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
       } else {
-        const fallbackReply = generateClientChatReply(userMessage, project);
-        setMessages(prev => [...prev, { role: 'assistant', content: fallbackReply }]);
+        throw new Error(data?.error || `[Mode STRICT_IA] Réponse invalide du modèle d'intelligence artificielle.`);
       }
     } catch (error: any) {
-      console.error('Chat error:', error);
-      const fallbackReply = generateClientChatReply(userMessage, project);
-      setMessages(prev => [...prev, { role: 'assistant', content: fallbackReply }]);
+      console.error('[Mode STRICT_IA] Chat error:', error);
+      const errMsg = error?.message || `[Mode STRICT_IA] Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, aucun fallback n'est autorisé.`;
+      setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ **Erreur Mode STRICT_IA** :\n${errMsg}` }]);
     } finally {
       setIsLoading(false);
     }

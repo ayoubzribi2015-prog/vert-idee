@@ -717,20 +717,12 @@ export const onRequestPost = async (
       });
     }
 
-    // Secours sémantique déterministe immédiat garanti (en cas de 503, 429, timeout ou absence de clé)
-    const fallback = extractRichDescriptionFallback(rawFullText, extracted[0]?.filename || 'Document');
+    // En Mode STRICT_IA : Aucun secours déterministe n'est autorisé.
     return respond({
-      success: true,
-      isAIEnhanced: false,
-      filename: extracted.map((f) => f.filename).join(', '),
-      extractedText: fallback.richDescription,
-      rawFullText,
-      suggestedTitle: fallback.suggestedTitle,
-      suggestedLocation: fallback.suggestedLocation,
-      sections: fallback.sections,
-      processedFilesCount: extracted.length,
-      charCount: rawFullText.length,
-    });
+      success: false,
+      error: `[Mode STRICT_IA] Échec de la synthèse documentaire : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`,
+      code: 'STRICT_IA_UNAVAILABLE',
+    }, 503);
   } catch (error: any) {
     console.error('Document processing error:', error);
     return respond({
