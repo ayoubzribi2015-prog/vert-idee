@@ -11,7 +11,7 @@ async function generateStrict(apiKey: string, models: string[], systemPrompt: st
   let lastError = 'Aucun modèle Gemini disponible.';
   for (const model of models) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 150000);
+    const timer = setTimeout(() => controller.abort(), 180000);
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
@@ -21,6 +21,7 @@ async function generateStrict(apiKey: string, models: string[], systemPrompt: st
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
           generationConfig: {
             maxOutputTokens: 8192,
+            thinkingConfig: { thinkingLevel: 'LOW' },
             responseMimeType: 'application/json',
             responseSchema: {
           type: "OBJECT",
