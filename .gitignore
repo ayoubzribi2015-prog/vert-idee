@@ -7,6 +7,9 @@ coverage/
 .env*
 !.env.example
 
+# Médias temporaires générés par AI Studio (ne pas versionner : alourdit le build)
+.aistudio/artifacts/
+
 # Local Netlify folder
 .netlify
 .wrangler
