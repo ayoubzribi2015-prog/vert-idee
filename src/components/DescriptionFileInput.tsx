@@ -35,6 +35,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
   const [importedFiles, setImportedFiles] = useState<ImportedFileItem[]>([]);
   const [aiEnhancedCount, setAiEnhancedCount] = useState(0);
   const [hasExtractedSummary, setHasExtractedSummary] = useState(false);
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,6 +44,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
     if (!value || !value.trim()) {
       setImportedFiles([]);
       setHasExtractedSummary(false);
+      setAiWarning(null);
       if (onFullContentChange) {
         onFullContentChange('');
       }
@@ -167,8 +169,9 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
 
       if (synthesizedText) {
         onChange(synthesizedText);
-        setHasExtractedSummary(true);
+        setHasExtractedSummary(Boolean(data.isAIEnhanced));
       }
+      setAiWarning(data.aiStatus === 'extraction_only' ? (data.aiError || 'Texte extrait sans synthèse Gemini.') : null);
 
       if (rawFullText && onFullContentChange) {
         onFullContentChange(rawFullText);
@@ -235,6 +238,7 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
       if (next.length === 0) {
         if (onFullContentChange) onFullContentChange('');
         setHasExtractedSummary(false);
+        setAiWarning(null);
       }
       return next;
     });
@@ -344,6 +348,13 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
                 : "Description structurée selon les termes exacts de vos documents (sans interprétation ni ajout extérieur)."}
             </span>
           </div>
+        </div>
+      )}
+
+      {aiWarning && !isExtracting && (
+        <div role="status" className="flex items-start gap-2 p-2.5 px-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
+          <span className="font-bold shrink-0">Synthèse IA non disponible :</span>
+          <span>{aiWarning}</span>
         </div>
       )}
 
