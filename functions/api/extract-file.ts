@@ -717,17 +717,31 @@ export const onRequestPost = async (
       });
     }
 
-    // Secours sémantique déterministe immédiat garanti (en cas de 503, 429, timeout ou absence de clé)
-    const fallback = extractRichDescriptionFallback(rawFullText, extracted[0]?.filename || 'Document');
+    // L'extraction locale du texte reste autorisée, mais aucune synthèse heuristique
+    // ne doit être présentée comme une analyse produite par l'IA.
+    if (!rawFullText.trim()) {
+      return respond({
+        success: false,
+        isAIEnhanced: false,
+        error: apiKey
+          ? 'Le texte du document est illisible et Gemini n’a pas pu en extraire le contenu.'
+          : 'Le texte du document est illisible et la clé Gemini n’est pas configurée.',
+        code: 'DOCUMENT_TEXT_UNAVAILABLE',
+      }, 422);
+    }
+
     return respond({
       success: true,
       isAIEnhanced: false,
+      aiStatus: 'extraction_only',
+      aiError: apiKey
+        ? 'Gemini n’a pas pu produire la synthèse. Seul le texte extrait est fourni ; aucune synthèse déterministe ne le remplace.'
+        : 'Clé GEMINI_API_KEY absente. Seul le texte extrait est fourni ; aucune synthèse déterministe ne le remplace.',
       filename: extracted.map((f) => f.filename).join(', '),
-      extractedText: fallback.richDescription,
+      extractedText: rawFullText,
       rawFullText,
-      suggestedTitle: fallback.suggestedTitle,
-      suggestedLocation: fallback.suggestedLocation,
-      sections: fallback.sections,
+      suggestedTitle: '',
+      suggestedLocation: '',
       processedFilesCount: extracted.length,
       charCount: rawFullText.length,
     });
