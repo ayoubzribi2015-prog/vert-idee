@@ -206,7 +206,7 @@ async function generateStrict(apiKey: string, models: string[], systemPrompt: st
               items: {
                 type: "OBJECT",
                 properties: {
-                  oddNumber: { type: Type.INTEGER, description: 'Numéro de l\'ODD (ex: 12)' },
+                  oddNumber: { type: "INTEGER", description: 'Numéro de l\'ODD (ex: 12)' },
                   title: { type: "STRING", description: 'Titre de l\'ODD' },
                   level: { type: "STRING", enum: ['Majeur', 'Secondaire'], description: 'Niveau de contribution : Majeur (cœur de métier / direct) ou Secondaire (transverse)' },
                   contribution: { type: "STRING", description: 'Contribution concrète et opérationnelle du projet' },
