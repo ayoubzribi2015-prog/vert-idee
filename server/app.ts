@@ -1,7 +1,8 @@
+import { discoverGeminiModels } from '../src/utils/geminiModels';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type, ThinkingLevel } from '@google/genai';
 import { generateText, Output, jsonSchema, type ModelMessage } from 'ai';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -67,14 +68,6 @@ function hasGeminiKey(): boolean {
 }
 
 // Initialise Gemini
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || '',
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
-});
 
 /**
  * Promesse avec délai d'expiration strict (timeout)
@@ -102,8 +95,40 @@ async function withFirestoreTimeout<T>(operation: () => Promise<T>, timeoutMs = 
   }
 }
 
+// Endpoint proxy vers Gemini (Remplace l'usage direct du SDK @google/genai)
+app.post('/api/generate', async (req: express.Request, res: express.Response) => {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    return res.status(500).json({ error: 'API key not configured' });
+  }
+
+  const { model, contents, systemInstruction, generationConfig } = req.body;
+  if (!contents) {
+    return res.status(400).json({ error: 'Field "contents" is required' });
+  }
+
+  const payload: any = { contents };
+  if (systemInstruction) payload.systemInstruction = systemInstruction;
+  if (generationConfig) payload.generationConfig = generationConfig;
+
+  try {
+    const upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify(payload),
+      }
+    );
+    const data = await upstream.json();
+    res.status(upstream.status).json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 /**
- * [Mode STRICT_IA] Appel direct de l'IA sans résilience multi-modèles ni fallback.
+ * [Mode STRICT_IA] Appel proxy de l'IA sans résilience multi-modèles ni fallback.
  * L'analyse échoue explicitement si l'IA ne répond pas ou si la clé est absente.
  */
 async function callGeminiStrict(options: {
@@ -111,53 +136,58 @@ async function callGeminiStrict(options: {
   config?: any;
   timeoutMs?: number;
 }): Promise<{ response: { text: string }; modelUsed: string }> {
-  const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
     throw new Error(
-      "[Mode STRICT_IA] Échec du diagnostic : Clé GEMINI_API_KEY non configurée. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé."
+      "[Mode STRICT_IA] Échec du diagnostic : Clé GEMINI_API_KEY non configurée. Aucun fallback autorisé."
     );
   }
 
-  const modelsToTry = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.6', 'gemini-3.6-flash', 'gemini-3.1-flash-lite'];
+  const discovery = await discoverGeminiModels(apiKey, process.env.GEMINI_MODEL);
+  const modelsToTry = discovery.models;
   const timeoutMs = options.timeoutMs || 300000; // 5 minutes
 
   let lastError: any = null;
 
   for (const modelName of modelsToTry) {
-    let timer: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<any>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`Délai dépassé pour le modèle ${modelName}.`)),
-        timeoutMs
-      );
-    });
-
     try {
-      const callPromise = ai.models.generateContent({
-        model: modelName,
-        contents: options.contents,
-        config: options.config,
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch('http://localhost:3000/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelName,
+          contents: options.contents,
+          systemInstruction: options.config?.systemInstruction,
+          generationConfig: {
+            ...options.config,
+            systemInstruction: undefined, // déjà passé au-dessus
+          }
+        }),
+        signal: controller.signal,
       });
 
-      const result = await Promise.race([callPromise, timeoutPromise]);
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
 
-      if (result && result.text) {
+      const result = await response.json();
+      
+      if (response.ok && result?.candidates?.[0]?.content?.parts?.[0]?.text) {
         return {
-          response: { text: result.text },
+          response: { text: result.candidates[0].content.parts[0].text },
           modelUsed: modelName,
         };
       }
+      lastError = new Error(result?.error?.message || `Erreur HTTP ${response.status}`);
     } catch (err: any) {
-      if (timer) clearTimeout(timer);
       lastError = err;
       console.error(`[Mode STRICT_IA] Modèle ${modelName} a échoué:`, err);
-      console.info(`[Mode STRICT_IA] Essai du modèle suivant...`);
     }
   }
 
   throw new Error(
-    `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${lastError?.message || 'Erreur inconnue'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`
+    `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${lastError?.message || 'Erreur inconnue'}). Aucun fallback autorisé.`
   );
 }
 
@@ -1000,6 +1030,7 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
         config: {
           systemInstruction: systemPrompt,
           maxOutputTokens: 8192,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: {
           type: Type.OBJECT,
