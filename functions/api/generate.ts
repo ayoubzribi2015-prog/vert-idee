@@ -1,12 +1,13 @@
 // Proxy Gemini sécurisé (Cloudflare Pages Function) : POST /api/generate
 // La clé GEMINI_API_KEY reste dans les secrets Cloudflare et n'est jamais exposée au navigateur.
 
+import { discoverGeminiModels } from '../../src/utils/geminiModels.ts';
+
 type Context = {
   request: Request;
   env: { GEMINI_API_KEY?: string; GEMINI_MODEL?: string };
 };
 
-const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
 const MAX_BODY_BYTES = 200_000;
 const UPSTREAM_TIMEOUT_MS = 25_000;
 
@@ -46,7 +47,7 @@ export const onRequestPost = async ({ request, env }: Context): Promise<Response
   if (body.systemInstruction) payload.systemInstruction = body.systemInstruction;
   if (body.generationConfig) payload.generationConfig = body.generationConfig;
 
-  const models = env.GEMINI_MODEL?.trim() ? [env.GEMINI_MODEL.trim(), ...DEFAULT_MODELS] : DEFAULT_MODELS;
+  const models = (await discoverGeminiModels(apiKey, env.GEMINI_MODEL)).models;
   let lastStatus = 502;
   let lastError = 'Upstream error';
 
