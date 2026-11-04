@@ -15,7 +15,7 @@ import {
 import { SdgAlignmentItem } from '../types';
 
 interface SdgAlignmentTabProps {
-  sdgItems: SdgAlignmentItem[];
+  sdgItems?: SdgAlignmentItem[];
 }
 
 export const OFFICIAL_SDG_TITLES: Record<number, string> = {
@@ -78,22 +78,29 @@ const SDG_COLORS: Record<number, { bg: string; text: string; hex: string; border
   17: { bg: 'bg-[#19486A]', text: 'text-white', hex: '#19486A', border: 'border-[#19486A]', lightBg: 'bg-[#19486A]/10' },
 };
 
-export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) => {
+export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems = [] }) => {
   const [filter, setFilter] = useState<'all' | 'majeur' | 'secondaire' | 'dnsh'>('all');
   const [selectedOdd, setSelectedOdd] = useState<number | null>(null);
 
+  const safeItems = Array.isArray(sdgItems) ? sdgItems : [];
+
   // Compute stats
   const activeSdgMap = new Map<number, SdgAlignmentItem>();
-  sdgItems.forEach((item) => activeSdgMap.set(item.oddNumber, item));
+  safeItems.forEach((item) => {
+    if (item && typeof item.oddNumber === 'number') {
+      activeSdgMap.set(item.oddNumber, item);
+    }
+  });
 
-  const totalTargetsCount = sdgItems.reduce((acc, curr) => {
-    return acc + (curr.targetsDetail?.length || curr.targets?.length || 0);
+  const totalTargetsCount = safeItems.reduce((acc, curr) => {
+    return acc + (curr?.targetsDetail?.length || curr?.targets?.length || 0);
   }, 0);
 
-  const majeursCount = sdgItems.filter((i) => (i.level || 'Majeur') === 'Majeur').length;
-  const secondairesCount = sdgItems.filter((i) => i.level === 'Secondaire').length;
+  const majeursCount = safeItems.filter((i) => (i?.level || 'Majeur') === 'Majeur').length;
+  const secondairesCount = safeItems.filter((i) => i?.level === 'Secondaire').length;
 
-  const filteredItems = sdgItems.filter((item) => {
+  const filteredItems = safeItems.filter((item) => {
+    if (!item) return false;
     if (selectedOdd !== null && item.oddNumber !== selectedOdd) return false;
     if (filter === 'majeur') return (item.level || 'Majeur') === 'Majeur';
     if (filter === 'secondaire') return item.level === 'Secondaire';
@@ -131,7 +138,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
             <Target className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 font-mono-numbers">{sdgItems.length}</span>
+            <span className="text-2xl font-black text-slate-900 font-mono-numbers">{safeItems.length}</span>
             <span className="text-xs text-slate-400">/ 17 mondiaux</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">Cartographie d'impact ciblée</p>
@@ -271,7 +278,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
             }`}
           >
             <Filter className="w-3.5 h-3.5" />
-            <span>Tous les ODD ({sdgItems.length})</span>
+            <span>Tous les ODD ({safeItems.length})</span>
           </button>
 
           <button
@@ -330,6 +337,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
       {/* Grid of Detailed Technical SDG Cards */}
       <div className="grid grid-cols-1 gap-5">
         {filteredItems.map((odd) => {
+          if (!odd) return null;
           const colors = SDG_COLORS[odd.oddNumber] || {
             bg: 'bg-emerald-700',
             text: 'text-white',
@@ -402,7 +410,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
                       CSRD : {odd.csrdEsrs}
                     </span>
                   )}
-                  {odd.griStandards && odd.griStandards.length > 0 && (
+                  {Array.isArray(odd.griStandards) && odd.griStandards.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {odd.griStandards.map((gri, gIdx) => (
                         <span
@@ -436,11 +444,11 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
                     <span>Sous-cibles officielles de l'ONU & Indicateurs normés :</span>
                   </div>
                   <span className="text-[11px] font-medium text-slate-500">
-                    {(odd.targetsDetail?.length || odd.targets?.length || 0)} sous-cible(s)
+                    {(odd?.targetsDetail?.length || odd?.targets?.length || 0)} sous-cible(s)
                   </span>
                 </div>
 
-                {odd.targetsDetail && odd.targetsDetail.length > 0 ? (
+                {Array.isArray(odd.targetsDetail) && odd.targetsDetail.length > 0 ? (
                   <div className="grid grid-cols-1 gap-2.5">
                     {odd.targetsDetail.map((td, tIdx) => (
                       <div
@@ -452,22 +460,22 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
                             className="px-2 py-0.5 rounded-md text-[11px] font-bold font-mono-numbers shrink-0 text-white"
                             style={{ backgroundColor: colors.hex }}
                           >
-                            Cible {td.code}
+                            Cible {td?.code}
                           </span>
                           <div className="text-xs text-slate-800 font-medium leading-relaxed">
-                            {td.title}
+                            {td?.title}
                           </div>
                         </div>
 
-                        {(td.indicator || td.targetKpi) && (
+                        {(td?.indicator || td?.targetKpi) && (
                           <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
-                            {td.indicator && (
+                            {td?.indicator && (
                               <span className="text-slate-600 flex items-center gap-1">
                                 <span className="font-semibold text-slate-700">Indicateur ONU :</span>
                                 <span className="text-sky-800 font-mono-numbers">{td.indicator}</span>
                               </span>
                             )}
-                            {td.targetKpi && (
+                            {td?.targetKpi && (
                               <span className="text-emerald-800 font-medium flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
                                 <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                                 <span>{td.targetKpi}</span>
@@ -481,7 +489,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
                 ) : (
                   // Fallback for simple targets string array
                   <div className="flex flex-wrap gap-2">
-                    {odd.targets.map((target, idx) => (
+                    {Array.isArray(odd.targets) && odd.targets.map((target, idx) => (
                       <div
                         key={idx}
                         className="px-3 py-1.5 rounded-lg text-xs bg-slate-50 text-slate-800 border border-slate-200 flex items-center gap-2"
@@ -498,7 +506,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
               </div>
 
               {/* Tracked Project KPIs */}
-              {odd.kpis && odd.kpis.length > 0 && (
+              {Array.isArray(odd.kpis) && odd.kpis.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
                     <BarChart3 className="w-4 h-4 text-emerald-700" />
@@ -539,7 +547,7 @@ export const SdgAlignmentTab: React.FC<SdgAlignmentTabProps> = ({ sdgItems }) =>
             <Info className="w-8 h-8 text-slate-400 mx-auto" />
             <h4 className="text-sm font-bold text-slate-800">Aucun ODD ne correspond à ce filtre</h4>
             <p className="text-xs text-slate-500">
-              Réinitialisez le filtre pour voir l'ensemble des {sdgItems.length} Objectifs de Développement Durable analysés.
+              Réinitialisez le filtre pour voir l'ensemble des {safeItems.length} Objectifs de Développement Durable analysés.
             </p>
             <button
               onClick={() => {
