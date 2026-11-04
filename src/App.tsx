@@ -48,6 +48,7 @@ import { GreenAssistantTab } from './components/GreenAssistantTab';
 import { MobileSectionNav } from './components/MobileSectionNav';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { generateWordReport } from './utils/docxExport';
+import { normalizeProjectAudit } from './utils/normalizeProject';
 import {
   auth,
   signInWithGoogle,
@@ -118,7 +119,7 @@ export default function App() {
           currentUser.uid,
           (userProjects) => {
             setCloudSyncing(false);
-            setProjects(userProjects);
+            setProjects(userProjects.map((p) => normalizeProjectAudit(p)));
           },
           (err) => {
             console.error('Firestore subscription error:', err);
@@ -241,7 +242,7 @@ export default function App() {
           return;
         }
 
-        const newProject: ProjectAudit = result.data;
+        const newProject: ProjectAudit = normalizeProjectAudit(result.data, formData?.title, formData?.description, formData?.location);
 
         if (user) {
           try {
