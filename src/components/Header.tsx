@@ -112,10 +112,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-30 bg-[#fafbf9]/95 backdrop-blur-md border-b border-stone-200/90 shadow-2xs">
-      {/* 1ère Ligne : Marque, Logos Institutionnels Principaux (APII & RNPE) & Compte utilisateur */}
       <div className="transition-all">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-18 lg:h-20 gap-2 sm:gap-6">
+          <div className="flex items-center justify-between h-16 sm:h-20 lg:h-24 gap-2 sm:gap-6">
             <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
               <div
                 className="cursor-pointer"
@@ -172,7 +171,20 @@ export const Header: React.FC<HeaderProps> = ({
               </a>
             </div>
 
-            <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* Historique Cloud (dans la rubrique connexion / compte) */}
+              {user && (
+                <button
+                  type="button"
+                  onClick={onOpenHistory}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-stone-800 hover:text-stone-950 bg-white hover:bg-stone-50 border border-stone-300 shadow-2xs transition-all cursor-pointer"
+                  title="Consulter l'historique de vos audits"
+                >
+                  <History className="w-4 h-4 text-[#10634e]" />
+                  <span className="hidden sm:inline">Historique ({historyCount})</span>
+                </button>
+              )}
+
               {/* Statut Synchronisation Cloud */}
               {user && (
                 <div
@@ -287,64 +299,6 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Accès Gmail</span>
                 </button>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* 2ème Ligne : Historique & Assistant IA (Desktop & Tablette - sur mobile intégrés dans la barre inférieure native) */}
-      <div className="hidden sm:block bg-[#f4f6f2]/90 backdrop-blur-md border-b border-stone-200/80 py-2 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-4 py-0.5">
-            <div className="flex items-center gap-2.5 shrink-0">
-              {user && (
-                <button
-                  type="button"
-                  onClick={onOpenHistory}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-stone-800 hover:text-stone-950 bg-white hover:bg-stone-50 border border-stone-300 shadow-2xs transition-all cursor-pointer"
-                  title="Consulter l'historique de vos audits"
-                >
-                  <History className="w-3.5 h-3.5 text-[#10634e]" />
-                  <span>Historique ({historyCount})</span>
-                </button>
-              )}
-              {/* Sur petits écrans, afficher aussi APII et RNPE sur la 2ème ligne */}
-              <div className="flex lg:hidden items-center gap-2">
-                <a
-                  href="https://www.tunisieindustrie.nat.tn/fr/home.asp"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-8 px-2 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                  title="APII - Ouvrir dans un nouvel onglet"
-                >
-                  <img src="/assets/aistudio/Logo_APII_4be2db23.jpg" alt="APII" className="w-5 h-5 object-contain" />
-                  <span className="text-[11px] font-black text-[#063428] font-heading">APII</span>
-                </a>
-                <a
-                  href="https://www.tunisieindustrie.nat.tn/fr/pepinieres.asp"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-8 px-2 rounded-lg bg-white border border-stone-200 hover:border-[#0b4a3a]/60 active:scale-95 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                  title="RNPE - Ouvrir dans un nouvel onglet"
-                >
-                  <img src="/assets/aistudio/logo_rnpe_official.png" alt="RNPE" className="w-5 h-5 object-contain" />
-                  <span className="text-[11px] font-black text-[#063428] font-heading">RNPE</span>
-                </a>
-              </div>
-            </div>
-
-            <div className="shrink-0 ml-auto">
-              <button
-                onClick={() => onNavigateTab('assistant')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                  activeTab === 'assistant'
-                    ? 'border-[#0b4a3a] bg-[#e5f1eb] text-[#063428] shadow-xs'
-                    : 'bg-white hover:bg-[#fafbf9] text-[#063428] border-stone-300 shadow-2xs'
-                }`}
-              >
-                <Bot className="w-3.5 h-3.5 text-[#10634e]" />
-                <span>Assistant Éco-Conseil</span>
-              </button>
             </div>
           </div>
         </div>

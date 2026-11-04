@@ -9,6 +9,7 @@ import {
   Award,
   Target,
   PlusCircle,
+  Bot,
 } from 'lucide-react';
 import { SIDEBAR_TABS, TabKey } from '../types';
 
@@ -42,10 +43,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       dir="ltr"
-      className="w-64 shrink-0 bg-[#fbfcf9] border-r border-stone-200/90 sticky top-[114px] self-start h-[calc(100vh-114px)] overflow-y-auto hidden lg:block z-20 text-left select-none"
+      className="w-64 shrink-0 bg-[#fbfcf9] border-r border-stone-200/90 sticky top-[76px] sm:top-[88px] lg:top-[96px] self-start h-[calc(100vh-76px)] sm:h-[calc(100vh-88px)] lg:h-[calc(100vh-96px)] overflow-y-auto hidden lg:block z-20 text-left select-none"
     >
       <div className="p-3.5 space-y-2 text-left">
-        {/* Nouveau diagnostic action placed before Rubriques du Diagnostic */}
+        {/* Assistant Éco-conseil placed before Nouveau diagnostic */}
+        <div className="pb-1">
+          <button
+            type="button"
+            onClick={() => onNavigateTab('assistant')}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+              activeTab === 'assistant'
+                ? 'border-[#0b4a3a]/40 bg-[#eaf4ef] text-[#063428] shadow-2xs'
+                : 'bg-white hover:bg-stone-100 text-[#063428] border-stone-200/90 shadow-2xs'
+            }`}
+            title="Consulter l'Assistant Éco-Conseil AI"
+          >
+            <Bot className="w-4 h-4 text-[#10634e] shrink-0" />
+            <span className="tracking-wide">Assistant Éco-Conseil</span>
+          </button>
+        </div>
+
+        {/* Nouveau diagnostic action */}
         <div className="pb-2.5 border-b border-stone-200/70">
           <button
             type="button"
