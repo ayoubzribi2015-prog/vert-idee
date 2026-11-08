@@ -1113,6 +1113,40 @@ Toute affirmation non sourcée par une donnée explicite du projet est un manque
 3. PROJETS CONVENTIONNELS : Attribue des notes réalistes, cohérentes et modérées (40 à 70/100 pour l'environnement). Si le projet présente des pratiques traditionnelles (ex: huilerie), il doit être évalué sur sa gestion réelle des déchets (margines) et de l'énergie, sans surévaluer le caractère 'traditionnel' comme une innovation écologique intrinsèque.
 4. VRAIES ÉCO-INNOVATIONS VÉRIFIABLES (Agroécologie régénératrice, biomatériaux compostables, énergies renouvelables certifiées, valorisation circulaire de biodéchets) : Attribue des scores élevés (75 à 90/100) UNIQUEMENT si le projet démontre une rupture écologique significative et mesurable, avec justification des gains nets et de la résilience locale (Guide OSS).
 
+*** GRILLE DE SCORING MULTICRITÈRE TRANSPARENTE ET RIGOREUSE (0-100) ***
+Pour garantir une fiabilité absolue et un diagnostic univoque, chaque note de pilier doit être attribuée selon les critères objectifs suivants :
+
+1. SCORE ENVIRONNEMENTAL (Poids : 30%) :
+   - Éco-conception et choix des matériaux (substitution des substances toxiques, approvisionnements durables).
+   - Maîtrise des Aspects Environnementaux Significatifs (AES selon ISO 14001 : Fréquence, Gravité, Sensibilité, Maîtrise).
+   - Préservation des ressources en eau, des écosystèmes et de la biodiversité (Guide OSS, écotoxicité ERA).
+   - Respect strict du principe DNSH (Do No Significant Harm) et conformité réglementaire.
+   - Échelle : 15-30 (industrie polluante sans traitement), 40-65 (procédé conventionnel conforme), 75-90 (éco-innovation régénératrice).
+
+2. SCORE ÉCONOMIE CIRCULAIRE (Poids : 25%) :
+   - Application rigoureuse des stratégies 9R (R0 Refuser à R9 Dégrader).
+   - Bouclage des flux de matière et valorisation intégrale des coproduits et déchets (zéro déchet ultime).
+   - Durabilité, modularité, réparabilité et économie de la fonctionnalité (EFC / PaaS).
+   - Intégration des normes ISO 59004 / ISO 59020 et symbioses industrielles territoriales (EIT).
+   - Échelle : 10-30 (linéaire pur sans revalorisation), 45-70 (tri sélectif et valorisation partielle), 75-95 (boucles fermées intégrées et symbioses).
+
+3. SCORE SOCIAL & RSE (Poids : 20%) :
+   - Santé, sécurité et conditions de travail (normes OIT, ergonomie, prévention des risques professionnels).
+   - Impact sanitaire et bien-être des riverains (nuisances, rejets, poussières, bruit).
+   - Ancrage territorial, création d'emplois locaux pérennes et non délocalisables.
+   - Gouvernance éthique (ISO 26000), dialogue avec les parties prenantes et transition juste (formation aux métiers verts).
+   - Échelle : 25-40 (conformité légale minimale), 50-70 (démarche RSE structurée), 75-90 (gouvernance partagée, inclusion et fort impact communautaire).
+
+4. SCORE MATURITÉ CARBONE (Poids : 25%) :
+   - Quantification rigoureuse du bilan GES sur le cycle de vie (ISO 14067 ECP & ISO 14064-1 Scopes 1-2-3).
+   - Règle absolue anti-greenwashing : exclusion stricte de toute compensation carbone (offsets) dans le calcul de l'empreinte intrinsèque.
+   - Comparaison sectorielle (sur-émissions vs émissions évitées par rapport à la moyenne du secteur).
+   - Ambition et quantification du plan de décarbonation (actions P1, P2, P3 basées sur la science).
+   - Échelle : 20-35 (empreinte supérieure au secteur sans plan de réduction), 45-70 (réduction modérée -15% à -30%), 75-95 (décarbonation radicale -40% à -70% et trajectoire neutre).
+
+5. NOTE GLOBALE D'IMPACT (Moyenne pondérée officielle) :
+   - Calculée strictement selon la formule : GlobalScore = (Environnement × 0.30) + (Économie Circulaire × 0.25) + (Social & RSE × 0.20) + (Maturité Carbone × 0.25).
+
 Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT les 8 sections officielles :
 1. Synthèse du projet : Scores d'impacts rigoureusement calibrés (sévères si polluant), avis collégial des experts (STRICTEMENT LIMITÉ À 5 LIGNES MAX / ~40-50 mots directement après le nom du projet) et vision de transformation.
    - NOTE IMPORTANTE SUR LE 'SCORE ENVIRONNEMENTAL GLOBAL' : Ce score DOIT intégrer l'évaluation de l'IA elle-même si elle est au cœur du projet. Le Collège des Experts doit justifier si l'IA utilisée est frugale (modèle adapté, usage nécessaire, hébergement sobre) et si le bénéfice environnemental démontrable du projet dépasse l'empreinte carbone et les ressources consommées par l'entraînement et l'inférence de l'IA (principe du bilan net positif). L'usage de l'IA sans besoin précis ou sans gain environnemental supérieur aux coûts (énergie, eau, métaux) doit réduire ce score.
