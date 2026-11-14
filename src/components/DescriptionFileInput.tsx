@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, FileText, CheckCircle2, X, Loader2, Sparkles } from 'lucide-react';
+import { extractClientSide } from '../utils/localExtraction';
 
 interface ImportedFileItem {
   name: string;
@@ -116,13 +117,17 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
         })
       );
 
-      // Appel de l'API de synthèse collective selon les 3 piliers méthodologiques avec timeout étendu de 300s (5 minutes)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000);
+      let data: any = null;
+      let synthesizedText = '';
+      let rawFullText = '';
+      let suggestedTitle = '';
+      let suggestedLocation = '';
 
-      let res: Response;
       try {
-        res = await fetch('/api/extract-file', {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000);
+
+        const res = await fetch('/api/extract-file', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -135,43 +140,35 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
           }),
           signal: controller.signal,
         });
-      } catch (fetchErr: any) {
-        if (fetchErr?.name === 'AbortError') {
-          throw new Error('Le traitement des documents a pris trop de temps (délai de 5 minutes dépassé). Veuillez vérifier votre connexion ou réessayer avec un document moins volumineux.');
-        }
-        throw new Error('Erreur réseau lors de la communication avec le serveur d\'extraction.');
-      } finally {
         clearTimeout(timeoutId);
-      }
 
-      const rawText = await res.text();
-      let data: any = null;
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        if (res.status === 413) {
-          throw new Error('Les documents dépassent la taille maximale autorisée (50 Mo cumulés).');
+        if (res.ok) {
+          const rawText = await res.text();
+          data = JSON.parse(rawText);
         }
-        if (res.status === 504 || res.status === 502) {
-          throw new Error('Le délai de lecture a expiré. Veuillez vérifier que les fichiers ne sont pas corrompus.');
-        }
-        throw new Error(res.status === 404 ? "Service d'extraction introuvable (404). Vérifiez le déploiement de l'API sur Render et le proxy Cloudflare Pages." : `Erreur réseau (${res.status}) lors de l'extraction des documents.`);
+      } catch (netErr) {
+        console.warn('Server extraction fetch failed, using client-side fallback:', netErr);
       }
 
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.error || "Impossible d'extraire le contenu des documents.");
+      if (data && data.success && data.extractedText) {
+        synthesizedText = data.extractedText;
+        rawFullText = data.rawFullText || '';
+        suggestedTitle = data.suggestedTitle || '';
+        suggestedLocation = data.suggestedLocation || '';
+        setHasExtractedSummary(Boolean(data.isAIEnhanced));
+      } else {
+        // Client-side robust fallback
+        const clientRes = extractClientSide(validFiles, payloadFiles.map(p => p.localText || ''));
+        synthesizedText = clientRes.extractedText;
+        rawFullText = clientRes.rawFullText;
+        suggestedTitle = clientRes.suggestedTitle;
+        suggestedLocation = clientRes.suggestedLocation;
+        setHasExtractedSummary(false);
       }
-
-      const synthesizedText = data.extractedText || '';
-      const rawFullText = data.rawFullText || '';
-      const suggestedTitle = data.suggestedTitle || '';
-      const suggestedLocation = data.suggestedLocation || '';
 
       if (synthesizedText) {
         onChange(synthesizedText);
-        setHasExtractedSummary(Boolean(data.isAIEnhanced));
       }
-      setAiWarning(data.aiStatus === 'extraction_only' ? (data.aiError || 'Texte extrait sans synthèse Gemini.') : null);
 
       if (rawFullText && onFullContentChange) {
         onFullContentChange(rawFullText);
@@ -183,10 +180,6 @@ export const DescriptionFileInput: React.FC<DescriptionFileInputProps> = ({
 
       if (suggestedLocation && onSuggestedLocation) {
         onSuggestedLocation(suggestedLocation);
-      }
-
-      if (data.isAIEnhanced) {
-        setAiEnhancedCount((prev) => prev + 1);
       }
 
       const newChips: ImportedFileItem[] = validFiles.map((f) => ({

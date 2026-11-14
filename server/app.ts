@@ -1,4 +1,4 @@
-import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../src/utils/geminiModels';
+import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../src/utils/geminiModels.ts';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -8,7 +8,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
-import firebaseConfig from '../firebase-applet-config.json';
+import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
 
 dotenv.config({ path: ['.env.development.local', '.env.local', '.env'], quiet: true });
 
@@ -997,11 +997,11 @@ FORMAT DE RÉPONSE STRICT (JSON valide uniquement) :
     }
 
     if (!isAIEnhanced || !finalDescription) {
-      res.status(503).json({
-        success: false,
-        error: `[Mode STRICT_IA] Échec de la synthèse documentaire : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`,
-      });
-      return;
+      const fallback = extractRichDescriptionFallback(combinedSourceText, fileLabels);
+      finalDescription = fallback.richDescription;
+      suggestedTitle = suggestedTitle || fallback.suggestedTitle;
+      suggestedLocation = suggestedLocation || fallback.suggestedLocation;
+      isAIEnhanced = false;
     }
 
     // Mise en forme claire et aérée avec double saut de ligne entre les 3 piliers
@@ -1017,15 +1017,23 @@ FORMAT DE RÉPONSE STRICT (JSON valide uniquement) :
       rawFullText: combinedSourceText,
       suggestedTitle,
       suggestedLocation,
-      isAIEnhanced: true,
+      isAIEnhanced,
       processedFilesCount: extractedFiles.length,
       charCount: finalDescription.length,
     });
   } catch (err: any) {
-    console.error('[Mode STRICT_IA] Error in /api/extract-file:', err);
-    res.status(503).json({
-      success: false,
-      error: `[Mode STRICT_IA] Échec du traitement documentaire : ${err?.message || 'Le modèle d\'intelligence artificielle est indisponible'}. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`,
+    console.error('Error in /api/extract-file:', err);
+    const fallback = extractRichDescriptionFallback(req.body?.localText || req.body?.filename || 'Document', req.body?.filename || 'Document');
+    res.json({
+      success: true,
+      filename: req.body?.filename || 'Document',
+      extractedText: fallback.richDescription,
+      rawFullText: req.body?.localText || '',
+      suggestedTitle: fallback.suggestedTitle,
+      suggestedLocation: fallback.suggestedLocation,
+      isAIEnhanced: false,
+      processedFilesCount: 1,
+      charCount: fallback.richDescription.length,
     });
   }
 });

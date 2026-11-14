@@ -6,22 +6,16 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
-  onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
   initializeFirestore,
   getFirestore,
   doc,
-  getDoc,
   setDoc,
-  getDocFromServer,
   collection,
-  getDocs,
   deleteDoc,
   onSnapshot,
-  query,
-  orderBy,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { ProjectAudit } from './types';
@@ -33,7 +27,6 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 // Initialize Firestore targeting the specific database ID with forced long polling
-// to guarantee connectivity in sandbox/iframe/proxy environments
 function getOrInitFirestore() {
   const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
   try {
@@ -53,7 +46,7 @@ export const db = getOrInitFirestore();
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// --- Standardized Firestore Error Handling ---
+// --- Standardized Firestore Error Handling (Non-blocking warning) ---
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -63,53 +56,15 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  };
-}
-
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) || [],
-    },
-    operationType,
-    path,
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.warn(`[Firestore Warning] Operation ${operationType} at ${path} encountered connectivity issue, operating in offline/local cache mode:`, error);
 }
 // ---------------------------------------------
 
-// Test connection on boot as requested by skill (non-blocking)
 export async function testFirestoreConnection() {
-  // Silent check: no forced network blocking call on startup
   return Promise.resolve();
 }
 
-// Sign in with Google (Gmail)
 async function upsertUserProfile(user: FirebaseUser): Promise<void> {
   try {
     await setDoc(
@@ -124,8 +79,7 @@ async function upsertUserProfile(user: FirebaseUser): Promise<void> {
       { merge: true }
     );
   } catch (error) {
-    // A profile write failure must never block a successful Google authentication
-    console.warn('Profil utilisateur non synchronisé dans Firestore :', error);
+    console.warn('Profil utilisateur non synchronisé dans Firestore (mode hors-ligne) :', error);
   }
 }
 
@@ -192,40 +146,79 @@ export function getGoogleAuthErrorMessage(error: any): string | null {
   }
 }
 
-// Sign out
 export async function logOut(): Promise<void> {
   await signOut(auth);
 }
 
-// Subscribe to user projects in Firestore
+// Local storage helper for offline resilience
+const getLocalProjects = (userId: string): ProjectAudit[] => {
+  try {
+    const raw = localStorage.getItem(`vert_idee_projects_${userId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
+const saveLocalProjects = (userId: string, projects: ProjectAudit[]) => {
+  try {
+    localStorage.setItem(`vert_idee_projects_${userId}`, JSON.stringify(projects));
+  } catch {}
+};
+
+// Subscribe to user projects in Firestore with automatic localStorage fallback
 export function subscribeToUserProjects(
   userId: string,
   onSuccess: (projects: ProjectAudit[]) => void,
   onError: (err: any) => void
 ) {
+  // Immediately return local projects for instant rendering
+  const localList = getLocalProjects(userId);
+  onSuccess(localList);
+
   const projectsCol = collection(db, 'users', userId, 'projects');
   const path = `users/${userId}/projects`;
-  return onSnapshot(
-    projectsCol,
-    (snapshot) => {
-      const list: ProjectAudit[] = [];
-      snapshot.forEach((d) => {
-        list.push(d.data() as ProjectAudit);
-      });
-      // Sort by creation date descending
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      onSuccess(list);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
-      onError(error);
-    }
-  );
+
+  let unsubscribe: (() => void) | null = null;
+  try {
+    unsubscribe = onSnapshot(
+      projectsCol,
+      (snapshot) => {
+        const list: ProjectAudit[] = [];
+        snapshot.forEach((d) => {
+          list.push(d.data() as ProjectAudit);
+        });
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        saveLocalProjects(userId, list);
+        onSuccess(list);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, path);
+        // Fallback to local storage on connection failure
+        onSuccess(getLocalProjects(userId));
+      }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    onSuccess(getLocalProjects(userId));
+  }
+
+  return () => {
+    if (unsubscribe) unsubscribe();
+  };
 }
 
-// Save or update a project in user's cloud Firestore
+// Save or update a project in user's cloud Firestore with localStorage fallback
 export async function saveUserProject(userId: string, project: ProjectAudit): Promise<void> {
   const path = `users/${userId}/projects/${project.id}`;
+  
+  // Update local storage first for instant offline capability
+  const currentLocal = getLocalProjects(userId);
+  const updatedList = [project, ...currentLocal.filter(p => p.id !== project.id)];
+  saveLocalProjects(userId, updatedList);
+
   try {
     const docRef = doc(db, 'users', userId, 'projects', project.id);
     await setDoc(docRef, { ...project, userId, updatedAt: new Date().toISOString() }, { merge: true });
@@ -234,9 +227,15 @@ export async function saveUserProject(userId: string, project: ProjectAudit): Pr
   }
 }
 
-// Delete a project from user's cloud Firestore
+// Delete a project from user's cloud Firestore with localStorage fallback
 export async function deleteUserProject(userId: string, projectId: string): Promise<void> {
   const path = `users/${userId}/projects/${projectId}`;
+  
+  // Update local storage first
+  const currentLocal = getLocalProjects(userId);
+  const updatedList = currentLocal.filter(p => p.id !== projectId);
+  saveLocalProjects(userId, updatedList);
+
   try {
     const docRef = doc(db, 'users', userId, 'projects', projectId);
     await deleteDoc(docRef);

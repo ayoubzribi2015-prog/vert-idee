@@ -12,7 +12,21 @@ process.on('uncaughtException', (err: any) => {
   console.error('[Server] Exception non capturée (ignorée pour garder le serveur actif) :', err?.message || err);
 });
 
-const PORT = Number(process.env.PORT) || 3000;
+function resolvePort(): number {
+  const portIndex = process.argv.indexOf('--port');
+  if (portIndex !== -1 && process.argv[portIndex + 1]) {
+    const parsed = Number(process.argv[portIndex + 1]);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  const envPort = Number(process.env.PORT);
+  // Port 8080 is reserved by Nginx reverse-proxy in AI Studio environment
+  if (!isNaN(envPort) && envPort > 0 && envPort !== 8080) {
+    return envPort;
+  }
+  return 3000;
+}
+
+const PORT = resolvePort();
 
 async function startServer() {
   const distPath = path.resolve(process.cwd(), 'dist');
