@@ -215,16 +215,15 @@ export default function App() {
           clearTimeout(abortTimeout);
         }
 
-        if (res.ok) {
-          const rawText = await res.text();
-          try {
-            result = JSON.parse(rawText);
-          } catch (parseErr) {
-            console.warn('Non-JSON response from /api/analyze:', rawText.slice(0, 100));
-            apiFailed = true;
-          }
-        } else {
-          console.warn(`API /api/analyze returned status ${res.status}`);
+        const rawText = await res.text();
+        try {
+          result = JSON.parse(rawText);
+        } catch (parseErr) {
+          console.warn('Non-JSON response from /api/analyze:', res.status, rawText.slice(0, 120));
+          apiFailed = true;
+        }
+        if (!res.ok) {
+          console.warn(`API /api/analyze returned status ${res.status}:`, result?.error || rawText.slice(0, 120));
           apiFailed = true;
         }
       } catch (fetchErr) {
@@ -271,7 +270,11 @@ export default function App() {
       const failureReason =
         result?.error ||
         `Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`;
-      throw new Error(`[Mode STRICT_IA] Échec du diagnostic : ${failureReason}`);
+      throw new Error(
+        failureReason.startsWith('[Mode STRICT_IA]')
+          ? failureReason
+          : `[Mode STRICT_IA] Échec du diagnostic : ${failureReason}`
+      );
     } catch (err: any) {
       console.error('Analysis error:', err);
       setErrorMessage(err?.message || "Échec de l'expertise environnementale.");

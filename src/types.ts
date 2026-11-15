@@ -2,7 +2,9 @@ export interface SustainabilityScores {
   environmental: number;
   social: number;
   circularity: number;
-  carbonMaturity: number;
+  innovationFeasibility: number;
+  /** @deprecated Rétrocompatibilité des anciens audits enregistrés */
+  carbonMaturity?: number;
   globalScore: number;
 }
 

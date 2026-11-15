@@ -2,7 +2,7 @@ import { ProjectAudit } from '../types';
 
 export function normalizeProjectAudit(raw: any, fallbackTitle?: string, fallbackDesc?: string, fallbackLocation?: string): ProjectAudit {
   const synthesis = raw?.projectSynthesis || {};
-  const scores = synthesis.scores || { environmental: 50, social: 50, circularity: 50, carbonMaturity: 50, globalScore: 50 };
+  const scores = synthesis.scores || { environmental: 50, social: 50, circularity: 50, innovationFeasibility: 50, globalScore: 50 };
   
   const envAspects = raw?.environmentalAspects || {};
   const socialAspects = raw?.socialAspects || {};
@@ -28,7 +28,12 @@ export function normalizeProjectAudit(raw: any, fallbackTitle?: string, fallback
         environmental: typeof scores.environmental === 'number' ? scores.environmental : 50,
         social: typeof scores.social === 'number' ? scores.social : 50,
         circularity: typeof scores.circularity === 'number' ? scores.circularity : 50,
-        carbonMaturity: typeof scores.carbonMaturity === 'number' ? scores.carbonMaturity : 50,
+        innovationFeasibility:
+          typeof scores.innovationFeasibility === 'number'
+            ? scores.innovationFeasibility
+            : typeof scores.carbonMaturity === 'number'
+            ? scores.carbonMaturity
+            : 50,
         globalScore: typeof scores.globalScore === 'number' ? scores.globalScore : 50,
       },
       summary: synthesis.summary || raw?.description || 'Synthèse non disponible.',

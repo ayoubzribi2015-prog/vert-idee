@@ -56,7 +56,7 @@ export function generateExpertAuditFallback(
     const envScore = 16;
     const socialScore = 26;
     const circularityScore = 14;
-    const carbonScore = 22;
+    const innovationScore = 22;
     const globalScore = 18;
 
     return {
@@ -74,7 +74,7 @@ export function generateExpertAuditFallback(
           environmental: envScore,
           social: socialScore,
           circularity: circularityScore,
-          carbonMaturity: carbonScore,
+          innovationFeasibility: innovationScore,
           globalScore: globalScore,
         },
         summary: `AVIS DÉFAVORABLE DU COLLÈGE DES EXPERTS (${globalScore}/100 - Risque Majeur) : Ce projet à ${location} présente une empreinte critique et des risques sanitaires et écotoxiques majeurs liés aux rejets et aux manipulations de substances dangereuses.`,
@@ -470,7 +470,7 @@ export function generateExpertAuditFallback(
     const envScore = 38;
     const socialScore = 55;
     const circularityScore = 32;
-    const carbonScore = 45;
+    const innovationScore = 45;
     const globalScore = 42;
 
     return {
@@ -482,7 +482,7 @@ export function generateExpertAuditFallback(
       businessModel: 'Production linéaire de pièces plastiques par injection',
       lifeCycleDetails: 'ACV conventionnelle : forte dépendance aux polymères fossiles vierges, consommation électrique process importante, et fin de vie problématique sans filière de recyclage dédiée.',
       projectSynthesis: {
-        scores: { environmental: envScore, social: socialScore, circularity: circularityScore, carbonMaturity: carbonScore, globalScore: globalScore },
+        scores: { environmental: envScore, social: socialScore, circularity: circularityScore, innovationFeasibility: innovationScore, globalScore: globalScore },
         summary: `AVIS RÉSERVÉ : Ce projet d'unité d'injection plastique à ${location} présente un risque de pollution plastique persisante. Sans intégration de matières recyclées ou biosourcées, le score reste plafonné à ${globalScore}/100.`,
         vision: 'Engager une transition vers 100% de matières recyclées et l\'autoconsommation solaire pour décarboner le process.',
       },
@@ -637,9 +637,9 @@ export function generateExpertAuditFallback(
   const environmentalScore = envScore;
   const socialScore = socScore;
   const circularityScore = circScore;
-  const carbonMaturityScore = carbScore;
+  const innovationFeasibilityScore = carbScore;
   const globalScore = Math.round(
-    environmentalScore * 0.35 + socialScore * 0.2 + circularityScore * 0.25 + carbonMaturityScore * 0.2
+    environmentalScore * 0.35 + socialScore * 0.2 + circularityScore * 0.25 + innovationFeasibilityScore * 0.2
   );
 
   return {
@@ -669,7 +669,7 @@ export function generateExpertAuditFallback(
         environmental: environmentalScore,
         social: socialScore,
         circularity: circularityScore,
-        carbonMaturity: carbonMaturityScore,
+        innovationFeasibility: innovationFeasibilityScore,
         globalScore: globalScore,
       },
       summary: isFootwearOrSafetyShoes

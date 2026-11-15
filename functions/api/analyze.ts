@@ -87,20 +87,25 @@ Pour garantir une fiabilité absolue et un diagnostic univoque, chaque note de p
    - Gouvernance éthique (ISO 26000), dialogue avec les parties prenantes et transition juste (formation aux métiers verts).
    - Échelle : 25-40 (conformité légale minimale), 50-70 (démarche RSE structurée), 75-90 (gouvernance partagée, inclusion et fort impact communautaire).
 
-4. SCORE MATURITÉ CARBONE (Poids : 25%) :
-   - Quantification rigoureuse du bilan GES sur le cycle de vie (ISO 14067 ECP & ISO 14064-1 Scopes 1-2-3).
-   - Règle absolue anti-greenwashing : exclusion stricte de toute compensation carbone (offsets) dans le calcul de l'empreinte intrinsèque.
-   - Comparaison sectorielle (sur-émissions vs émissions évitées par rapport à la moyenne du secteur).
-   - Ambition et quantification du plan de décarbonation (actions P1, P2, P3 basées sur la science).
-   - Échelle : 20-35 (empreinte supérieure au secteur sans plan de réduction), 45-70 (réduction modérée -15% à -30%), 75-95 (décarbonation radicale -40% à -70% et trajectoire neutre).
+4. SCORE INNOVATION & FAISABILITÉ TECHNIQUE (Poids : 25%) :
+   Ce critère combine 8 dimensions :
+   - Utilisation de technologies propres.
+   - Originalité du procédé ou du modèle économique.
+   - Capacité à apporter une réponse nouvelle à un problème environnemental.
+   - Maîtrise du processus de production.
+   - Disponibilité des matières premières et intrants.
+   - Accessibilité des équipements et technologies.
+   - Disponibilité des compétences techniques.
+   - Capacité de mise en œuvre.
+   - Échelle : 20-35 (procédé non maîtrisé ou intrants/compétences indisponibles), 45-70 (faisabilité éprouvée mais faible originalité), 75-95 (technologies propres innovantes, réponse originale et forte maîtrise technique/mise en œuvre).
 
 5. NOTE GLOBALE D'IMPACT (Moyenne pondérée officielle) :
-   - Calculée strictement selon la formule : GlobalScore = (Environnement × 0.30) + (Économie Circulaire × 0.25) + (Social & RSE × 0.20) + (Maturité Carbone × 0.25).
+   - Calculée strictement selon la formule : GlobalScore = (Environnement × 0.30) + (Économie Circulaire × 0.25) + (Social & RSE × 0.20) + (Innovation & Faisabilité technique × 0.25).
 
 NOTE SUR LE SCORE ENVIRONNEMENTAL GLOBAL : Ce score DOIT intégrer l'évaluation de l'IA elle-même si elle est au cœur du projet (frugalité, bilan net positif supérieur aux coûts de calcul, eau, électricité).
 
 Le rapport DOIT être structuré en JSON selon les 8 sections officielles :
-1. projectSynthesis (scores 0-100: environmental, social, circularity, carbonMaturity, globalScore; summary, vision)
+1. projectSynthesis (scores 0-100: environmental, social, circularity, innovationFeasibility, globalScore; summary, vision)
 2. environmentalAspects (strengths, criticalRisks, lifecycleAssessment, circularEconomy, regulationsAndNorms)
 3. socialAspects (socialImpacts, localEconomy, governanceAndEthics, justTransition)
 4. greenEntrepreneurshipIntegration (differentiationFactor, circularValueProposition, circularArchetype, competitiveMoat, iso59000Compliance, environmentalAssets, improvementAxes, innovativeBusinessModels, monetizationMechanisms, industrialSymbiosis, decouplingMetrics)
@@ -133,9 +138,10 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   let parsedData: any = null;
   let lastError: any = null;
 
-  for (const model of models) {
+  for (let idx = 0; idx < models.length; idx++) {
+    const model = models[idx];
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 180000);
+    const timer = setTimeout(() => controller.abort(), idx === 0 ? 90000 : 25000);
 
     try {
       const upstream = await fetch(
@@ -151,7 +157,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
             contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
             generationConfig: {
               responseMimeType: 'application/json',
-              maxOutputTokens: 8192,
+              maxOutputTokens: 16384,
               thinkingConfig: { thinkingLevel: "LOW" },
               responseSchema: {
                 type: "OBJECT",
@@ -179,10 +185,10 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
                           environmental: { type: "NUMBER" },
                           social: { type: "NUMBER" },
                           circularity: { type: "NUMBER" },
-                          carbonMaturity: { type: "NUMBER" },
+                          innovationFeasibility: { type: "NUMBER" },
                           globalScore: { type: "NUMBER" }
                         },
-                        required: ["environmental", "social", "circularity", "carbonMaturity", "globalScore"]
+                        required: ["environmental", "social", "circularity", "innovationFeasibility", "globalScore"]
                       },
                       summary: { type: "STRING" },
                       vision: { type: "STRING" }
@@ -504,11 +510,13 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
       if (upstream.ok) {
         const json = await upstream.json();
         const parts = json?.candidates?.[0]?.content?.parts || [];
-        const text = parts.find((p: any) => p.text && !p.thought)?.text || parts[0]?.text;
+        const rawText = parts.filter((p: any) => p && typeof p.text === 'string' && !p.thought).map((p: any) => p.text).join('') || parts[0]?.text || '';
+        const text = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
         if (text) {
           parsedData = JSON.parse(text);
           break;
         }
+        lastError = new Error(`Réponse vide du modèle ${model}`);
       } else {
         const errJson = await upstream.json().catch(() => ({}));
         lastError = new Error(errJson?.error?.message || `HTTP ${upstream.status}`);

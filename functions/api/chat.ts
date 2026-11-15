@@ -100,7 +100,7 @@ Contexte technique actuel du projet audité :
 - Lieu d'implantation : ${projectContext.location || 'Non spécifié'}
 - Secteur : ${projectContext.sector || 'Non spécifié'}
 - Description : ${projectContext.description || 'Non spécifié'}
-- Scores d'impact : Environnement ${projectContext.projectSynthesis?.scores?.environmental ?? '--'}/100, Social ${projectContext.projectSynthesis?.scores?.social ?? '--'}/100, Circularité ${projectContext.projectSynthesis?.scores?.circularity ?? '--'}/100, Global ${projectContext.projectSynthesis?.scores?.globalScore ?? '--'}/100
+- Scores d'impact : Environnement ${projectContext.projectSynthesis?.scores?.environmental ?? '--'}/100, Social ${projectContext.projectSynthesis?.scores?.social ?? '--'}/100, Circularité ${projectContext.projectSynthesis?.scores?.circularity ?? '--'}/100, Innovation & Faisabilité technique ${projectContext.projectSynthesis?.scores?.innovationFeasibility ?? projectContext.projectSynthesis?.scores?.carbonMaturity ?? '--'}/100, Global ${projectContext.projectSynthesis?.scores?.globalScore ?? '--'}/100
 - Empreinte carbone produit : ${projectContext.impactIndicators?.carbonFootprint?.totalCarbonKgCO2e ?? '--'} kg CO2e / unité
 ` : ''}
 

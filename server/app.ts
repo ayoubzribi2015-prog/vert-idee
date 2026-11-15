@@ -295,6 +295,7 @@ async function callGeminiStrict(options: {
   contents: any;
   config?: any;
   timeoutMs?: number;
+  validateResponse?: (text: string) => boolean;
 }): Promise<{ response: { text: string }; modelUsed: string }> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
@@ -308,15 +309,21 @@ async function callGeminiStrict(options: {
     ? discovery.models
     : [...ORDERED_GEMINI_MODELS];
 
-  const timeoutMs = options.timeoutMs || 300000; // 5 minutes
+  const baseTimeoutMs = options.timeoutMs || 300000; // 5 minutes max par défaut
+  const expectsJson = options.config?.responseMimeType === 'application/json';
   let lastError: any = null;
 
-  for (const modelName of modelsToTry) {
+  for (let idx = 0; idx < modelsToTry.length; idx++) {
+    const modelName = modelsToTry[idx];
+    // Laisser un budget confortable au 1er modèle, puis borner les modèles de repli pour éviter qu'un modèle bloqué ne fige toute la cascade
+    const attemptTimeoutMs = idx === 0
+      ? Math.min(baseTimeoutMs, 90000)
+      : Math.min(baseTimeoutMs, 25000);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), attemptTimeoutMs);
 
     try {
-      console.log(`[Mode STRICT_IA] Tentative avec le modèle : ${modelName}`);
+      console.log(`[Mode STRICT_IA] Tentative avec le modèle : ${modelName} (timeout ${Math.round(attemptTimeoutMs / 1000)}s)`);
       const result = await executeGenerate({
         apiKey,
         model: modelName,
@@ -329,11 +336,35 @@ async function callGeminiStrict(options: {
       clearTimeout(timer);
 
       if (result.ok && result.text && result.text.trim().length > 0) {
-        console.log(`[Mode STRICT_IA] Succès avec le modèle : ${modelName}`);
-        return {
-          response: { text: result.text },
-          modelUsed: modelName,
-        };
+        const cleanedText = expectsJson
+          ? result.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+          : result.text;
+
+        let isValid = true;
+        if (expectsJson) {
+          try {
+            JSON.parse(cleanedText);
+          } catch (jsonErr: any) {
+            isValid = false;
+            lastError = new Error(`JSON invalide/tronqué renvoyé par ${modelName} (${jsonErr?.message || 'SyntaxError'})`);
+            console.warn(`[Mode STRICT_IA] ${lastError.message}. Passage au modèle suivant...`);
+          }
+        }
+
+        if (isValid && options.validateResponse && !options.validateResponse(cleanedText)) {
+          isValid = false;
+          lastError = new Error(`Réponse incomplète renvoyée par ${modelName}`);
+          console.warn(`[Mode STRICT_IA] ${lastError.message}. Passage au modèle suivant...`);
+        }
+
+        if (isValid) {
+          console.log(`[Mode STRICT_IA] Succès avec le modèle : ${modelName}`);
+          return {
+            response: { text: cleanedText },
+            modelUsed: modelName,
+          };
+        }
+        continue;
       }
 
       lastError = new Error(
@@ -1078,7 +1109,7 @@ Si la requête contient la rubrique 'CONTENU INTÉGRAL ET EXHAUSTIF DES DOCUMENT
 *** RÈGLE ABSOLUE D'ISOLATION ET D'INDÉPENDANCE DE L'AUDIT DE PROJET (AUCUN CACHE DE COHÉRENCE) ***
 1. INDÉPENDANCE ABSOLUE DES ANCIENS PROJETS : Chaque audit est réalisé de manière 100% autonome, dynamique et isolée sans aucun cache de cohérence ni mémoire intermédiaire. L'analyse, les 8 sections, les scores et les modèles circulaires DOIVENT découler EXCLUSIVEMENT et directement des données transmises DANS LA PRÉSENTE REQUÊTE.
 2. INTERDICTION STRICTE DE CONFUSION INTER-PROJETS : Il est strictement interdit d'injecter, de mélanger ou d'associer des données, procédés, produits ou termes issus d'autres projets ou sessions d'analyse précédentes.
-3. INDÉPENDANCE TOTALE VIS-À-VIS DU NOM / MARQUE : L'évaluation environnementale et les scores (environnemental, social, circularité, maturité carbone et score global) reposent EXCLUSIVEMENT et STRICTEMENT sur la nature des activités réelles, les intrants, les procédés de fabrication ou de service, les flux de matière et d'énergie, et les externalités décrits dans la DESCRIPTION et les DOCUMENTS IMPORTÉS ACTUELS.
+3. INDÉPENDANCE TOTALE VIS-À-VIS DU NOM / MARQUE : L'évaluation environnementale et les scores (environnemental, social, circularité, innovation & faisabilité technique et score global) reposent EXCLUSIVEMENT et STRICTEMENT sur la nature des activités réelles, les intrants, les procédés de fabrication ou de service, les flux de matière et d'énergie, et les externalités décrits dans la DESCRIPTION et les DOCUMENTS IMPORTÉS ACTUELS.
 4. Le titre commercial ou nom de marque (ex: "grandii", "t3allem", ou tout autre libellé) n'est qu'un identifiant administratif. Il NE DOIT EN AUCUN CAS biaiser les scores ni l'analyse d'impact.
 
 *** RÈGLE DE JUSTIFICATION TECHNIQUE ET SOURÇAGE (OBLIGATION DE TRAÇABILITÉ) ***
@@ -1131,15 +1162,20 @@ Pour garantir une fiabilité absolue et un diagnostic univoque, chaque note de p
    - Gouvernance éthique (ISO 26000), dialogue avec les parties prenantes et transition juste (formation aux métiers verts).
    - Échelle : 25-40 (conformité légale minimale), 50-70 (démarche RSE structurée), 75-90 (gouvernance partagée, inclusion et fort impact communautaire).
 
-4. SCORE MATURITÉ CARBONE (Poids : 25%) :
-   - Quantification rigoureuse du bilan GES sur le cycle de vie (ISO 14067 ECP & ISO 14064-1 Scopes 1-2-3).
-   - Règle absolue anti-greenwashing : exclusion stricte de toute compensation carbone (offsets) dans le calcul de l'empreinte intrinsèque.
-   - Comparaison sectorielle (sur-émissions vs émissions évitées par rapport à la moyenne du secteur).
-   - Ambition et quantification du plan de décarbonation (actions P1, P2, P3 basées sur la science).
-   - Échelle : 20-35 (empreinte supérieure au secteur sans plan de réduction), 45-70 (réduction modérée -15% à -30%), 75-95 (décarbonation radicale -40% à -70% et trajectoire neutre).
+4. SCORE INNOVATION & FAISABILITÉ TECHNIQUE (Poids : 25%) :
+   Ce critère évalue conjointement l'innovation écologique et la faisabilité opérationnelle du projet selon les 8 dimensions suivantes :
+   - Utilisation de technologies propres (procédés éco-efficients, sobriété énergétique, équipements non polluants).
+   - Originalité du procédé ou du modèle économique.
+   - Capacité à apporter une réponse nouvelle et pertinente à un problème environnemental concret.
+   - Maîtrise du processus de production (maturité technologique, qualité, fiabilité industrielle).
+   - Disponibilité des matières premières et des intrants nécessaires (approvisionnement régulier, local ou sécurisé).
+   - Accessibilité des équipements et des technologies (coût, maintenance, disponibilité sur le marché).
+   - Disponibilité des compétences techniques requises pour exploiter le procédé.
+   - Capacité opérationnelle de mise en œuvre et de déploiement à l'échelle.
+   - Échelle : 20-35 (procédé conventionnel/obsolète peu maîtrisé ou intrants/équipements/compétences critiques indisponibles), 45-70 (faisabilité technique solide mais faible originalité ou innovation incrémentale), 75-95 (technologies propres innovantes, réponse originale à un enjeu environnemental, intrants/compétences disponibles et forte capacité de mise en œuvre).
 
 5. NOTE GLOBALE D'IMPACT (Moyenne pondérée officielle) :
-   - Calculée strictement selon la formule : GlobalScore = (Environnement × 0.30) + (Économie Circulaire × 0.25) + (Social & RSE × 0.20) + (Maturité Carbone × 0.25).
+   - Calculée strictement selon la formule : GlobalScore = (Environnement × 0.30) + (Économie Circulaire × 0.25) + (Social & RSE × 0.20) + (Innovation & Faisabilité technique × 0.25).
 
 Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT les 8 sections officielles :
 1. Synthèse du projet : Scores d'impacts rigoureusement calibrés (sévères si polluant), avis collégial des experts (STRICTEMENT LIMITÉ À 5 LIGNES MAX / ~40-50 mots directement après le nom du projet) et vision de transformation.
@@ -1194,9 +1230,13 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       const { response, modelUsed } = await callGeminiStrict({
         contents: userPrompt,
         timeoutMs: 180000, // 3 minutes timeout for deep analysis
+        validateResponse: (text) => {
+          const parsed = JSON.parse(text);
+          return Boolean(parsed?.needsInfo || parsed?.projectSynthesis);
+        },
         config: {
           systemInstruction: systemPrompt,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 16384,
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: {
@@ -1227,10 +1267,10 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
                     environmental: { type: Type.NUMBER, description: 'Score environnemental 0-100' },
                     social: { type: Type.NUMBER, description: 'Score social 0-100' },
                     circularity: { type: Type.NUMBER, description: 'Score circularité 0-100' },
-                    carbonMaturity: { type: Type.NUMBER, description: 'Score maturité carbone 0-100' },
+                    innovationFeasibility: { type: Type.NUMBER, description: 'Score innovation et faisabilité technique 0-100' },
                     globalScore: { type: Type.NUMBER, description: 'Score global 0-100' },
                   },
-                  required: ['environmental', 'social', 'circularity', 'carbonMaturity', 'globalScore'],
+                  required: ['environmental', 'social', 'circularity', 'innovationFeasibility', 'globalScore'],
                 },
                 summary: { type: Type.STRING },
                 vision: { type: Type.STRING },
@@ -1673,7 +1713,7 @@ Contexte technique actuel du projet audité :
 - Lieu d'implantation : ${resolveLocation(projectContext.location)}
 - Secteur : ${projectContext.sector || 'Non spécifié'}
 - Description : ${projectContext.description || 'Non spécifié'}
-- Scores d'impact : Environnement ${projectContext.projectSynthesis?.scores?.environmental ?? '--'}/100, Social ${projectContext.projectSynthesis?.scores?.social ?? '--'}/100, Circularité ${projectContext.projectSynthesis?.scores?.circularity ?? '--'}/100, Global ${projectContext.projectSynthesis?.scores?.globalScore ?? '--'}/100
+- Scores d'impact : Environnement ${projectContext.projectSynthesis?.scores?.environmental ?? '--'}/100, Social ${projectContext.projectSynthesis?.scores?.social ?? '--'}/100, Circularité ${projectContext.projectSynthesis?.scores?.circularity ?? '--'}/100, Innovation & Faisabilité technique ${projectContext.projectSynthesis?.scores?.innovationFeasibility ?? projectContext.projectSynthesis?.scores?.carbonMaturity ?? '--'}/100, Global ${projectContext.projectSynthesis?.scores?.globalScore ?? '--'}/100
 - Empreinte carbone produit : ${projectContext.impactIndicators?.carbonFootprint?.totalCarbonKgCO2e ?? '--'} kg CO2e / unité
 ` : ''}
 

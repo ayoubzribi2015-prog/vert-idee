@@ -159,7 +159,7 @@ export async function generateWordReport(rawProject: ProjectAudit): Promise<Blob
               createScoreRow('Score Environnemental Global', project.projectSynthesis?.scores?.environmental ?? 50),
               createScoreRow('Score Social & Sociétal (RSE)', project.projectSynthesis?.scores?.social ?? 50),
               createScoreRow('Économie Circulaire & Réemploi', project.projectSynthesis?.scores?.circularity ?? 50),
-              createScoreRow('Maturité Carbone & Décarbonation', project.projectSynthesis?.scores?.carbonMaturity ?? 50),
+              createScoreRow('Innovation & Faisabilité technique', project.projectSynthesis?.scores?.innovationFeasibility ?? project.projectSynthesis?.scores?.carbonMaturity ?? 50),
               createScoreRow('NOTE GLOBALE D\'IMPACT', project.projectSynthesis?.scores?.globalScore ?? 50, true),
             ],
           }),

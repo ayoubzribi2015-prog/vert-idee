@@ -1,6 +1,6 @@
 import React from 'react';
 import { ProjectAudit } from '../types';
-import { ShieldCheck, Target, Sparkles, TrendingUp, Compass, ArrowRight, Leaf, Users, Rocket, Gauge, Award } from 'lucide-react';
+import { ShieldCheck, Target, Sparkles, TrendingUp, Compass, ArrowRight, Leaf, Users, Rocket, Lightbulb, Award } from 'lucide-react';
 
 interface ExecutiveSummaryTabProps {
   project: ProjectAudit;
@@ -174,7 +174,7 @@ export const ExecutiveSummaryTab: React.FC<ExecutiveSummaryTabProps> = ({ projec
               {getScoreAppraisal(scores.globalScore)}
             </span>
             <p className="text-[11px] text-stone-500 leading-relaxed max-w-xs pt-2">
-              Indice synthétique multicritère basé sur l'empreinte carbone, la circularité, la préservation des ressources et la RSE.
+              Indice synthétique multicritère basé sur l'environnement, le social & RSE, l'économie circulaire et l'innovation & faisabilité technique.
             </p>
           </div>
 
@@ -243,22 +243,27 @@ export const ExecutiveSummaryTab: React.FC<ExecutiveSummaryTabProps> = ({ projec
           <p className="text-[11px] text-stone-500 leading-normal">Réemploi, démontabilité, consigne et valorisation des flux secondaires.</p>
         </div>
 
-        {/* Pillar 4: Maturité Carbone */}
-        <div className={`bg-white rounded-xl border p-5 space-y-3 shadow-2xs transition-colors ${
-          scores.carbonMaturity < 35 ? 'border-rose-200' : 'border-stone-200/90 hover:border-[#10634e]/40'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Gauge className={`w-4 h-4 ${scores.carbonMaturity < 35 ? 'text-rose-600' : 'text-[#0b4a3a]'}`} />
-              <span className="text-xs font-bold text-stone-800 font-heading">Maturité Carbone</span>
+        {/* Pillar 4: Innovation & Faisabilité technique */}
+        {(() => {
+          const innovationScore = scores.innovationFeasibility ?? scores.carbonMaturity ?? 50;
+          return (
+            <div className={`bg-white rounded-xl border p-5 space-y-3 shadow-2xs transition-colors ${
+              innovationScore < 35 ? 'border-rose-200' : 'border-stone-200/90 hover:border-[#10634e]/40'
+            }`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Lightbulb className={`w-4 h-4 shrink-0 ${innovationScore < 35 ? 'text-rose-600' : 'text-[#0b4a3a]'}`} />
+                  <span className="text-xs font-bold text-stone-800 font-heading leading-tight">Innovation &amp; Faisabilité technique</span>
+                </div>
+                <span className="text-sm font-black text-[#063428] font-mono-numbers shrink-0">{innovationScore}/100</span>
+              </div>
+              <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all duration-700 ${innovationScore < 35 ? 'bg-rose-600' : 'bg-[#0b4a3a]'}`} style={{ width: `${innovationScore}%` }} />
+              </div>
+              <p className="text-[11px] text-stone-500 leading-normal">Technologies propres, originalité du modèle, maîtrise du procédé, disponibilité des intrants, équipements et compétences.</p>
             </div>
-            <span className="text-sm font-black text-[#063428] font-mono-numbers">{scores.carbonMaturity}/100</span>
-          </div>
-          <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all duration-700 ${scores.carbonMaturity < 35 ? 'bg-rose-600' : 'bg-[#0b4a3a]'}`} style={{ width: `${scores.carbonMaturity}%` }} />
-          </div>
-          <p className="text-[11px] text-stone-500 leading-normal">Émissions évitées et trajectoire bas-carbone sur le cycle de vie.</p>
-        </div>
+          );
+        })()}
       </div>
     </div>
   );
