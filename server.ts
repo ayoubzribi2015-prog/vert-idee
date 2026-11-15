@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
@@ -35,6 +34,7 @@ async function startServer() {
 
   if (!isProduction) {
     console.log('Running in development mode (Vite middleware)');
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
         middlewareMode: true,

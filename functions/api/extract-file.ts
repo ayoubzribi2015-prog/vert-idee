@@ -498,17 +498,21 @@ async function callGemini(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90000);
   try {
+    const generationConfig: Record<string, unknown> = {
+      responseMimeType: 'application/json',
+      maxOutputTokens: 2800,
+    };
+    if (!model.toLowerCase().startsWith('gemini-4')) {
+      generationConfig.temperature = 0.1;
+    }
+
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: instructions }] },
         contents: [{ role: 'user', parts }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-          maxOutputTokens: 2800,
-        },
+        generationConfig,
       }),
       signal: controller.signal,
     });
@@ -521,7 +525,9 @@ async function callGemini(
     }
 
     const result: any = await response.json();
-    const text = (result.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || '').join('');
+    const partsOut: any[] = result.candidates?.[0]?.content?.parts || [];
+    const textParts = partsOut.filter((p: any) => p && typeof p.text === 'string' && !p.thought);
+    const text = (textParts.length > 0 ? textParts : partsOut).map((p: any) => p.text || '').join('');
     if (!text.trim()) {
       throw new Error('GEMINI_EMPTY_RESPONSE_' + (result.candidates?.[0]?.finishReason || 'UNKNOWN'));
     }

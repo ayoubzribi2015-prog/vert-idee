@@ -1,12 +1,14 @@
 // Découverte et hiérarchisation stricte des modèles Gemini selon le classement imposé :
-// 1. gemini-3.8-flash
-// 2. gemini-3.5-flash-lite
-// 3. gemini-3.6
-// 4. gemini-3.6-flash
-// 5. gemini-3.1-flash-lite
-// On commence avec 1. gemini-3.8-flash puis on passe au modèle suivant uniquement si le modèle actuel rencontre un problème.
+// 1. gemini-4-hydrogen (Gemini 4 Hydrogen)
+// 2. gemini-3.8-flash
+// 3. gemini-3.5-flash-lite
+// 4. gemini-3.6
+// 5. gemini-3.6-flash
+// 6. gemini-3.1-flash-lite
+// On commence avec 1. gemini-4-hydrogen puis on passe au modèle suivant uniquement si le modèle actuel échoue ou renvoie une réponse vide.
 
 export const ORDERED_GEMINI_MODELS = [
+  'gemini-4-hydrogen',
   'gemini-3.8-flash',
   'gemini-3.5-flash-lite',
   'gemini-3.6',
@@ -30,15 +32,17 @@ const clean = (name: string) => name.replace(/^models\//, '');
 
 function getModelRank(name: string): number {
   const lower = name.toLowerCase();
-  if (lower === 'gemini-3.8-flash' || lower.includes('gemini-3.8-flash')) return 1;
-  if (lower === 'gemini-3.5-flash-lite' || lower.includes('gemini-3.5-flash-lite')) return 2;
-  if (lower === 'gemini-3.6' || (lower.includes('gemini-3.6') && !lower.includes('flash'))) return 3;
-  if (lower === 'gemini-3.6-flash' || lower.includes('gemini-3.6-flash')) return 4;
-  if (lower === 'gemini-3.1-flash-lite' || lower.includes('gemini-3.1-flash-lite')) return 5;
+  if (/(tts|image|live|transcribe|translate|embedding|audio|veo|lyria)/.test(lower)) return 99;
+  if (lower === 'gemini-4-hydrogen') return 1;
+  if (lower === 'gemini-3.8-flash') return 2;
+  if (lower === 'gemini-3.5-flash-lite') return 3;
+  if (lower === 'gemini-3.6') return 4;
+  if (lower === 'gemini-3.6-flash') return 5;
+  if (lower === 'gemini-3.1-flash-lite') return 6;
   return 99;
 }
 
-export async function discoverGeminiModels(apiKey: string, preferred?: string): Promise<ModelDiscovery> {
+export async function discoverGeminiModels(apiKey: string, _preferred?: string): Promise<ModelDiscovery> {
   const now = Date.now();
   let base: ModelDiscovery;
 
@@ -64,8 +68,6 @@ export async function discoverGeminiModels(apiKey: string, preferred?: string): 
           .filter((n) => n && getModelRank(n) < 90)
           .sort((a, b) => getModelRank(a) - getModelRank(b));
 
-        // Si des modèles de la hiérarchie ont été validés via ListModels, on les utilise selon le classement exact
-        // Sinon, on garantit les 5 modèles imposés dans l'ordre strict
         const models = found.length > 0 ? found : [...ORDERED_GEMINI_MODELS];
         base = {
           models,
@@ -86,27 +88,7 @@ export async function discoverGeminiModels(apiKey: string, preferred?: string): 
     cache = { key: apiKey, at: now, value: base };
   }
 
-  // Toujours s'assurer que les modèles sont dans l'ordre exact demandé :
-  // 1. gemini-3.8-flash, 2. gemini-3.5-flash-lite, 3. gemini-3.6, 4. gemini-3.6-flash, 5. gemini-3.1-flash-lite
-  const orderedList = [...ORDERED_GEMINI_MODELS];
-  const finalModels: string[] = [];
-
-  for (const target of orderedList) {
-    // Si la liste découverte contient ce modèle (ou un alias), on le place
-    const match = base.models.find((m) => m === target || m.includes(target));
-    if (match && !finalModels.includes(match)) {
-      finalModels.push(match);
-    } else if (!finalModels.includes(target)) {
-      finalModels.push(target);
-    }
-  }
-
-  // Ajouter d'éventuels autres modèles découverts à la fin
-  for (const m of base.models) {
-    if (!finalModels.includes(m)) {
-      finalModels.push(m);
-    }
-  }
-
-  return { ...base, models: finalModels };
+  // Ordre fixe strict établi par ORDERED_GEMINI_MODELS :
+  // 1. gemini-4-hydrogen, 2. gemini-3.8-flash, 3. gemini-3.5-flash-lite, 4. gemini-3.6, 5. gemini-3.6-flash, 6. gemini-3.1-flash-lite
+  return { ...base, models: [...ORDERED_GEMINI_MODELS] };
 }

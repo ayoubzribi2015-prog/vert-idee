@@ -2,13 +2,24 @@ import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../src/utils/gemini
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { Type, ThinkingLevel } from '@google/genai';
-import { generateText, Output, jsonSchema, type ModelMessage } from 'ai';
 import path from 'path';
 import dotenv from 'dotenv';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
+
+const Type = {
+  OBJECT: 'OBJECT',
+  STRING: 'STRING',
+  NUMBER: 'NUMBER',
+  INTEGER: 'INTEGER',
+  BOOLEAN: 'BOOLEAN',
+  ARRAY: 'ARRAY',
+} as const;
+
+const ThinkingLevel = {
+  LOW: 'LOW',
+} as const;
 
 dotenv.config({ path: ['.env.development.local', '.env.local', '.env'], quiet: true });
 
@@ -209,6 +220,12 @@ export async function executeGenerate({
   let cleanConfig: any = undefined;
   if (generationConfig && typeof generationConfig === 'object') {
     const { systemInstruction: _, ...rest } = generationConfig;
+    if (model.toLowerCase().startsWith('gemini-4')) {
+      delete rest.temperature;
+      delete rest.topP;
+      delete rest.topK;
+      delete rest.candidateCount;
+    }
     if (Object.keys(rest).length > 0) cleanConfig = rest;
   }
 
@@ -258,7 +275,7 @@ app.post('/api/generate', async (req: express.Request, res: express.Response) =>
     return res.status(400).json({ error: 'Champ "contents" obligatoire' });
   }
 
-  const modelName = model || 'gemini-3.8-flash';
+  const modelName = model || ORDERED_GEMINI_MODELS[0];
   const result = await executeGenerate({
     apiKey,
     model: modelName,
@@ -311,7 +328,7 @@ async function callGeminiStrict(options: {
 
       clearTimeout(timer);
 
-      if (result.ok && result.text) {
+      if (result.ok && result.text && result.text.trim().length > 0) {
         console.log(`[Mode STRICT_IA] Succès avec le modèle : ${modelName}`);
         return {
           response: { text: result.text },
@@ -319,7 +336,9 @@ async function callGeminiStrict(options: {
         };
       }
 
-      lastError = new Error(result.error || `Erreur HTTP ${result.status}`);
+      lastError = new Error(
+        result.error || (result.ok ? `Réponse vide du modèle ${modelName}` : `Erreur HTTP ${result.status}`)
+      );
       console.warn(`[Mode STRICT_IA] Le modèle ${modelName} a rencontré un problème (${lastError.message}). Passage au modèle suivant dans le classement...`);
     } catch (err: any) {
       clearTimeout(timer);
@@ -464,23 +483,6 @@ app.delete('/api/projects/:id', async (req: express.Request, res: express.Respon
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
-// Chargement différé de pdf-parse : pdfjs-dist exige DOMMatrix/Path2D, absents de Node
-// en serverless. `pdf-parse/worker` les polyfille via @napi-rs/canvas et fournit le worker
-// en data URL ; l'import différé évite qu'un échec de chargement ne casse toute l'API.
-let pdfParsePromise: Promise<typeof import('pdf-parse').PDFParse> | null = null;
-function loadPDFParse() {
-  pdfParsePromise ??= (async () => {
-    const { getData } = await import('pdf-parse/worker');
-    const { PDFParse } = await import('pdf-parse');
-    PDFParse.setWorker(getData());
-    return PDFParse;
-  })().catch((err) => {
-    pdfParsePromise = null;
-    throw err;
-  });
-  return pdfParsePromise;
-}
 
 /**
  * Analyse sémantique locale de secours garantissant des phrases complètes,
@@ -706,23 +708,7 @@ async function extractRawTextFromFile(buffer: Buffer, filename: string, mimeType
       console.warn('[File Extract] unpdf non disponible:', unpdfErr?.message);
     }
 
-    // 2. Deuxième tentative : pdf-parse v2
-    if (!extractedText || extractedText.trim().length < 20) {
-      try {
-        const PDFParse = await loadPDFParse();
-        if (PDFParse) {
-          const parser = typeof PDFParse === 'function' ? new PDFParse({ data: buffer }) : null;
-          if (parser && typeof parser.getText === 'function') {
-            const parsedResult = await parser.getText();
-            extractedText = typeof parsedResult === 'string' ? parsedResult : (parsedResult?.text || '');
-          }
-        }
-      } catch (pdfErr: any) {
-        console.warn('[File Extract] Erreur pdf-parse:', pdfErr?.message);
-      }
-    }
-
-    // 3. Troisième tentative : Gemini Multimodal pour PDF scannés ou à rendu graphique
+    // 2. Deuxième tentative : Gemini Multimodal pour PDF scannés ou à rendu graphique
     if ((!extractedText || extractedText.trim().length < 25) && base64Data) {
       try {
         const { response: aiRes } = await callGeminiStrict({

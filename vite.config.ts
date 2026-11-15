@@ -10,6 +10,11 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, '.'),
     },
   },
+  build: {
+    sourcemap: false,
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 1000,
+  },
   server: {
     host: '0.0.0.0',
     allowedHosts: ['vert-idee.onrender.com'],

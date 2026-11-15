@@ -13,6 +13,10 @@ async function callGeminiChat(
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const generationConfig = model.toLowerCase().startsWith('gemini-4')
+      ? undefined
+      : { temperature: 0.7 };
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -24,9 +28,7 @@ async function callGeminiChat(
           parts: [{ text: systemInstruction }],
         },
         contents,
-        generationConfig: {
-          temperature: 0.7,
-        },
+        ...(generationConfig ? { generationConfig } : {}),
       }),
       signal: controller.signal,
     });
@@ -37,8 +39,10 @@ async function callGeminiChat(
     }
 
     const data: any = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text || typeof text !== 'string') {
+    const parts: any[] = data?.candidates?.[0]?.content?.parts || [];
+    const textParts = parts.filter((p: any) => p && typeof p.text === 'string' && !p.thought);
+    const text = (textParts.length > 0 ? textParts : parts).map((p: any) => p?.text || '').join('');
+    if (!text.trim()) {
       throw new Error('Réponse Gemini vide');
     }
     return text.trim();
