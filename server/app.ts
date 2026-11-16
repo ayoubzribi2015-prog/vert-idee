@@ -1717,7 +1717,21 @@ Contexte technique actuel du projet audité :
 - Empreinte carbone produit : ${projectContext.impactIndicators?.carbonFootprint?.totalCarbonKgCO2e ?? '--'} kg CO2e / unité
 ` : ''}
 
-Réponds en français avec un ton professionnel, direct, hautement qualifié, analytique et sans complaisance. Apporte des conseils d'expert aguerri, des analyses de risques rigoureuses et des recommandations pratiques basées sur le terrain.
+Réponds en français avec un ton professionnel, direct, analytique et sans complaisance.
+
+*** RÈGLES STRICTES DE FORMAT, PÉDAGOGIE ET LISIBILITÉ (OBLIGATOIRES) ***
+L'utilisateur doit saisir l'essentiel rapidement tout en comprenant en profondeur le raisonnement technique :
+1. **Équilibre clarté / profondeur** : Structure systématiquement la réponse en sections distinctes et aérées (300 à 420 mots hors tableaux/graphiques).
+2. **Structure visuelle obligatoire** :
+   - \`### Synthèse\` : 2 à 3 lignes maximum répondant directement à la question.
+   - \`### Analyse narrative approfondie\` : Un **paragraphe narratif fluide et détaillé** (5 à 7 phrases) qui développe le contexte opérationnel, les mécanismes de cause à effet, les arbitrages techniques/financiers et les points de vigilance terrain pour que l'utilisateur comprenne parfaitement le raisonnement derrière les chiffres.
+   - \`### Tableau décisionnel\` : Un **tableau Markdown compact** (\`| Critère / Action | Impact | Priorité / Chiffre |\`) de 3 à 5 lignes max pour comparer options, leviers, risques ou financements.
+   - **Graphique visuel intégré** : Dès qu'il existe des données chiffrées, scores, répartitions (%) ou comparatifs (CO2, coûts, gains, délais), insère **1 bloc graphique** au format JSON strict entouré de \`\`\`chart :
+     \`\`\`chart
+     {"type":"bar","title":"Titre court du graphique","unit":"%","items":[{"label":"Levier 1","value":45},{"label":"Levier 2","value":30}]}
+     \`\`\`
+     (Utilise "type":"bar" pour comparer des valeurs ou "type":"donut" pour une répartition en %).
+   - \`### Prochaines étapes\` : 3 puces courtes et actionnables maximum.
 `;
 
     // Build contents from history
@@ -1725,12 +1739,13 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
 
     if (Array.isArray(history)) {
       for (const item of history.slice(-8)) {
-        if (item.role === 'user' || item.role === 'model') {
-          contents.push({
-            role: item.role,
-            parts: [{ text: item.content }],
-          });
-        }
+        const text = typeof item?.content === 'string' ? item.content : typeof item?.text === 'string' ? item.text : '';
+        if (!text.trim()) continue;
+        const mappedRole = item.role === 'model' || item.role === 'assistant' ? 'model' : 'user';
+        contents.push({
+          role: mappedRole,
+          parts: [{ text }],
+        });
       }
     }
 
@@ -1747,7 +1762,9 @@ Réponds en français avec un ton professionnel, direct, hautement qualifié, an
         timeoutMs: 60000,
         config: {
           systemInstruction,
-          temperature: 0.7,
+          maxOutputTokens: 3584,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          temperature: 0.5,
         },
       });
       reply = response.text || 'Désolé, je n\'ai pas pu générer de réponse.';

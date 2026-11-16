@@ -14,8 +14,8 @@ async function callGeminiChat(
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     const generationConfig = model.toLowerCase().startsWith('gemini-4')
-      ? undefined
-      : { temperature: 0.7 };
+      ? { maxOutputTokens: 3584, thinkingConfig: { thinkingLevel: 'LOW' } }
+      : { temperature: 0.5, maxOutputTokens: 3584 };
 
     const response = await fetch(url, {
       method: 'POST',
@@ -104,14 +104,27 @@ Contexte technique actuel du projet audité :
 - Empreinte carbone produit : ${projectContext.impactIndicators?.carbonFootprint?.totalCarbonKgCO2e ?? '--'} kg CO2e / unité
 ` : ''}
 
-Réponds en français avec un ton professionnel, direct, hautement qualifié, analytique et sans complaisance. Apporte des conseils d'expert aguerri, des analyses de risques rigoureuses et des recommandations pratiques basées sur le terrain.`;
+Réponds en français avec un ton professionnel, direct, analytique et sans complaisance.
+
+*** RÈGLES STRICTES DE FORMAT, PÉDAGOGIE ET LISIBILITÉ (OBLIGATOIRES) ***
+1. **Équilibre clarté / profondeur** : Structure la réponse en sections distinctes et aérées (300 à 420 mots hors tableaux/graphiques).
+2. **Structure visuelle obligatoire** :
+   - \`### Synthèse\` : 2 à 3 lignes maximum répondant directement à la question.
+   - \`### Analyse narrative approfondie\` : Un **paragraphe narratif fluide et détaillé** (5 à 7 phrases) développant le contexte, les mécanismes de cause à effet, les arbitrages techniques/financiers et les points de vigilance terrain.
+   - \`### Tableau décisionnel\` : Tableau Markdown compact (3 à 5 lignes max) pour comparer options, leviers, risques ou financements.
+   - **Graphique visuel intégré** : Dès qu'il existe des données chiffrées, scores ou comparatifs, insère 1 bloc JSON strict entouré de \`\`\`chart :
+     \`\`\`chart
+     {"type":"bar","title":"Titre court","unit":"%","items":[{"label":"Poste 1","value":45},{"label":"Poste 2","value":30}]}
+     \`\`\`
+   - \`### Prochaines étapes\` : 3 puces courtes et actionnables maximum.`;
 
     const contents: Array<{ role: 'user' | 'model'; parts: [{ text: string }] }> = [];
     if (Array.isArray(history)) {
-      for (const item of history) {
-        if (!item || typeof item.text !== 'string') continue;
+      for (const item of history.slice(-8)) {
+        const txt = typeof item?.content === 'string' ? item.content : typeof item?.text === 'string' ? item.text : '';
+        if (!txt.trim()) continue;
         const role = item.role === 'model' || item.role === 'assistant' ? 'model' : 'user';
-        contents.push({ role, parts: [{ text: item.text }] });
+        contents.push({ role, parts: [{ text: txt }] });
       }
     }
     contents.push({ role: 'user', parts: [{ text: message }] });
