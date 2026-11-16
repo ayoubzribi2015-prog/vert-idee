@@ -33,7 +33,11 @@
         "sdgAlignment": { "type": "array" },
         "impactIndicators": { "type": "object" },
         "greenFinancingAndLabels": { "type": "object" },
-        "priorityActionPlan": { "type": "object" }
+        "priorityActionPlan": { "type": "object" },
+        "assistantHistory": {
+          "type": "array",
+          "description": "Persisted Éco-Conseiller AI conversation messages for this project"
+        }
       },
       "required": ["id", "userId", "title", "sector", "description", "createdAt"]
     }

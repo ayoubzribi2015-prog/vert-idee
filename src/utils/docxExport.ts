@@ -12,7 +12,7 @@ import {
   AlignmentType,
   ShadingType,
 } from 'docx';
-import type { ProjectAudit } from '../types.ts';
+import type { AssistantChatMessage, ProjectAudit } from '../types.ts';
 import { normalizeProjectAudit } from './normalizeProject.ts';
 
 const PRIMARY_COLOR = '047857'; // emerald-700
@@ -916,6 +916,132 @@ export async function generateWordReport(rawProject: ProjectAudit): Promise<Blob
                 ],
               })
           ),
+
+          // ==========================================
+          // 9. Échanges avec l'Éco-Conseiller AI Vert'Idée
+          // ==========================================
+          ...(project.assistantHistory && project.assistantHistory.length > 0
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_1,
+                  spacing: { before: 420, after: 120 },
+                  children: [
+                    new TextRun({
+                      text: "9. Échanges & Conseils de l'Éco-Conseiller AI Vert'Idée",
+                      bold: true,
+                      color: SECONDARY_COLOR,
+                      size: 24,
+                    }),
+                  ],
+                }),
+                ...buildAssistantDiscussionDocxElements(project.assistantHistory),
+              ]
+            : []),
+        ],
+      },
+    ],
+  });
+
+  return await Packer.toBlob(doc);
+}
+
+export async function generateAssistantChatWordReport(
+  rawProject: ProjectAudit | null,
+  rawMessages: AssistantChatMessage[]
+): Promise<Blob> {
+  const project = rawProject ? normalizeProjectAudit(rawProject) : null;
+  const messages = (rawMessages || []).filter(
+    (m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim().length > 0
+  );
+
+  const exportDate = new Date().toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 200, after: 100 },
+            children: [
+              new TextRun({
+                text: "SYNTHÈSE DES ÉCHANGES — ÉCO-CONSEILLER AI VERT'IDÉE",
+                size: 20,
+                bold: true,
+                color: PRIMARY_COLOR,
+              }),
+            ],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 140 },
+            children: [
+              new TextRun({
+                text: project ? project.title : 'Consultation Éco-Conseil Globale',
+                size: 30,
+                bold: true,
+                color: '111827',
+              }),
+            ],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 300 },
+            children: [
+              new TextRun({
+                text: project
+                  ? `Secteur : ${project.sector || 'Économie Circulaire'}  |  Lieu : ${project.location || 'Tunisie'}  |  Score Global : ${project.projectSynthesis?.scores?.globalScore ?? '--'}/100  |  Exporté le ${exportDate}`
+                  : `Mode Consultation Globale  |  Exporté le ${exportDate}  |  Expertise Vert_Idée`,
+                size: 18,
+                italics: true,
+                color: TEXT_MUTED,
+              }),
+            ],
+          }),
+          ...(project
+            ? [
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    createKeyValueRow('Projet associé', project.title),
+                    createKeyValueRow('Secteur', project.sector || 'Économie Circulaire'),
+                    createKeyValueRow('Lieu', project.location || 'Tunisie'),
+                    createKeyValueRow("Score Global d'Impact", `${project.projectSynthesis?.scores?.globalScore ?? '--'} / 100`),
+                  ],
+                }),
+              ]
+            : []),
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: 300, after: 120 },
+            children: [
+              new TextRun({
+                text: "Journal structuré de la discussion avec l'Éco-Conseiller AI",
+                bold: true,
+                color: SECONDARY_COLOR,
+                size: 24,
+              }),
+            ],
+          }),
+          ...(messages.length > 0
+            ? buildAssistantDiscussionDocxElements(messages)
+            : [
+                new Paragraph({
+                  spacing: { before: 100, after: 100 },
+                  children: [
+                    new TextRun({
+                      text: "Aucun échange enregistré pour cette discussion.",
+                      italics: true,
+                      color: TEXT_MUTED,
+                    }),
+                  ],
+                }),
+              ]),
         ],
       },
     ],
@@ -1126,3 +1252,390 @@ function createDescriptionParagraphs(description?: string): Paragraph[] {
 
   return paragraphs;
 }
+
+function buildAssistantDiscussionDocxElements(messages: AssistantChatMessage[]): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
+  let exchangeNumber = 0;
+
+  for (const msg of messages) {
+    const timestampLabel = msg.createdAt
+      ? ` — ${new Date(msg.createdAt).toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })}`
+      : '';
+
+    if (msg.role === 'user') {
+      exchangeNumber += 1;
+      elements.push(
+        new Paragraph({
+          spacing: { before: 220, after: 80 },
+          shading: { type: ShadingType.CLEAR, fill: BG_LIGHT },
+          children: [
+            new TextRun({
+              text: `Question #${exchangeNumber}${timestampLabel} : `,
+              bold: true,
+              color: SECONDARY_COLOR,
+              size: 20,
+            }),
+            new TextRun({
+              text: msg.content.trim(),
+              bold: true,
+              color: '111827',
+              size: 20,
+            }),
+          ],
+        })
+      );
+    } else {
+      elements.push(
+        new Paragraph({
+          spacing: { before: 120, after: 60 },
+          children: [
+            new TextRun({
+              text: `Réponse de l'Éco-Conseiller AI Vert'Idée${timestampLabel}`,
+              bold: true,
+              color: PRIMARY_COLOR,
+              size: 20,
+            }),
+          ],
+        })
+      );
+      elements.push(...parseMarkdownToDocxElements(msg.content));
+    }
+  }
+
+  return elements;
+}
+
+function parseInlineRuns(text: string, baseColor = '1F2937', baseSize = 19, baseBold = false): TextRun[] {
+  const runs: TextRun[] = [];
+  const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      runs.push(
+        new TextRun({
+          text: text.slice(lastIndex, match.index),
+          color: baseColor,
+          size: baseSize,
+          bold: baseBold,
+        })
+      );
+    }
+    const token = match[0];
+    if (token.startsWith('**') && token.endsWith('**')) {
+      runs.push(
+        new TextRun({
+          text: token.slice(2, -2),
+          bold: true,
+          color: '111827',
+          size: baseSize,
+        })
+      );
+    } else if (token.startsWith('*') && token.endsWith('*')) {
+      runs.push(
+        new TextRun({
+          text: token.slice(1, -1),
+          italics: true,
+          bold: baseBold,
+          color: baseColor,
+          size: baseSize,
+        })
+      );
+    } else if (token.startsWith('`') && token.endsWith('`')) {
+      runs.push(
+        new TextRun({
+          text: token.slice(1, -1),
+          font: 'Courier New',
+          color: SECONDARY_COLOR,
+          size: Math.max(16, baseSize - 1),
+        })
+      );
+    }
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    runs.push(
+      new TextRun({
+        text: text.slice(lastIndex),
+        color: baseColor,
+        size: baseSize,
+        bold: baseBold,
+      })
+    );
+  }
+
+  if (runs.length === 0) {
+    runs.push(new TextRun({ text, color: baseColor, size: baseSize, bold: baseBold }));
+  }
+
+  return runs;
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|')) return false;
+  const cells = trimmed.replace(/^\|/, '').replace(/\|$/, '').split('|');
+  return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c.trim()));
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((c) => c.trim());
+}
+
+function stripInlineMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1');
+}
+
+function createChartTableFromJson(rawJson: string): (Paragraph | Table)[] {
+  try {
+    const candidate = JSON.parse(rawJson.trim());
+    if (!candidate || !Array.isArray(candidate.items) || candidate.items.length === 0) {
+      return [];
+    }
+
+    const items: Array<{ label: string; value: number }> = candidate.items
+      .filter((it: any) => it && typeof it.label === 'string' && Number.isFinite(Number(it.value)))
+      .map((it: any) => ({
+        label: String(it.label),
+        value: Number(it.value),
+      }));
+
+    if (items.length === 0) return [];
+
+    const title = typeof candidate.title === 'string' ? candidate.title : 'Données graphiques';
+    const unit = typeof candidate.unit === 'string' && candidate.unit.trim() ? ` ${candidate.unit.trim()}` : '';
+    const total = items.reduce((sum, it) => sum + Math.max(0, it.value), 0);
+
+    return [
+      new Paragraph({
+        spacing: { before: 140, after: 60 },
+        children: [
+          new TextRun({
+            text: `Graphique : ${title}`,
+            bold: true,
+            color: PRIMARY_COLOR,
+            size: 19,
+          }),
+        ],
+      }),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              createHeaderCell('Indicateur / Catégorie'),
+              createHeaderCell('Valeur'),
+              createHeaderCell('Part relative'),
+            ],
+          }),
+          ...items.map((item) => {
+            const pct = total > 0 ? `${Math.round((Math.max(0, item.value) / total) * 100)} %` : '—';
+            return new TableRow({
+              children: [
+                createDataCell(item.label, true),
+                createDataCell(`${item.value}${unit}`, true),
+                createDataCell(pct),
+              ],
+            });
+          }),
+        ],
+      }),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+function parseMarkdownToDocxElements(markdown: string): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
+  const fenceRegex = /```(?:chart|json-chart)\s*\n?([\s\S]*?)```/gi;
+  const segments: Array<{ type: 'text' | 'chart'; value: string }> = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = fenceRegex.exec(markdown)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', value: markdown.slice(lastIndex, match.index) });
+    }
+    segments.push({ type: 'chart', value: match[1] });
+    lastIndex = fenceRegex.lastIndex;
+  }
+  if (lastIndex < markdown.length) {
+    segments.push({ type: 'text', value: markdown.slice(lastIndex) });
+  }
+
+  for (const segment of segments) {
+    if (segment.type === 'chart') {
+      elements.push(...createChartTableFromJson(segment.value));
+      continue;
+    }
+
+    const lines = segment.value.replace(/\r\n/g, '\n').split('\n');
+    let i = 0;
+
+    while (i < lines.length) {
+      const trimmed = lines[i].trim();
+      if (!trimmed) {
+        i++;
+        continue;
+      }
+
+      // Markdown table
+      if (trimmed.includes('|') && i + 1 < lines.length && isMarkdownTableSeparator(lines[i + 1])) {
+        const headers = splitMarkdownTableRow(lines[i]);
+        i += 2;
+        const rows: string[][] = [];
+        while (i < lines.length && lines[i].trim().includes('|') && !isMarkdownTableSeparator(lines[i])) {
+          rows.push(splitMarkdownTableRow(lines[i]));
+          i++;
+        }
+
+        elements.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              new TableRow({
+                children: headers.map((h) => createHeaderCell(stripInlineMarkdown(h))),
+              }),
+              ...rows.map(
+                (row) =>
+                  new TableRow({
+                    children: headers.map((_, cIdx) =>
+                      createDataCell(stripInlineMarkdown(row[cIdx] ?? ''), cIdx === 0)
+                    ),
+                  })
+              ),
+            ],
+          })
+        );
+        continue;
+      }
+
+      // Heading
+      const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+      if (headingMatch) {
+        elements.push(
+          new Paragraph({
+            spacing: { before: 140, after: 60 },
+            children: [
+              new TextRun({
+                text: stripInlineMarkdown(headingMatch[2]),
+                bold: true,
+                color: SECONDARY_COLOR,
+                size: headingMatch[1].length <= 2 ? 21 : 19,
+              }),
+            ],
+          })
+        );
+        i++;
+        continue;
+      }
+
+      // Blockquote
+      if (trimmed.startsWith('>')) {
+        const quoteLines: string[] = [];
+        while (i < lines.length && lines[i].trim().startsWith('>')) {
+          quoteLines.push(lines[i].trim().replace(/^>\s?/, ''));
+          i++;
+        }
+        elements.push(
+          new Paragraph({
+            spacing: { before: 60, after: 60 },
+            indent: { left: 320 },
+            children: parseInlineRuns(quoteLines.join(' '), TEXT_MUTED, 18),
+          })
+        );
+        continue;
+      }
+
+      // Unordered list
+      if (/^[-*•]\s+/.test(trimmed)) {
+        while (i < lines.length && /^[-*•]\s+/.test(lines[i].trim())) {
+          const itemText = lines[i].trim().replace(/^[-*•]\s+/, '');
+          elements.push(
+            new Paragraph({
+              bullet: { level: 0 },
+              spacing: { before: 35, after: 35 },
+              children: parseInlineRuns(itemText, '1F2937', 19),
+            })
+          );
+          i++;
+        }
+        continue;
+      }
+
+      // Ordered list
+      if (/^\d+[.)]\s+/.test(trimmed)) {
+        while (i < lines.length && /^\d+[.)]\s+/.test(lines[i].trim())) {
+          const m = lines[i].trim().match(/^(\d+)[.)]\s+(.+)$/);
+          if (m) {
+            elements.push(
+              new Paragraph({
+                spacing: { before: 35, after: 35 },
+                indent: { left: 260 },
+                children: [
+                  new TextRun({ text: `${m[1]}. `, bold: true, color: SECONDARY_COLOR, size: 19 }),
+                  ...parseInlineRuns(m[2], '1F2937', 19),
+                ],
+              })
+            );
+          }
+          i++;
+        }
+        continue;
+      }
+
+      // Horizontal rule
+      if (/^[-*_]{3,}$/.test(trimmed)) {
+        i++;
+        continue;
+      }
+
+      // Narrative / standard paragraph
+      const paraLines: string[] = [];
+      while (i < lines.length) {
+        const cur = lines[i].trim();
+        if (
+          !cur ||
+          /^#{1,4}\s+/.test(cur) ||
+          cur.startsWith('>') ||
+          /^[-*•]\s+/.test(cur) ||
+          /^\d+[.)]\s+/.test(cur) ||
+          /^[-*_]{3,}$/.test(cur) ||
+          (cur.includes('|') && i + 1 < lines.length && isMarkdownTableSeparator(lines[i + 1]))
+        ) {
+          break;
+        }
+        paraLines.push(cur);
+        i++;
+      }
+      if (paraLines.length > 0) {
+        elements.push(
+          new Paragraph({
+            spacing: { before: 60, after: 80 },
+            children: parseInlineRuns(paraLines.join(' '), '1F2937', 19),
+          })
+        );
+      }
+    }
+  }
+
+  return elements;
+}
+

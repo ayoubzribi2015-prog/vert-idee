@@ -210,18 +210,42 @@ export function subscribeToUserProjects(
   };
 }
 
+function sanitizeForFirestore<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const clean: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+      if (v !== undefined) {
+        clean[k] = sanitizeForFirestore(v);
+      }
+    }
+    return clean as T;
+  }
+  return value;
+}
+
 // Save or update a project in user's cloud Firestore with localStorage fallback
 export async function saveUserProject(userId: string, project: ProjectAudit): Promise<void> {
   const path = `users/${userId}/projects/${project.id}`;
+  const cleanProject = sanitizeForFirestore({
+    ...project,
+    assistantHistory: Array.isArray(project.assistantHistory)
+      ? project.assistantHistory.slice(-100)
+      : [],
+    userId,
+    updatedAt: new Date().toISOString(),
+  });
   
   // Update local storage first for instant offline capability
   const currentLocal = getLocalProjects(userId);
-  const updatedList = [project, ...currentLocal.filter(p => p.id !== project.id)];
+  const updatedList = [cleanProject, ...currentLocal.filter(p => p.id !== cleanProject.id)];
   saveLocalProjects(userId, updatedList);
 
   try {
-    const docRef = doc(db, 'users', userId, 'projects', project.id);
-    await setDoc(docRef, { ...project, userId, updatedAt: new Date().toISOString() }, { merge: true });
+    const docRef = doc(db, 'users', userId, 'projects', cleanProject.id);
+    await setDoc(docRef, cleanProject, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }

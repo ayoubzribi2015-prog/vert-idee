@@ -322,4 +322,15 @@ export interface ProjectAudit {
     summary: string;
     validationStatus: string;
   };
+
+  // 10. Discussion persistée avec l'Éco-Conseiller AI Vert'Idée
+  assistantHistory?: AssistantChatMessage[];
 }
+
+export interface AssistantChatMessage {
+  id?: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt?: string;
+}
+

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   FileText,
   Leaf,
@@ -29,7 +29,7 @@ import {
   Lock,
   RotateCcw,
 } from 'lucide-react';
-import { ProjectAudit, CarbonFootprintModel } from './types';
+import { AssistantChatMessage, ProjectAudit, CarbonFootprintModel } from './types';
 import { Header, TabKey } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { HomePageForm } from './components/HomePageForm';
@@ -47,7 +47,7 @@ import { PriorityActionPlanTab } from './components/PriorityActionPlanTab';
 import { GreenAssistantTab } from './components/GreenAssistantTab';
 import { MobileSectionNav } from './components/MobileSectionNav';
 import { MobileBottomNav } from './components/MobileBottomNav';
-import { generateWordReport } from './utils/docxExport';
+import { generateAssistantChatWordReport, generateWordReport } from './utils/docxExport';
 import { normalizeProjectAudit } from './utils/normalizeProject';
 import {
   auth,
@@ -81,6 +81,11 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dismissedLoginBanner, setDismissedLoginBanner] = useState(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
+  const projectsRef = useRef<ProjectAudit[]>([]);
+
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
 
   useEffect(() => {
     setIsDescExpanded(false);
@@ -344,6 +349,33 @@ export default function App() {
     }
   };
 
+  const handleSaveProjectChat = async (projectId: string, assistantHistory: AssistantChatMessage[]) => {
+    const target = projectsRef.current.find((p) => p.id === projectId);
+    if (!target) return;
+
+    const updatedProject: ProjectAudit = {
+      ...target,
+      assistantHistory,
+      updatedAt: new Date().toISOString(),
+    };
+
+    projectsRef.current = projectsRef.current.map((p) =>
+      p.id === projectId ? updatedProject : p
+    );
+    setProjects(projectsRef.current);
+
+    if (user) {
+      try {
+        setCloudSyncing(true);
+        await saveUserProject(user.uid, updatedProject);
+      } catch (err) {
+        console.warn('Erreur lors de la sauvegarde de la discussion dans Firestore :', err);
+      } finally {
+        setCloudSyncing(false);
+      }
+    }
+  };
+
   const handleDownloadWord = async (projectToDownload?: ProjectAudit) => {
     const target = projectToDownload || activeProject;
     if (!target) return;
@@ -363,6 +395,31 @@ export default function App() {
     } catch (err: any) {
       console.error('Download error:', err);
       setErrorMessage('Erreur lors de la génération du fichier Word.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadDiscussionWord = async (chatMessages: AssistantChatMessage[]) => {
+    try {
+      setIsDownloading(true);
+      const blob = await generateAssistantChatWordReport(activeProject, chatMessages);
+      const slug = activeProject
+        ? activeProject.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 28)
+        : 'Consultation_Globale';
+      const filename = `Discussion_Eco_Conseiller_${slug}.docx`;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      setToastMessage('Discussion Éco-Conseiller AI téléchargée en Word (.docx) !');
+    } catch (err: any) {
+      console.error('Discussion Word download error:', err);
+      setErrorMessage('Erreur lors du téléchargement Word de la discussion.');
     } finally {
       setIsDownloading(false);
     }
@@ -707,7 +764,13 @@ export default function App() {
                 <PriorityActionPlanTab plan={activeProject.priorityActionPlan} />
               )}
               {activeTab === 'assistant' && (
-                <GreenAssistantTab project={activeProject} />
+                <GreenAssistantTab
+                  project={activeProject}
+                  onSaveProjectChat={handleSaveProjectChat}
+                  onDownloadDiscussionWord={handleDownloadDiscussionWord}
+                  isDownloadingWord={isDownloading}
+                  isAuthenticated={Boolean(user)}
+                />
               )}
             </div>
           </div>
@@ -726,7 +789,12 @@ export default function App() {
                   Revenir au formulaire d'accueil
                 </button>
               </div>
-              <GreenAssistantTab project={null} />
+              <GreenAssistantTab
+                project={null}
+                onDownloadDiscussionWord={handleDownloadDiscussionWord}
+                isDownloadingWord={isDownloading}
+                isAuthenticated={Boolean(user)}
+              />
             </div>
           ) : (
             /* Render empty diagnostic form with empty fields */

@@ -121,5 +121,16 @@ export function normalizeProjectAudit(raw: any, fallbackTitle?: string, fallback
         { timeframe: '6-12 mois', title: 'Certification et labellisation verte', description: 'Obtention des écolabels et financement vert.', priorityLevel: 'Stratégique', expectedDeliverable: 'Certification officielle' }
       ],
     },
+    assistantHistory: Array.isArray(raw?.assistantHistory)
+      ? raw.assistantHistory
+          .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim().length > 0)
+          .slice(-100)
+          .map((m: any) => ({
+            ...(m.id ? { id: String(m.id) } : {}),
+            role: m.role as 'user' | 'assistant',
+            content: String(m.content),
+            ...(m.createdAt ? { createdAt: String(m.createdAt) } : {}),
+          }))
+      : [],
   };
 }

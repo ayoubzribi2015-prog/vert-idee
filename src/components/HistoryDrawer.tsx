@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Mail,
   MapPin,
+  MessageSquare,
 } from 'lucide-react';
 import { ProjectAudit } from '../types';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -208,10 +209,21 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                   </p>
 
                   <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100">
-                    <span className="flex items-center gap-1 text-[11px]">
-                      <Calendar className="w-3 h-3" />
-                      {dateStr}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="flex items-center gap-1 text-[11px]">
+                        <Calendar className="w-3 h-3" />
+                        {dateStr}
+                      </span>
+                      {proj.assistantHistory && proj.assistantHistory.length > 0 && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 text-[10px] font-semibold"
+                          title={`${proj.assistantHistory.length} messages enregistrés avec l'Éco-Conseiller AI`}
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          {proj.assistantHistory.length} msg IA
+                        </span>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-1.5">
                       {/* Download Word directly from history */}
@@ -221,7 +233,11 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                           onDownloadProjectWord(proj);
                         }}
                         className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
-                        title="Télécharger le rapport Word (.docx)"
+                        title={
+                          proj.assistantHistory && proj.assistantHistory.length > 0
+                            ? 'Télécharger le rapport Word (.docx) incluant la discussion IA'
+                            : 'Télécharger le rapport Word (.docx)'
+                        }
                       >
                         <FileDown className="w-4 h-4" />
                       </button>
