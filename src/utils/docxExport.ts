@@ -720,6 +720,51 @@ export async function generateWordReport(rawProject: ProjectAudit): Promise<Blob
               ),
             ],
           }),
+          // ADEME Base Carbone reference factors table
+          ...(project.impactIndicators?.carbonFootprint?.ademeReferenceFactors &&
+          project.impactIndicators.carbonFootprint.ademeReferenceFactors.length > 0
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 180, after: 80 },
+                  children: [
+                    new TextRun({
+                      text: "Facteurs d'émission ADEME Base Carbone® de référence :",
+                      bold: true,
+                      color: SECONDARY_COLOR,
+                      size: 20,
+                    }),
+                  ],
+                }),
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        createHeaderCell('ID ADEME'),
+                        createHeaderCell('Poste / Élément'),
+                        createHeaderCell("Facteur d'émission"),
+                        createHeaderCell('Localisation & Étape ACV'),
+                      ],
+                    }),
+                    ...project.impactIndicators.carbonFootprint.ademeReferenceFactors.map((f) =>
+                      new TableRow({
+                        children: [
+                          createDataCell(`#${f.id || 'ADEME'}`, true),
+                          createDataCell(`${f.name || ''}${f.attribute ? ` (${f.attribute})` : ''}\n[${f.category || 'ADEME'}]`),
+                          createDataCell(`${f.factorKgCO2e} ${f.unit}`, true),
+                          createDataCell(
+                            `${f.geography || 'International'}${f.uncertaintyPct ? ` (±${f.uncertaintyPct}%)` : ''}${
+                              f.appliedStage ? `\nÉtape : ${f.appliedStage}` : ''
+                            }`
+                          ),
+                        ],
+                      })
+                    ),
+                  ],
+                }),
+              ]
+            : []),
           // Key metrics table
           new Paragraph({
             heading: HeadingLevel.HEADING_2,

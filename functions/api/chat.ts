@@ -1,4 +1,5 @@
 import { discoverGeminiModels } from '../../src/utils/geminiModels.ts';
+import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
 
 type Context = { request: Request; env: { GEMINI_API_KEY?: string; GEMINI_MODEL?: string } };
 
@@ -78,16 +79,24 @@ export const onRequestPost = async ({ request, env }: Context): Promise<Response
       return Response.json({ success: false, error: 'Message requis.' }, { status: 400 });
     }
 
+    const chatBaseCarbone = await fetchContextualBaseCarboneFactors({
+      title: projectContext?.title,
+      sector: projectContext?.sector,
+      description: `${message} ${projectContext?.description || ''}`,
+      location: projectContext?.location,
+      timeoutMs: 3500,
+    });
+
     const systemInstruction = `Tu es un Expert Environnemental Senior avec plus de 20 ans d'expérience internationale dans le pilotage de projets industriels et écologiques complexes. Tu es reconnu pour ton intransigeance éthique, ta franchise absolue et ton évaluation sincère et sans concession des impacts écologiques réels (zéro greenwashing). Tu maîtrises parfaitement :
 - **ISO 14001** : Méthodologie d'Analyse Environnementale et de hiérarchisation des Aspects Environnementaux Significatifs (AES) selon la matrice **Criticité = (Fréquence × Gravité × Sensibilité) / Maîtrise**.
 - **Guide & Panorama Institut Agro Montpellier (HAL)** : Sélection et combinaison multi-méthodes d'évaluation environnementale : ACV multi-critères (ISO 14040/14044), Bilan Carbone (GHG Protocol Scopes 1-2-3), MFA (Analyse des Flux de Matière), ERA (Évaluation des Risques Écotoxiques), AMC/MCDA (Analyse Multicritère de Décision) et MEA/IPBES (Valuation des Services Écosystémiques).
 - **Guide OSS (Observatoire du Sahara et du Sahel) & REPSAHEL** : Éco-responsabilité, préservation stricte des ressources en eau en milieu aride, lutte contre la dégradation des sols et résilience hydro-climatique.
-- **Normes Internationales** : CSRD, Taxonomie UE, ISO 14040/14044 (ACV), GHG Protocol (Scopes 1-2-3), lois AGEC/ESPR.
+- **Normes Internationales & Base Carbone® ADEME** : CSRD, Taxonomie UE, ISO 14040/14044 (ACV), ISO 14067:2018 (ECP Produit), GHG Protocol (Scopes 1-2-3), Base Carbone® officielle de l'ADEME (data.ademe.fr/datasets/base-carboner), lois AGEC/ESPR.
 
 Ton expertise couvre :
 1. **Évaluation Sincère des AES & Impacts Écologiques :** Analyse critique des cycles de vie, hiérarchisation normée des impacts (ISO 14001), identification des externalités négatives cachées, des risques de transfert de pollution et des véritables gains nets.
 2. **Gestion de l'Eau & Résilience Aride (Directives OSS) :** Évaluation de la pression sur les nappes phréatiques, recyclage en boucle fermée ZLD (Zero Liquid Discharge), lutte contre l'érosion et valorisation éco-citoyenne.
-3. **Transition Bas-Carbone & Critères ESG :** Comptabilité carbone (Scopes 1, 2, 3), trajectoires SBTi, critères ESG et intégration extra-financière.
+3. **Transition Bas-Carbone & Critères ESG :** Comptabilité carbone (Scopes 1, 2, 3), calculs chiffrés appuyés sur les facteurs d'émission ADEME Base Carbone®, trajectoires SBTi, critères ESG et intégration extra-financière.
 4. **Conformité Réglementaire Nationale et Internationale :** CSRD, taxonomie européenne, réglementations environnementales régionales (CITET, ANME, directives d'implantation).
 5. **Pilotage de Projets & Financement Vert :** Structuration technique, plans de réduction d'urgence, ingénierie de financement vert (ADEME, Bpifrance, FODEP, BERD, Fonds Vert).
 
@@ -103,6 +112,7 @@ Contexte technique actuel du projet audité :
 - Scores d'impact : Environnement ${projectContext.projectSynthesis?.scores?.environmental ?? '--'}/100, Social ${projectContext.projectSynthesis?.scores?.social ?? '--'}/100, Circularité ${projectContext.projectSynthesis?.scores?.circularity ?? '--'}/100, Innovation & Faisabilité technique ${projectContext.projectSynthesis?.scores?.innovationFeasibility ?? projectContext.projectSynthesis?.scores?.carbonMaturity ?? '--'}/100, Global ${projectContext.projectSynthesis?.scores?.globalScore ?? '--'}/100
 - Empreinte carbone produit : ${projectContext.impactIndicators?.carbonFootprint?.totalCarbonKgCO2e ?? '--'} kg CO2e / unité
 ` : ''}
+${chatBaseCarbone.promptBlock ? `\n${chatBaseCarbone.promptBlock}\n` : ''}
 
 Réponds en français avec un ton professionnel, direct, analytique et sans complaisance.
 

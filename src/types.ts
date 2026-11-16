@@ -141,12 +141,26 @@ export interface DecarbonizationAction {
   priority: 'P1' | 'P2' | 'P3';
 }
 
+export interface AdemeReferenceFactor {
+  id: string;
+  name: string;
+  attribute?: string;
+  category: string;
+  factorKgCO2e: number;
+  unit: string;
+  geography: string;
+  uncertaintyPct?: number;
+  appliedStage?: string;
+  source?: string;
+}
+
 export interface CarbonFootprintModel {
   functionalUnit: string;
   totalCarbonKgCO2e: number;
   benchmarkComparison: BenchmarkComparison;
   lifecycleStages: LifecycleStageCarbon[];
   highImpactDecarbonizationActions: DecarbonizationAction[];
+  ademeReferenceFactors?: AdemeReferenceFactor[];
 }
 
 export interface ImpactIndicators {

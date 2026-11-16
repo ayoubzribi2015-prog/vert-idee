@@ -1,4 +1,5 @@
 import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../src/utils/geminiModels.ts';
+import { fetchContextualBaseCarboneFactors, searchBaseCarbone } from '../src/utils/baseCarbone.ts';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -436,6 +437,31 @@ app.get('/api/ai-status', async (req: express.Request, res: express.Response) =>
     }
   }
   res.json(status);
+});
+
+// ADEME Base Carbone® Live Emission Factors Search API
+app.get('/api/base-carbone/search', async (req: express.Request, res: express.Response) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const size = Math.min(25, Math.max(1, Number(req.query.size) || 12));
+    if (!q) {
+      res.status(400).json({ success: false, error: 'Paramètre de recherche "q" requis.' });
+      return;
+    }
+    const results = await searchBaseCarbone(q, { size, timeoutMs: 6000 });
+    res.json({
+      success: true,
+      source: 'ADEME Base Carbone®',
+      dataset: 'base-carboner',
+      count: results.length,
+      results,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Erreur lors de la consultation de la Base Carbone ADEME.',
+    });
+  }
 });
 
 // REST API for Cloud History
@@ -1122,7 +1148,7 @@ Toute affirmation non sourcée par une donnée explicite du projet est un manque
    - Pose entre 3 et 5 questions à choix multiples pertinentes pour lever les doutes sur le greenwashing (ex: provenance de la matière, type d'énergie, consommation d'eau et circuit de recyclage).
 
 2. ANALYSE DÉTAILLÉE : Si suffisant, tu es constitué de QUATRE Experts Seniors Indépendants réalisant une revue critique sans la moindre complaisance, couvrant exhaustivement tous les volets du projet :
-   - **Expert 1 (Spécialiste Senior Empreinte Carbone & ACV - Normes ISO 14067:2018, ISO 14064-1:2018, GHG Protocol & MFA Institut Agro)** : Quantification normée de l'Empreinte Carbone Produit (ECP) par unité fonctionnelle ou déclarée (ISO 14067), décomposition rigoureuse selon les 6 catégories d'émissions ISO 14064-1 (Cat 1 directe, Cat 2 énergie importée, Cat 3 transport, Cat 4 intrants/emballages, Cat 5 usage/fin de vie), comptabilisation séparée du carbone biogénique et exclusion stricte de toute compensation carbone fictive.
+   - **Expert 1 (Spécialiste Senior Empreinte Carbone & ACV - Normes ISO 14067:2018, ISO 14064-1:2018, GHG Protocol, Base Carbone® ADEME & MFA Institut Agro)** : Quantification normée de l'Empreinte Carbone Produit (ECP) par unité fonctionnelle ou déclarée (ISO 14067) ancrée sur les facteurs d'émission officiels de la Base Carbone® ADEME (data.ademe.fr/datasets/base-carboner), décomposition rigoureuse selon les 6 catégories d'émissions ISO 14064-1 (Cat 1 directe, Cat 2 énergie importée, Cat 3 transport, Cat 4 intrants/emballages, Cat 5 usage/fin de vie), comptabilisation séparée du carbone biogénique et exclusion stricte de toute compensation carbone fictive.
    - **Expert 2 (Risques Industriels, Écotoxicologie ERA & AES ISO 14001 - Guide OSS & Institut Agro)** : Évaluation de la criticité des impacts selon la matrice normée **Criticité (C) = [Fréquence (F) × Gravité (G) × Sensibilité du Milieu (S)] / Maîtrise Opérationnelle (M)**, l'évaluation des risques écotoxiques (ERA), le stress hydrique (OSS), la santé des riverains et la conformité réglementaire (CITET, CSRD, Taxonomie UE).
    - **Expert 3 (Expert Senior en Entrepreneuriat Vert & Modèles Circulaires - Master 2 / Doctorat, >10 ans d'expérience dans le conseil RSE & incubation)** : Pilote la structuration des modèles d'affaires circulaires (écoconception, économie de la fonctionnalité PaaS, écologie industrielle & symbioses territoriales, gestion/valorisation des déchets, réemploi 9R), la modélisation financière et viabilité économique, le suivi-évaluation (M&E) des KPI d'impacts (tonnes CO2 évitées, déchets valorisés, emplois verts), et l'ingénierie financière pour l'accès aux financements verts (ANME/FTE, SwitchMed, FODEP, BERD Climat, capital-risque vert & fonds à impact).
    - **Expert 4 (Détecteur Avancé Anti-Greenwashing & Vérification des Allégations)** : Chasse implacable aux revendications environnementales trompeuses (greenwashing), analyse critique de la matérialité des gains annoncés face aux impacts cachés (amont/aval), exigence de preuves mesurables (ACV certifiée, traçabilité des intrants, labels authentiques).
@@ -1195,10 +1221,19 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
    - PRINCIPE DNSH (Do No Significant Harm / Non-nuisance importante) : Fournir pour chaque ODD une analyse DNSH garantissant que l'atteinte de cette cible ne cause aucun dommage disproportionné sur les autres écosystèmes (ex: consommation énergétique d'un service digital, recyclage batterie solaire, etc.).
    - KPI DE SUIVI ET STANDARDS GRI / CSRD : Spécifier au moins 1 KPI d'impact chiffrable et les liens normatifs pertinents (ex: GRI 302, GRI 303, GRI 305, GRI 306, ESRS E1, ESRS E5, ESRS S1).
    - RÈGLE IMPÉRATIVE POUR LES PROJETS EDTECH / ÉDUCATION : Pour tout projet relevant de l'éducation, de la formation, de l'EdTech, de l'inclusion (ex: enfants TSA, DYS) ou de la pédagogie, tu DOIS obligatoirement inclure l'**ODD 4 (Éducation de qualité)** en premier et au niveau 'Majeur' (avec les sous-cibles 4.1, 4.4, 4.5 et 4.7), complété par les ODD 10, 8 et 12.
-6. Indicateurs d'impact : Bilan carbone normé selon ISO 14067:2018 (par unité fonctionnelle) et ISO 14064-1:2018 (Catégories 1 à 6). Analyse de cycle de vie étape par étape (Approvisionnement Cat 4, Fabrication Cat 1-2, Conditionnement Cat 4, Transport Cat 3, Utilisation Cat 5, Fin de vie Cat 5) avec exclusion stricte de toute compensation carbone fictive. Pour benchmarkComparison : si le projet appartient à une industrie lourde ou polluante, totalCarbonKgCO2e DOIT être STRICTEMENT SUPÉRIEUR à industryAverageKgCO2e (+20% à +60% de sur-émissions) ; si éco-innovation vertueuse, totalCarbonKgCO2e DOIT être INFÉRIEUR (-20% à -65%). Actions de décarbonation quantifiées (P1/P2/P3), intensité eau chiffrée.
+6. Indicateurs d'impact : Bilan carbone normé selon ISO 14067:2018 (par unité fonctionnelle) et ISO 14064-1:2018 (Catégories 1 à 6), calibré à l'aide des facteurs d'émission ADEME Base Carbone® fournis. Analyse de cycle de vie étape par étape (Approvisionnement Cat 4, Fabrication Cat 1-2, Conditionnement Cat 4, Transport Cat 3, Utilisation Cat 5, Fin de vie Cat 5) avec exclusion stricte de toute compensation carbone fictive, citation explicite des IDs ADEME retenus dans les descriptions et ademeReferenceFactors. Pour benchmarkComparison : si le projet appartient à une industrie lourde ou polluante, totalCarbonKgCO2e DOIT être STRICTEMENT SUPÉRIEUR à industryAverageKgCO2e (+20% à +60% de sur-émissions) ; si éco-innovation vertueuse, totalCarbonKgCO2e DOIT être INFÉRIEUR (-20% à -65%). Actions de décarbonation quantifiées (P1/P2/P3), intensité eau chiffrée.
 7. Financements et labels verts : Statut d'éligibilité réel (exclusion formelle des labels verts si activité polluante), fonds de mise en conformité et dépollution (FODEP, BERD Climat).
 8. Plan d'action prioritaire : Actions concrètes d'urgence (0-12 mois) priorisées avec livrables opérationnels pour la neutralisation des AES.
 `;
+
+    const baseCarboneCtx = await fetchContextualBaseCarboneFactors({
+      title,
+      sector,
+      description,
+      location: resolveLocation(location),
+      fullDocumentContent,
+      timeoutMs: 4500,
+    });
 
     const userPrompt = `
 Voici le projet à auditer selon les 8 sections officielles par le Collège des 4 Experts Environnementaux :
@@ -1220,6 +1255,7 @@ ${fullDocumentContent.trim().slice(0, 50000)}
     : ''
 }
 ${req.body && req.body.answers ? `- Informations complémentaires fournies (Q&R) : ${JSON.stringify(req.body.answers)}` : ''}
+${baseCarboneCtx.promptBlock ? `\n${baseCarboneCtx.promptBlock}\n` : ''}
 
 Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, exclusivement fondé sur la description et le contenu des documents fournis dans cette demande spécifique (sans aucun cache de cohérence ni contrainte d'alignement historique).
 `;
@@ -1500,6 +1536,25 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
                         required: ['action', 'estimatedReductionPct', 'priority'],
                       },
                     },
+                    ademeReferenceFactors: {
+                      type: Type.ARRAY,
+                      description: 'Facteurs d\'émission ADEME Base Carbone® utilisés pour le calcul',
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          id: { type: Type.STRING },
+                          name: { type: Type.STRING },
+                          attribute: { type: Type.STRING },
+                          category: { type: Type.STRING },
+                          factorKgCO2e: { type: Type.NUMBER },
+                          unit: { type: Type.STRING },
+                          geography: { type: Type.STRING },
+                          uncertaintyPct: { type: Type.NUMBER },
+                          appliedStage: { type: Type.STRING },
+                        },
+                        required: ['id', 'name', 'factorKgCO2e', 'unit'],
+                      },
+                    },
                   },
                   required: ['functionalUnit', 'totalCarbonKgCO2e', 'benchmarkComparison', 'lifecycleStages', 'highImpactDecarbonizationActions'],
                 },
@@ -1650,8 +1705,17 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       return;
     }
 
-    // Build complete project object
+    // Build complete project object and ensure ADEME Base Carbone® reference factors are attached
     const finalSector = parsedData.detectedSector || sector || 'Économie Circulaire & Éco-innovation';
+    if (
+      parsedData?.impactIndicators?.carbonFootprint &&
+      (!Array.isArray(parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors) ||
+        parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors.length === 0) &&
+      baseCarboneCtx.factors.length > 0
+    ) {
+      parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors = baseCarboneCtx.factors.slice(0, 6);
+    }
+
     const auditResult = {
       id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title,
@@ -1690,17 +1754,25 @@ app.post('/api/chat', async (req: express.Request, res: express.Response) => {
       return;
     }
 
+    const chatBaseCarbone = await fetchContextualBaseCarboneFactors({
+      title: projectContext?.title,
+      sector: projectContext?.sector,
+      description: `${message} ${projectContext?.description || ''}`,
+      location: projectContext?.location,
+      timeoutMs: 3500,
+    });
+
     const systemInstruction = `
 Tu es un Expert Environnemental Senior avec plus de 20 ans d'expérience internationale dans le pilotage de projets industriels et écologiques complexes. Tu es reconnu pour ton intransigeance éthique, ta franchise absolue et ton évaluation sincère et sans concession des impacts écologiques réels (zéro greenwashing). Tu maîtrises parfaitement :
 - **ISO 14001** : Méthodologie d'Analyse Environnementale et de hiérarchisation des Aspects Environnementaux Significatifs (AES) selon la matrice **Criticité = (Fréquence × Gravité × Sensibilité) / Maîtrise**.
 - **Guide & Panorama Institut Agro Montpellier (HAL)** : Sélection et combinaison multi-méthodes d'évaluation environnementale : ACV multi-critères (ISO 14040/14044), Bilan Carbone (GHG Protocol Scopes 1-2-3), MFA (Analyse des Flux de Matière), ERA (Évaluation des Risques Écotoxiques), AMC/MCDA (Analyse Multicritère de Décision) et MEA/IPBES (Valuation des Services Écosystémiques).
 - **Guide OSS (Observatoire du Sahara et du Sahel) & REPSAHEL** : Éco-responsabilité, préservation stricte des ressources en eau en milieu aride, lutte contre la dégradation des sols et résilience hydro-climatique.
-- **Normes Internationales** : CSRD, Taxonomie UE, ISO 14040/14044 (ACV), GHG Protocol (Scopes 1-2-3), lois AGEC/ESPR.
+- **Normes Internationales & Base Carbone® ADEME** : CSRD, Taxonomie UE, ISO 14040/14044 (ACV), ISO 14067:2018 (ECP Produit), GHG Protocol (Scopes 1-2-3), Base Carbone® officielle de l'ADEME (data.ademe.fr/datasets/base-carboner), lois AGEC/ESPR.
 
 Ton expertise couvre :
 1. **Évaluation Sincère des AES & Impacts Écologiques :** Analyse critique des cycles de vie, hiérarchisation normée des impacts (ISO 14001), identification des externalités négatives cachées, des risques de transfert de pollution et des véritables gains nets.
 2. **Gestion de l'Eau & Résilience Aride (Directives OSS) :** Évaluation de la pression sur les nappes phréatiques, recyclage en boucle fermée ZLD (Zero Liquid Discharge), lutte contre l'érosion et valorisation éco-citoyenne.
-3. **Transition Bas-Carbone & Critères ESG :** Comptabilité carbone (Scopes 1, 2, 3), trajectoires SBTi, critères ESG et intégration extra-financière.
+3. **Transition Bas-Carbone & Critères ESG :** Comptabilité carbone (Scopes 1, 2, 3), calculs chiffrés appuyés sur les facteurs d'émission ADEME Base Carbone®, trajectoires SBTi, critères ESG et intégration extra-financière.
 4. **Conformité Réglementaire Nationale et Internationale :** CSRD, taxonomie européenne, réglementations environnementales régionales (CITET, ANME, directives d'implantation).
 5. **Pilotage de Projets & Financement Vert :** Structuration technique, plans de réduction d'urgence, ingénierie de financement vert (ADEME, Bpifrance, FODEP, BERD, Fonds Vert).
 
@@ -1716,6 +1788,7 @@ Contexte technique actuel du projet audité :
 - Scores d'impact : Environnement ${projectContext.projectSynthesis?.scores?.environmental ?? '--'}/100, Social ${projectContext.projectSynthesis?.scores?.social ?? '--'}/100, Circularité ${projectContext.projectSynthesis?.scores?.circularity ?? '--'}/100, Innovation & Faisabilité technique ${projectContext.projectSynthesis?.scores?.innovationFeasibility ?? projectContext.projectSynthesis?.scores?.carbonMaturity ?? '--'}/100, Global ${projectContext.projectSynthesis?.scores?.globalScore ?? '--'}/100
 - Empreinte carbone produit : ${projectContext.impactIndicators?.carbonFootprint?.totalCarbonKgCO2e ?? '--'} kg CO2e / unité
 ` : ''}
+${chatBaseCarbone.promptBlock ? `\n${chatBaseCarbone.promptBlock}\n` : ''}
 
 Réponds en français avec un ton professionnel, direct, analytique et sans complaisance.
 

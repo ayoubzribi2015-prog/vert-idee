@@ -95,6 +95,23 @@ export function normalizeProjectAudit(raw: any, fallbackTitle?: string, fallback
         },
         lifecycleStages: Array.isArray(carbon.lifecycleStages) ? carbon.lifecycleStages : [],
         highImpactDecarbonizationActions: Array.isArray(carbon.highImpactDecarbonizationActions) ? carbon.highImpactDecarbonizationActions : [],
+        ademeReferenceFactors: Array.isArray(carbon.ademeReferenceFactors)
+          ? carbon.ademeReferenceFactors
+              .filter((f: any) => f && f.name && Number.isFinite(Number(f.factorKgCO2e)))
+              .slice(0, 20)
+              .map((f: any) => ({
+                id: String(f.id || ''),
+                name: String(f.name),
+                ...(f.attribute ? { attribute: String(f.attribute) } : {}),
+                category: String(f.category || 'ADEME Base Carbone'),
+                factorKgCO2e: Number(f.factorKgCO2e),
+                unit: String(f.unit || 'kgCO2e/unité'),
+                geography: String(f.geography || 'France / International'),
+                ...(Number.isFinite(Number(f.uncertaintyPct)) ? { uncertaintyPct: Number(f.uncertaintyPct) } : {}),
+                ...(f.appliedStage ? { appliedStage: String(f.appliedStage) } : {}),
+                source: String(f.source || 'ADEME Base Carbone®'),
+              }))
+          : [],
       },
       circularityRate: impact.circularityRate || '75%',
       wasteAvoided: impact.wasteAvoided || '30%',

@@ -1,4 +1,5 @@
 import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../../src/utils/geminiModels.ts';
+import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
 
 type Context = {
   request: Request;
@@ -115,6 +116,15 @@ Le rapport DOIT être structuré en JSON selon les 8 sections officielles :
 8. priorityActionPlan (phase1_0to3months, phase2_3to6months, phase3_6to12months)
 `;
 
+  const baseCarboneCtx = await fetchContextualBaseCarboneFactors({
+    title,
+    sector,
+    description,
+    location: loc,
+    fullDocumentContent,
+    timeoutMs: 4500,
+  });
+
   const userPrompt = `
 Voici le projet à auditer selon les 8 sections officielles :
 - Titre : ${title}
@@ -126,6 +136,7 @@ ${businessModel ? `- Modèle économique suggéré : ${businessModel}` : ''}
 ${lifeCycleDetails ? `- Détails cycle de vie : ${lifeCycleDetails}` : ''}
 ${fullDocumentContent ? `- Documents importés :\n"""\n${String(fullDocumentContent).slice(0, 40000)}\n"""` : ''}
 ${answers ? `- Réponses complémentaires : ${JSON.stringify(answers)}` : ''}
+${baseCarboneCtx.promptBlock ? `\n${baseCarboneCtx.promptBlock}\n` : ''}
 
 Consigne : Réalise un audit direct et rigoureux en JSON valide.
 `;
@@ -393,6 +404,24 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
                               },
                               required: ["action", "estimatedReductionPct", "priority"]
                             }
+                          },
+                          ademeReferenceFactors: {
+                            type: "ARRAY",
+                            items: {
+                              type: "OBJECT",
+                              properties: {
+                                id: { type: "STRING" },
+                                name: { type: "STRING" },
+                                attribute: { type: "STRING" },
+                                category: { type: "STRING" },
+                                factorKgCO2e: { type: "NUMBER" },
+                                unit: { type: "STRING" },
+                                geography: { type: "STRING" },
+                                uncertaintyPct: { type: "NUMBER" },
+                                appliedStage: { type: "STRING" }
+                              },
+                              required: ["id", "name", "factorKgCO2e", "unit"]
+                            }
                           }
                         },
                         required: ["functionalUnit", "totalCarbonKgCO2e", "benchmarkComparison", "lifecycleStages", "highImpactDecarbonizationActions"]
@@ -542,6 +571,15 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   }
 
   const finalSector = parsedData.detectedSector || sector || 'Économie Circulaire & Éco-innovation';
+  if (
+    parsedData?.impactIndicators?.carbonFootprint &&
+    (!Array.isArray(parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors) ||
+      parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors.length === 0) &&
+    baseCarboneCtx.factors.length > 0
+  ) {
+    parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors = baseCarboneCtx.factors.slice(0, 6);
+  }
+
   const auditResult = {
     id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     title,

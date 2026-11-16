@@ -13,8 +13,18 @@ import {
   Trash2,
   Droplets,
   Users,
+  Search,
+  Database,
+  Plus,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react';
-import { ImpactIndicators, CarbonFootprintModel, LifecycleStageCarbon } from '../types';
+import {
+  ImpactIndicators,
+  CarbonFootprintModel,
+  LifecycleStageCarbon,
+  AdemeReferenceFactor,
+} from '../types';
 
 interface ImpactIndicatorsTabProps {
   indicators: ImpactIndicators;
@@ -40,14 +50,32 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
 }) => {
   const initialModel = indicators.carbonFootprint;
   const [stages, setStages] = useState<LifecycleStageCarbon[]>(initialModel.lifecycleStages);
+  const [ademeFactors, setAdemeFactors] = useState<AdemeReferenceFactor[]>(
+    initialModel.ademeReferenceFactors || []
+  );
   const [annualVolume, setAnnualVolume] = useState<number>(10000);
   const [hasChanges, setHasChanges] = useState<boolean>(false);
   const [appliedSimulation, setAppliedSimulation] = useState<string | null>(null);
 
+  // ADEME Base Carbone® live search & calculator state
+  const [ademeQuery, setAdemeQuery] = useState<string>('');
+  const [ademeResults, setAdemeResults] = useState<AdemeReferenceFactor[]>([]);
+  const [isSearchingAdeme, setIsSearchingAdeme] = useState<boolean>(false);
+  const [ademeError, setAdemeError] = useState<string | null>(null);
+  const [selectedAdemeFactor, setSelectedAdemeFactor] = useState<AdemeReferenceFactor | null>(null);
+  const [ademeQuantity, setAdemeQuantity] = useState<string>('1');
+  const [targetStageId, setTargetStageId] = useState<string>(
+    initialModel.lifecycleStages?.[0]?.id || ''
+  );
+
   useEffect(() => {
     setStages(initialModel.lifecycleStages);
+    setAdemeFactors(initialModel.ademeReferenceFactors || []);
     setHasChanges(false);
     setAppliedSimulation(null);
+    if (initialModel.lifecycleStages?.length > 0) {
+      setTargetStageId(initialModel.lifecycleStages[0].id);
+    }
   }, [initialModel]);
 
   const totalCarbonKgCO2e = stages.reduce((acc, s) => acc + (s.emissionKgCO2e || 0), 0);
@@ -109,8 +137,63 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
 
   const handleResetToBaseline = () => {
     setStages(initialModel.lifecycleStages);
+    setAdemeFactors(initialModel.ademeReferenceFactors || []);
     setHasChanges(false);
     setAppliedSimulation(null);
+  };
+
+  const handleSearchAdeme = async (overrideQuery?: string) => {
+    const q = (overrideQuery !== undefined ? overrideQuery : ademeQuery).trim();
+    if (!q) return;
+    if (overrideQuery !== undefined) setAdemeQuery(overrideQuery);
+    try {
+      setIsSearchingAdeme(true);
+      setAdemeError(null);
+      const res = await fetch(`/api/base-carbone/search?q=${encodeURIComponent(q)}&size=10`);
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Erreur de consultation ADEME Base Carbone®');
+      }
+      setAdemeResults(Array.isArray(data.results) ? data.results : []);
+      if (Array.isArray(data.results) && data.results.length > 0) {
+        setSelectedAdemeFactor(data.results[0]);
+      } else {
+        setSelectedAdemeFactor(null);
+      }
+    } catch (err: any) {
+      setAdemeError(err?.message || 'Impossible de joindre la Base Carbone ADEME.');
+    } finally {
+      setIsSearchingAdeme(false);
+    }
+  };
+
+  const handleApplyAdemeFactor = (mode: 'add' | 'replace') => {
+    if (!selectedAdemeFactor || !targetStageId) return;
+    const qty = Math.max(0, Number(ademeQuantity) || 0);
+    const computedEmission = Number((qty * selectedAdemeFactor.factorKgCO2e).toFixed(4));
+    const targetStageObj = stages.find((s) => s.id === targetStageId);
+
+    setStages((prev) =>
+      prev.map((stage) => {
+        if (stage.id !== targetStageId) return stage;
+        const nextEmission =
+          mode === 'add'
+            ? Math.max(0, Number((stage.emissionKgCO2e + computedEmission).toFixed(2)))
+            : Math.max(0, Number(computedEmission.toFixed(2)));
+        return { ...stage, emissionKgCO2e: nextEmission };
+      })
+    );
+
+    const enrichedFactor: AdemeReferenceFactor = {
+      ...selectedAdemeFactor,
+      appliedStage: targetStageObj?.name || targetStageId,
+    };
+
+    setAdemeFactors((prev) => {
+      const filtered = prev.filter((f) => f.id !== enrichedFactor.id);
+      return [enrichedFactor, ...filtered].slice(0, 15);
+    });
+    setHasChanges(true);
   };
 
   const handleSaveToCloud = async () => {
@@ -122,6 +205,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
         emissionKgCO2e: Number(s.emissionKgCO2e.toFixed(2)),
         percentage: Number(s.percentage.toFixed(1)),
       })),
+      ademeReferenceFactors: ademeFactors,
     };
     await onSaveCarbonUpdates(updatedModel);
     setHasChanges(false);
@@ -197,9 +281,17 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#fafbf9] text-[#063428] border border-stone-200">
                 ISO 14064-1:2018
               </span>
-              <span className="text-[10px] font-semibold text-stone-500">
-                GHG Protocol & ADEME
-              </span>
+              <a
+                href="https://data.ademe.fr/datasets/base-carboner"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#edf5f0] text-[#063428] border border-[#0b4a3a]/25 hover:bg-[#dfeee5] transition-colors"
+                title="Base Carbone® officielle de l'ADEME"
+              >
+                <Database className="w-3 h-3 text-[#10634e]" />
+                <span>ADEME Base Carbone®</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
             </div>
             <h3 className="text-base font-bold text-stone-900 font-heading">
               Unité fonctionnelle : {initialModel.functionalUnit}
@@ -562,6 +654,211 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* ADEME Base Carbone® Reference Factors & Live Calculator */}
+        <div className="space-y-4 pt-4 border-t border-stone-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#063428] flex items-center gap-1.5">
+                <Database className="w-4 h-4 text-[#10634e]" />
+                <span>Calculateur &amp; Référentiel ADEME Base Carbone®</span>
+              </h4>
+              <p className="text-[11px] text-stone-500 mt-0.5">
+                Interrogez les facteurs d'émission officiels (data.ademe.fr) pour calibrer et vérifier chaque poste du cycle de vie.
+              </p>
+            </div>
+          </div>
+
+          {ademeFactors.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-stone-200 bg-[#fafbf9]">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200 bg-[#edf5f0] text-[#063428] font-bold text-[11px]">
+                    <th className="py-2 px-3">ID ADEME</th>
+                    <th className="py-2 px-3">Poste / Intrant</th>
+                    <th className="py-2 px-3">Facteur d'émission</th>
+                    <th className="py-2 px-3">Localisation &amp; Incertitude</th>
+                    <th className="py-2 px-3">Étape ACV</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {ademeFactors.map((f, idx) => (
+                    <tr key={`${f.id}-${idx}`} className="hover:bg-white transition-colors">
+                      <td className="py-2 px-3 font-mono-numbers font-bold text-[#10634e] whitespace-nowrap">
+                        #{f.id || 'ADEME'}
+                      </td>
+                      <td className="py-2 px-3 text-stone-800">
+                        <span className="font-semibold block">
+                          {f.name}
+                          {f.attribute ? ` — ${f.attribute}` : ''}
+                        </span>
+                        <span className="text-[10px] text-stone-500 line-clamp-1">{f.category}</span>
+                      </td>
+                      <td className="py-2 px-3 font-mono-numbers font-extrabold text-[#063428] whitespace-nowrap">
+                        {f.factorKgCO2e} <span className="font-normal text-stone-600">{f.unit}</span>
+                      </td>
+                      <td className="py-2 px-3 text-[11px] text-stone-600">
+                        {f.geography}
+                        {f.uncertaintyPct ? ` (±${f.uncertaintyPct}%)` : ''}
+                      </td>
+                      <td className="py-2 px-3 text-[11px] text-stone-700 font-medium">
+                        {f.appliedStage || 'Référence audit'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Live ADEME Search & Apply Box */}
+          <div className="p-4 rounded-xl border border-stone-200 bg-stone-50/70 space-y-3">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={ademeQuery}
+                  onChange={(e) => setAdemeQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearchAdeme()}
+                  placeholder="Rechercher un facteur ADEME (ex: électricité tunisie, PEHD, acier, carton, routier...)"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-stone-300 bg-white text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-[#10634e]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSearchAdeme()}
+                disabled={isSearchingAdeme || !ademeQuery.trim()}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-[#063428] hover:bg-[#0b4a3a] text-white disabled:opacity-40 transition-colors cursor-pointer shrink-0"
+              >
+                {isSearchingAdeme ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Search className="w-3.5 h-3.5" />
+                )}
+                <span>Rechercher ADEME</span>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: 'Électricité Tunisie', q: 'Tunisie' },
+                { label: 'Électricité PV', q: 'Electricité photovoltaïque' },
+                { label: 'Gaz naturel', q: 'Gaz naturel kWh PCI' },
+                { label: 'PEHD / Plastique', q: 'Plastique PEHD tonne' },
+                { label: 'Emballage Carton', q: 'Emballages Carton' },
+                { label: 'Fret routier (t.km)', q: '"Transport de marchandises" routier' },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => handleSearchAdeme(preset.q)}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white hover:bg-[#edf5f0] text-stone-700 hover:text-[#063428] border border-stone-200 transition-colors cursor-pointer"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {ademeError && (
+              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                {ademeError}
+              </p>
+            )}
+
+            {ademeResults.length > 0 && (
+              <div className="space-y-3">
+                <div className="max-h-52 overflow-y-auto rounded-lg border border-stone-200 bg-white divide-y divide-stone-100">
+                  {ademeResults.map((item) => {
+                    const isSelected = selectedAdemeFactor?.id === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setSelectedAdemeFactor(item)}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                          isSelected ? 'bg-[#edf5f0] text-[#063428]' : 'hover:bg-stone-50 text-stone-700'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <span className="font-bold block truncate">
+                            #{item.id} — {item.name}
+                            {item.attribute ? ` (${item.attribute})` : ''}
+                          </span>
+                          <span className="text-[10px] text-stone-500 block truncate">
+                            {item.category} • {item.geography}
+                          </span>
+                        </div>
+                        <span className="font-mono-numbers font-extrabold text-[#063428] shrink-0">
+                          {item.factorKgCO2e} {item.unit}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedAdemeFactor && (
+                  <div className="p-3 rounded-lg border border-[#10634e]/30 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end text-xs">
+                    <div className="sm:col-span-3 space-y-1">
+                      <label className="text-[10px] font-bold uppercase text-stone-500 block">
+                        Quantité ({selectedAdemeFactor.unit.split('/')[1] || 'unité'})
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        value={ademeQuantity}
+                        onChange={(e) => setAdemeQuantity(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-stone-300 font-mono-numbers font-bold text-stone-900"
+                      />
+                    </div>
+                    <div className="sm:col-span-4 space-y-1">
+                      <label className="text-[10px] font-bold uppercase text-stone-500 block">
+                        Étape ACV cible
+                      </label>
+                      <select
+                        value={targetStageId}
+                        onChange={(e) => setTargetStageId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-stone-300 bg-white text-stone-900 font-medium"
+                      >
+                        {stages.map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name} ({st.emissionKgCO2e.toFixed(2)} kg)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2 text-center sm:text-left">
+                      <span className="text-[10px] uppercase font-bold text-stone-500 block">Impact calculé</span>
+                      <span className="font-mono-numbers font-black text-sm text-[#10634e]">
+                        {((Number(ademeQuantity) || 0) * selectedAdemeFactor.factorKgCO2e).toFixed(2)} kg CO₂e
+                      </span>
+                    </div>
+                    <div className="sm:col-span-3 flex gap-1.5 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleApplyAdemeFactor('add')}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#063428] hover:bg-[#0b4a3a] text-white font-bold cursor-pointer"
+                        title="Ajouter ce calcul à l'étape sélectionnée"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Ajouter</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyAdemeFactor('replace')}
+                        className="px-2.5 py-1.5 rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-800 font-semibold cursor-pointer"
+                        title="Remplacer la valeur de l'étape par ce calcul"
+                      >
+                        Remplacer
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
