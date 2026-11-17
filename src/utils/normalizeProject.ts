@@ -255,7 +255,7 @@ export function normalizeCarbonFootprint(
     highImpactDecarbonizationActions: Array.isArray(carbon?.highImpactDecarbonizationActions)
       ? carbon.highImpactDecarbonizationActions
       : [],
-    ademeReferenceFactors,
+    ademeReferenceFactors: ademeFactors,
   };
 }
 
