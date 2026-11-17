@@ -291,7 +291,7 @@ RÈGLES DE CALCUL CARBONE — OBLIGATOIRES ET NON NÉGOCIABLES :
 - Applique rigoureusement les conversions d'unités entre l'unité du facteur et l'Unité Fonctionnelle du projet. Ne jamais moyenner des facteurs exprimés dans des unités différentes.
 - INTERDICTION ABSOLUE d'inventer, d'approximer ou de remplacer un facteur ADEME par une valeur mémorisée : si aucun facteur ne correspond exactement, cite le plus proche et signale explicitement l'incertitude.
 - Cite explicitement l'identifiant [ADEME ID #xxxxx], la valeur, l'unité et l'incertitude dans les descriptions des étapes, dans benchmarkComparison.commentary et dans le tableau ademeReferenceFactors (champs id, name, factorKgCO2e, unit, uncertaintyPct, source).
-- La somme des émissions des 6 étapes doit être cohérente avec totalCarbonKgCO2e. Toute valeur non traçable à un ID ADEME est invalide.`;
+- La somme des émissions des 6 étapes doit être cohérente avec totalCarbonKgCO2e : chaque étape concernée doit avoir une émission strictement positive. Si aucun facteur ne correspond exactement à une étape, utilise le facteur ADEME le plus proche en signalant son incertitude. Ne renvoie JAMAIS 0 pour une étape faute de facteur exact.`;
 
     return { factors: topFactors, promptBlock };
   } catch {

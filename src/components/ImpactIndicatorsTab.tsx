@@ -25,6 +25,7 @@ import {
   LifecycleStageCarbon,
   AdemeReferenceFactor,
 } from '../types';
+import { buildDefaultLifecycleStages } from '../utils/normalizeProject';
 
 interface ImpactIndicatorsTabProps {
   indicators: ImpactIndicators;
@@ -49,7 +50,13 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   isSaving,
 }) => {
   const initialModel = indicators.carbonFootprint;
-  const [stages, setStages] = useState<LifecycleStageCarbon[]>(initialModel.lifecycleStages);
+  // The headline figure is the sum of stages: never render 0.00 when the model
+  // carries a positive footprint total but no usable stage breakdown.
+  const baselineStages = initialModel.lifecycleStages?.length
+    ? initialModel.lifecycleStages
+    : buildDefaultLifecycleStages(initialModel.totalCarbonKgCO2e);
+
+  const [stages, setStages] = useState<LifecycleStageCarbon[]>(baselineStages);
   const [ademeFactors, setAdemeFactors] = useState<AdemeReferenceFactor[]>(
     initialModel.ademeReferenceFactors || []
   );
@@ -64,17 +71,15 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   const [ademeError, setAdemeError] = useState<string | null>(null);
   const [selectedAdemeFactor, setSelectedAdemeFactor] = useState<AdemeReferenceFactor | null>(null);
   const [ademeQuantity, setAdemeQuantity] = useState<string>('1');
-  const [targetStageId, setTargetStageId] = useState<string>(
-    initialModel.lifecycleStages?.[0]?.id || ''
-  );
+  const [targetStageId, setTargetStageId] = useState<string>(baselineStages[0]?.id || '');
 
   useEffect(() => {
-    setStages(initialModel.lifecycleStages);
+    setStages(baselineStages);
     setAdemeFactors(initialModel.ademeReferenceFactors || []);
     setHasChanges(false);
     setAppliedSimulation(null);
-    if (initialModel.lifecycleStages?.length > 0) {
-      setTargetStageId(initialModel.lifecycleStages[0].id);
+    if (baselineStages.length > 0) {
+      setTargetStageId(baselineStages[0].id);
     }
   }, [initialModel]);
 
@@ -136,7 +141,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   };
 
   const handleResetToBaseline = () => {
-    setStages(initialModel.lifecycleStages);
+    setStages(baselineStages);
     setAdemeFactors(initialModel.ademeReferenceFactors || []);
     setHasChanges(false);
     setAppliedSimulation(null);

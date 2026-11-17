@@ -1,4 +1,124 @@
-import { ProjectAudit } from '../types';
+import {
+  BenchmarkComparison,
+  CarbonFootprintModel,
+  LifecycleStageCarbon,
+  ProjectAudit,
+} from '../types';
+
+const DEFAULT_CARBON_TOTAL = 120.5;
+
+const CARBON_STAGE_CATEGORIES: LifecycleStageCarbon['category'][] = [
+  'raw_materials',
+  'manufacturing',
+  'packaging',
+  'transport',
+  'usage',
+  'end_of_life',
+];
+
+/**
+ * Deterministic 6-stage ISO 14064-1 breakdown used only when the AI returns no
+ * usable stage emissions. It preserves the footprint total without inventing a
+ * new figure; the weights are a transparent estimation, not ADEME factors.
+ */
+export function buildDefaultLifecycleStages(totalKgCO2e: number): LifecycleStageCarbon[] {
+  const definitions = [
+    { id: 'raw_materials', name: 'Approvisionnement & matières premières', category: 'raw_materials' as const, weight: 0.34, description: 'Intrants et matières premières (Catégorie 4 ISO 14064-1).', reductionOpportunity: 'Privilégier matières recyclées et circuits courts.' },
+    { id: 'manufacturing', name: 'Fabrication & procédés', category: 'manufacturing' as const, weight: 0.26, description: 'Procédés de production et énergie importée (Catégories 1-2).', reductionOpportunity: 'Électrifier les procédés et recourir aux énergies renouvelables.' },
+    { id: 'packaging', name: 'Conditionnement & emballages', category: 'packaging' as const, weight: 0.10, description: 'Emballages et intrants de conditionnement (Catégorie 4).', reductionOpportunity: 'Réduire, réutiliser et recycler les emballages.' },
+    { id: 'transport', name: 'Transport & logistique', category: 'transport' as const, weight: 0.14, description: 'Fret amont et aval, mobilité (Catégorie 3).', reductionOpportunity: 'Reporter le fret sur le rail et optimiser les tournées.' },
+    { id: 'usage', name: 'Utilisation', category: 'usage' as const, weight: 0.08, description: 'Émissions de la phase d’utilisation du produit (Catégorie 5).', reductionOpportunity: 'Allonger la durée de vie et améliorer l’efficacité énergétique.' },
+    { id: 'end_of_life', name: 'Fin de vie & valorisation', category: 'end_of_life' as const, weight: 0.08, description: 'Traitement des déchets et valorisation (Catégorie 5).', reductionOpportunity: 'Organiser la reprise et le recyclage des matériaux.' },
+  ];
+
+  return definitions.map((d) => ({
+    id: d.id,
+    name: d.name,
+    category: d.category,
+    emissionKgCO2e: Number((totalKgCO2e * d.weight).toFixed(4)),
+    percentage: Number((d.weight * 100).toFixed(1)),
+    description: `${d.description} Répartition estimative par défaut, à confirmer par les facteurs ADEME.`,
+    reductionOpportunity: d.reductionOpportunity,
+  }));
+}
+
+/** Keep the headline total and the stage breakdown consistent before rendering. */
+function normalizeCarbonFootprint(carbon: any, benchmark: BenchmarkComparison): CarbonFootprintModel {
+  const rawTotal = Number(carbon.totalCarbonKgCO2e);
+  const rawStages = Array.isArray(carbon.lifecycleStages) ? carbon.lifecycleStages : [];
+
+  const stages: LifecycleStageCarbon[] = rawStages
+    .filter((s: any) => s && typeof s === 'object')
+    .map((s: any) => {
+      const emission = Number(s.emissionKgCO2e);
+      return {
+        id: typeof s.id === 'string' && s.id ? s.id : String(s.category || 'stage'),
+        name: typeof s.name === 'string' && s.name ? s.name : 'Étape du cycle de vie',
+        category: CARBON_STAGE_CATEGORIES.includes(s.category) ? s.category : 'manufacturing',
+        emissionKgCO2e: Number.isFinite(emission) && emission > 0 ? emission : 0,
+        percentage: Number.isFinite(Number(s.percentage)) ? Number(s.percentage) : 0,
+        description: typeof s.description === 'string' ? s.description : '',
+        reductionOpportunity: typeof s.reductionOpportunity === 'string' ? s.reductionOpportunity : '',
+      };
+    });
+
+  const stageSum = stages.reduce((sum, s) => sum + s.emissionKgCO2e, 0);
+  let total = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : stageSum;
+  if (!Number.isFinite(total) || total <= 0) {
+    total = Number.isFinite(benchmark.industryAverageKgCO2e) && benchmark.industryAverageKgCO2e > 0
+      ? benchmark.industryAverageKgCO2e
+      : DEFAULT_CARBON_TOTAL;
+  }
+
+  let normalizedStages: LifecycleStageCarbon[];
+  if (stageSum <= 0) {
+    // The calculator sums stages, so an empty/zero breakdown would display 0.00
+    // even though a positive footprint total is known.
+    normalizedStages = buildDefaultLifecycleStages(total);
+  } else if (Math.abs(stageSum - total) > 0.01) {
+    const scale = total / stageSum;
+    normalizedStages = stages.map((s) => ({ ...s, emissionKgCO2e: s.emissionKgCO2e * scale }));
+  } else {
+    normalizedStages = stages;
+  }
+
+  normalizedStages = normalizedStages.map((s) => ({
+    ...s,
+    percentage: total > 0 ? (s.emissionKgCO2e / total) * 100 : 0,
+  }));
+
+  return {
+    functionalUnit: carbon.functionalUnit || '1 unité fonctionnelle / service',
+    totalCarbonKgCO2e: total,
+    benchmarkComparison: benchmark,
+    lifecycleStages: normalizedStages,
+    highImpactDecarbonizationActions: Array.isArray(carbon.highImpactDecarbonizationActions)
+      ? carbon.highImpactDecarbonizationActions
+      : [],
+    ademeReferenceFactors: Array.isArray(carbon.ademeReferenceFactors)
+      ? carbon.ademeReferenceFactors
+          .filter((f: any) => f && f.name && Number.isFinite(Number(f.factorKgCO2e)))
+          .slice(0, 20)
+          .map((f: any) => ({
+            id: String(f.id || ''),
+            name: String(f.name),
+            ...(f.attribute ? { attribute: String(f.attribute) } : {}),
+            category: String(f.category || 'ADEME Base Carbone'),
+            factorKgCO2e: Number(f.factorKgCO2e),
+            unit: String(f.unit || 'kgCO2e/unité'),
+            geography: String(f.geography || 'France / International'),
+            ...(Number.isFinite(Number(f.uncertaintyPct)) ? { uncertaintyPct: Number(f.uncertaintyPct) } : {}),
+            ...(f.appliedStage ? { appliedStage: String(f.appliedStage) } : {}),
+            source: String(f.source || 'ADEME Base Carbone®'),
+            ...(f.version ? { version: String(f.version) } : {}),
+            ...(f.validity ? { validity: String(f.validity) } : {}),
+            ...(f.program ? { program: String(f.program) } : {}),
+            ...(f.sourceDetail ? { sourceDetail: String(f.sourceDetail) } : {}),
+            ...(Number.isFinite(Number(f.matchScore)) ? { matchScore: Number(f.matchScore) } : {}),
+          }))
+      : [],
+  };
+}
 
 export function normalizeProjectAudit(raw: any, fallbackTitle?: string, fallbackDesc?: string, fallbackLocation?: string): ProjectAudit {
   const synthesis = raw?.projectSynthesis || {};
@@ -85,34 +205,11 @@ export function normalizeProjectAudit(raw: any, fallbackTitle?: string, fallback
       }
     ],
     impactIndicators: {
-      carbonFootprint: {
-        functionalUnit: carbon.functionalUnit || '1 unité fonctionnelle / service',
-        totalCarbonKgCO2e: typeof carbon.totalCarbonKgCO2e === 'number' ? carbon.totalCarbonKgCO2e : 120.5,
-        benchmarkComparison: carbon.benchmarkComparison || {
-          industryAverageKgCO2e: 180.0,
-          ecoDesignedTargetKgCO2e: 100.0,
-          commentary: 'Performance carbone optimisée par rapport au benchmark sectoriel.'
-        },
-        lifecycleStages: Array.isArray(carbon.lifecycleStages) ? carbon.lifecycleStages : [],
-        highImpactDecarbonizationActions: Array.isArray(carbon.highImpactDecarbonizationActions) ? carbon.highImpactDecarbonizationActions : [],
-        ademeReferenceFactors: Array.isArray(carbon.ademeReferenceFactors)
-          ? carbon.ademeReferenceFactors
-              .filter((f: any) => f && f.name && Number.isFinite(Number(f.factorKgCO2e)))
-              .slice(0, 20)
-              .map((f: any) => ({
-                id: String(f.id || ''),
-                name: String(f.name),
-                ...(f.attribute ? { attribute: String(f.attribute) } : {}),
-                category: String(f.category || 'ADEME Base Carbone'),
-                factorKgCO2e: Number(f.factorKgCO2e),
-                unit: String(f.unit || 'kgCO2e/unité'),
-                geography: String(f.geography || 'France / International'),
-                ...(Number.isFinite(Number(f.uncertaintyPct)) ? { uncertaintyPct: Number(f.uncertaintyPct) } : {}),
-                ...(f.appliedStage ? { appliedStage: String(f.appliedStage) } : {}),
-                source: String(f.source || 'ADEME Base Carbone®'),
-              }))
-          : [],
-      },
+      carbonFootprint: normalizeCarbonFootprint(carbon, carbon.benchmarkComparison || {
+        industryAverageKgCO2e: 180.0,
+        ecoDesignedTargetKgCO2e: 100.0,
+        commentary: 'Performance carbone optimisée par rapport au benchmark sectoriel.'
+      }),
       circularityRate: impact.circularityRate || '75%',
       wasteAvoided: impact.wasteAvoided || '30%',
       waterPreservation: impact.waterPreservation || '25%',
