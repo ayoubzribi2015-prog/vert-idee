@@ -1,11 +1,11 @@
-import {
+import type {
   AdemeReferenceFactor,
   BenchmarkComparison,
   CarbonFactorApplication,
   CarbonFootprintModel,
   LifecycleStageCarbon,
   ProjectAudit,
-} from '../types';
+} from '../types.ts';
 
 const CARBON_STAGE_CATEGORIES: LifecycleStageCarbon['category'][] = [
   'raw_materials',
