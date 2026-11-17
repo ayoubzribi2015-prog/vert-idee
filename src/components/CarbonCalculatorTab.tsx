@@ -15,6 +15,7 @@ import {
   Info,
 } from 'lucide-react';
 import { CarbonFootprintModel, LifecycleStageCarbon } from '../types';
+import { buildDefaultLifecycleStages } from '../utils/normalizeProject';
 
 interface CarbonCalculatorTabProps {
   initialModel: CarbonFootprintModel;
@@ -47,14 +48,20 @@ export const CarbonCalculatorTab: React.FC<CarbonCalculatorTabProps> = ({
   onSaveCarbonUpdates,
   isSaving,
 }) => {
-  const [stages, setStages] = useState<LifecycleStageCarbon[]>(initialModel.lifecycleStages);
+  // Defensive fallback: the headline figure is the sum of stages, so a model
+  // with a positive total but no stages must still render that total.
+  const baselineStages = initialModel.lifecycleStages?.length
+    ? initialModel.lifecycleStages
+    : buildDefaultLifecycleStages(initialModel.totalCarbonKgCO2e);
+
+  const [stages, setStages] = useState<LifecycleStageCarbon[]>(baselineStages);
   const [annualVolume, setAnnualVolume] = useState<number>(10000);
   const [hasChanges, setHasChanges] = useState<boolean>(false);
   const [appliedSimulation, setAppliedSimulation] = useState<string | null>(null);
 
   // Sync when initialModel changes
   useEffect(() => {
-    setStages(initialModel.lifecycleStages);
+    setStages(baselineStages);
     setHasChanges(false);
     setAppliedSimulation(null);
   }, [initialModel]);
@@ -120,7 +127,7 @@ export const CarbonCalculatorTab: React.FC<CarbonCalculatorTabProps> = ({
   };
 
   const handleResetToBaseline = () => {
-    setStages(initialModel.lifecycleStages);
+    setStages(baselineStages);
     setHasChanges(false);
     setAppliedSimulation(null);
   };
