@@ -1,4 +1,4 @@
-import { searchBaseCarbone } from '../../../src/utils/baseCarbone.ts';
+import { searchBaseCarbone, BASE_CARBONE_VERSION } from '../../../src/utils/baseCarbone.ts';
 
 export const onRequestGet = async ({ request }: { request: Request }): Promise<Response> => {
   try {
@@ -17,6 +17,7 @@ export const onRequestGet = async ({ request }: { request: Request }): Promise<R
     return Response.json({
       success: true,
       source: 'ADEME Base Carbone®',
+      version: BASE_CARBONE_VERSION,
       dataset: 'base-carboner',
       count: results.length,
       results,

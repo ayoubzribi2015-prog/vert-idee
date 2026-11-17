@@ -652,6 +652,81 @@ export const CarbonCalculatorTab: React.FC<CarbonCalculatorTabProps> = ({
           </table>
         </div>
       </div>
+
+      {/* ADEME Base Carbone traceability */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+        <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+          <CheckCircle className="w-5 h-5 text-emerald-600" />
+          <div>
+            <h4 className="font-bold text-sm text-slate-900 font-heading">
+              Traçabilité des facteurs d’émission ADEME Base Carbone®
+            </h4>
+            <p className="text-xs text-slate-500">
+              Référentiel V23.11 figé (index local) : chaque facteur est identifié par son ID ADEME, reproductible et auditable.
+            </p>
+          </div>
+        </div>
+
+        {(initialModel.ademeReferenceFactors?.length ?? 0) > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/80 font-semibold text-slate-600 uppercase tracking-wider">
+                  <th className="py-2.5 px-3">ID ADEME</th>
+                  <th className="py-2.5 px-3">Facteur d’émission</th>
+                  <th className="py-2.5 px-3">Valeur</th>
+                  <th className="py-2.5 px-3">Catégorie</th>
+                  <th className="py-2.5 px-3">Localisation</th>
+                  <th className="py-2.5 px-3">Incertitude</th>
+                  <th className="py-2.5 px-3">Version</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {initialModel.ademeReferenceFactors!.map((f) => (
+                  <tr key={f.id} className="hover:bg-slate-50/50 align-top">
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-indigo-100 text-indigo-800">
+                        #{f.id}
+                      </span>
+                      {f.appliedStage && (
+                        <div className="text-[10px] text-slate-500 mt-1">{f.appliedStage}</div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 font-medium text-slate-800 max-w-[16rem]">
+                      {f.name}
+                      {f.attribute && <div className="text-[10px] text-slate-500">{f.attribute}</div>}
+                      {f.sourceDetail && (
+                        <div className="text-[10px] text-slate-400 italic">{f.sourceDetail}</div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap font-bold text-emerald-700 font-mono-numbers">
+                      {f.factorKgCO2e}{' '}
+                      <span className="font-normal text-slate-500">{f.unit}</span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-600 max-w-[12rem]">{f.category}</td>
+                    <td className="py-3 px-3 text-slate-600 whitespace-nowrap">{f.geography}</td>
+                    <td className="py-3 px-3 whitespace-nowrap font-mono-numbers">
+                      {f.uncertaintyPct ? `±${f.uncertaintyPct}%` : '—'}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 font-bold text-[10px]">
+                        {f.version || 'V23.11'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[10px] text-slate-500 pt-2">
+              Source : ADEME Base Carbone® — référentiel officiel téléchargé et figé localement (V23.11). Aucune valeur n’est estimée par l’IA.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500 italic">
+            Aucun facteur ADEME associé à cette analyse. Relancez le diagnostic pour injecter les référentiels officiels.
+          </p>
+        )}
+      </div>
     </div>
   );
 };
