@@ -18,7 +18,7 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { ProjectAudit } from './types';
+import type { ProjectAudit } from './types.ts';
 
 // Initialize Firebase App
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
