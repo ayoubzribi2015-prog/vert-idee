@@ -1,4 +1,9 @@
-import { searchBaseCarbone, BASE_CARBONE_VERSION } from '../../../src/utils/baseCarbone.ts';
+import {
+  searchBaseCarbone,
+  BASE_CARBONE_VERSION,
+  BASE_CARBONE_DATASET,
+  BASE_CARBONE_DOC_URL,
+} from '../../../src/utils/baseCarbone.ts';
 
 export const onRequestGet = async ({ request }: { request: Request }): Promise<Response> => {
   try {
@@ -16,9 +21,11 @@ export const onRequestGet = async ({ request }: { request: Request }): Promise<R
     const results = await searchBaseCarbone(q, { size, timeoutMs: 6000 });
     return Response.json({
       success: true,
-      source: 'ADEME Base Carbone®',
+      source: 'ADEME Base Empreinte® / Base Carbone®',
       version: BASE_CARBONE_VERSION,
-      dataset: 'base-carboner',
+      dataset: BASE_CARBONE_DATASET,
+      documentation: BASE_CARBONE_DOC_URL,
+      offline: true,
       count: results.length,
       results,
     });
@@ -26,7 +33,7 @@ export const onRequestGet = async ({ request }: { request: Request }): Promise<R
     return Response.json(
       {
         success: false,
-        error: err?.message || 'Erreur lors de la consultation de la Base Carbone ADEME.',
+        error: err?.message || 'Erreur lors de la consultation de l’index local Base Carbone ADEME.',
       },
       { status: 500 }
     );
