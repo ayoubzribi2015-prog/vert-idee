@@ -119,6 +119,24 @@ export interface SdgAlignmentItem {
   csrdEsrs?: string;
 }
 
+/** One ADEME factor applied to a quantity, expressed per functional unit. */
+export interface CarbonFactorApplication {
+  id: string;
+  ademeId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  factorKgCO2e: number;
+  /** quantity × factorKgCO2e — recomputed by the application, never trusted from the AI. */
+  emissionKgCO2e: number;
+  category?: string;
+  geography?: string;
+  uncertaintyPct?: number;
+  version?: string;
+  program?: string;
+  appliedStage?: string;
+}
+
 export interface LifecycleStageCarbon {
   id: string;
   name: string;
@@ -127,6 +145,8 @@ export interface LifecycleStageCarbon {
   percentage: number;
   description: string;
   reductionOpportunity: string;
+  /** Factor-based calculation lines. When present, the stage emission is their sum. */
+  factorApplications?: CarbonFactorApplication[];
 }
 
 export interface BenchmarkComparison {

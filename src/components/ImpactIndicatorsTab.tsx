@@ -24,6 +24,7 @@ import {
   CarbonFootprintModel,
   LifecycleStageCarbon,
   AdemeReferenceFactor,
+  CarbonFactorApplication,
 } from '../types';
 import { buildDefaultLifecycleStages } from '../utils/normalizeProject';
 
@@ -41,6 +42,20 @@ const CATEGORY_COLORS: Record<string, string> = {
   transport: 'bg-blue-600',
   usage: 'bg-purple-600',
   end_of_life: 'bg-rose-600',
+};
+
+/** Emission of a factor line is always quantity × factor, never trusted from the model. */
+const lineEmission = (quantity: number, factorKgCO2e: number): number =>
+  Number((Math.max(0, quantity) * Math.max(0, factorKgCO2e)).toFixed(6));
+
+/** A stage emission is the sum of its factor lines when factor-based calculation is active. */
+const withRecomputedEmission = (stage: LifecycleStageCarbon): LifecycleStageCarbon => {
+  if (!stage.factorApplications?.length) return stage;
+  const emission = stage.factorApplications.reduce(
+    (sum, line) => sum + lineEmission(line.quantity, line.factorKgCO2e),
+    0
+  );
+  return { ...stage, emissionKgCO2e: Number(emission.toFixed(4)) };
 };
 
 export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
@@ -113,25 +128,37 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   const handleStageEmissionChange = (id: string, newEmission: number) => {
     const validEmission = Math.max(0, Number(newEmission) || 0);
     setStages((prev) =>
-      prev.map((stage) => (stage.id === id ? { ...stage, emissionKgCO2e: validEmission } : stage))
+      prev.map((stage) =>
+        stage.id === id && !stage.factorApplications?.length
+          ? { ...stage, emissionKgCO2e: validEmission }
+          : stage
+      )
     );
     setHasChanges(true);
+  };
+
+  /** Simulation levers scale the activity quantities, so emissions stay factor-derived. */
+  const applyLeverToStage = (stage: LifecycleStageCarbon, factor: number): LifecycleStageCarbon => {
+    if (!stage.factorApplications?.length) {
+      return { ...stage, emissionKgCO2e: Number((stage.emissionKgCO2e * factor).toFixed(4)) };
+    }
+    return withRecomputedEmission({
+      ...stage,
+      factorApplications: stage.factorApplications.map((line) => {
+        const quantity = Number((line.quantity * factor).toFixed(6));
+        return { ...line, quantity, emissionKgCO2e: lineEmission(quantity, line.factorKgCO2e) };
+      }),
+    });
   };
 
   const applySimulationLever = (type: 'green_energy' | 'bio_packaging' | 'rail_freight' | 'extended_life') => {
     setStages((prev) =>
       prev.map((s) => {
-        if (type === 'green_energy' && s.category === 'manufacturing') {
-          return { ...s, emissionKgCO2e: Number((s.emissionKgCO2e * 0.65).toFixed(2)) };
-        }
-        if (type === 'bio_packaging' && s.category === 'packaging') {
-          return { ...s, emissionKgCO2e: Number((s.emissionKgCO2e * 0.45).toFixed(2)) };
-        }
-        if (type === 'rail_freight' && s.category === 'transport') {
-          return { ...s, emissionKgCO2e: Number((s.emissionKgCO2e * 0.55).toFixed(2)) };
-        }
+        if (type === 'green_energy' && s.category === 'manufacturing') return applyLeverToStage(s, 0.65);
+        if (type === 'bio_packaging' && s.category === 'packaging') return applyLeverToStage(s, 0.45);
+        if (type === 'rail_freight' && s.category === 'transport') return applyLeverToStage(s, 0.55);
         if (type === 'extended_life' && (s.category === 'raw_materials' || s.category === 'usage')) {
-          return { ...s, emissionKgCO2e: Number((s.emissionKgCO2e * 0.75).toFixed(2)) };
+          return applyLeverToStage(s, 0.75);
         }
         return s;
       })
@@ -175,29 +202,72 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   const handleApplyAdemeFactor = (mode: 'add' | 'replace') => {
     if (!selectedAdemeFactor || !targetStageId) return;
     const qty = Math.max(0, Number(ademeQuantity) || 0);
-    const computedEmission = Number((qty * selectedAdemeFactor.factorKgCO2e).toFixed(4));
+    if (qty <= 0) return;
     const targetStageObj = stages.find((s) => s.id === targetStageId);
+    const factor = selectedAdemeFactor;
+    const newLine: CarbonFactorApplication = {
+      id: `line_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      ademeId: factor.id,
+      name: factor.name,
+      quantity: qty,
+      unit: factor.unit,
+      factorKgCO2e: factor.factorKgCO2e,
+      emissionKgCO2e: lineEmission(qty, factor.factorKgCO2e),
+      ...(factor.category ? { category: factor.category } : {}),
+      ...(factor.geography ? { geography: factor.geography } : {}),
+      ...(factor.uncertaintyPct ? { uncertaintyPct: factor.uncertaintyPct } : {}),
+      ...(factor.version ? { version: factor.version } : {}),
+      ...(factor.program ? { program: factor.program } : {}),
+      appliedStage: targetStageObj?.name || targetStageId,
+    };
 
     setStages((prev) =>
       prev.map((stage) => {
         if (stage.id !== targetStageId) return stage;
-        const nextEmission =
-          mode === 'add'
-            ? Math.max(0, Number((stage.emissionKgCO2e + computedEmission).toFixed(2)))
-            : Math.max(0, Number(computedEmission.toFixed(2)));
-        return { ...stage, emissionKgCO2e: nextEmission };
+        const factorApplications =
+          mode === 'replace' ? [newLine] : [...(stage.factorApplications || []), newLine];
+        return withRecomputedEmission({ ...stage, factorApplications });
       })
     );
 
     const enrichedFactor: AdemeReferenceFactor = {
-      ...selectedAdemeFactor,
+      ...factor,
       appliedStage: targetStageObj?.name || targetStageId,
     };
-
     setAdemeFactors((prev) => {
       const filtered = prev.filter((f) => f.id !== enrichedFactor.id);
       return [enrichedFactor, ...filtered].slice(0, 15);
     });
+    setHasChanges(true);
+  };
+
+  const handleFactorQuantityChange = (stageId: string, lineId: string, rawQuantity: string) => {
+    const quantity = Math.max(0, Number(rawQuantity) || 0);
+    setStages((prev) =>
+      prev.map((stage) => {
+        if (stage.id !== stageId) return stage;
+        const factorApplications = stage.factorApplications?.map((line) =>
+          line.id === lineId
+            ? { ...line, quantity, emissionKgCO2e: lineEmission(quantity, line.factorKgCO2e) }
+            : line
+        );
+        return withRecomputedEmission({ ...stage, factorApplications });
+      })
+    );
+    setHasChanges(true);
+  };
+
+  const handleRemoveFactorLine = (stageId: string, lineId: string) => {
+    setStages((prev) =>
+      prev.map((stage) => {
+        if (stage.id !== stageId) return stage;
+        const factorApplications = (stage.factorApplications || []).filter((line) => line.id !== lineId);
+        if (!factorApplications.length) {
+          return { ...stage, factorApplications: undefined, emissionKgCO2e: 0 };
+        }
+        return withRecomputedEmission({ ...stage, factorApplications });
+      })
+    );
     setHasChanges(true);
   };
 
@@ -628,38 +698,87 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
           </div>
         </div>
 
-        {/* Detailed numerical adjustment inputs */}
+        {/* Factor-based calculation: stage = Σ(quantity × ADEME factor) */}
         <div className="space-y-3 pt-3 border-t border-slate-100">
-          <span className="text-xs font-bold text-slate-900 block">
-            Ajuster manuellement chaque étape (kg CO₂e) :
-          </span>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xs font-bold text-slate-900 block">
+              Calcul par facteurs ADEME (quantité × facteur) :
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono-numbers">
+              Total recalculé : {totalCarbonKgCO2e.toFixed(2)} kg CO₂e
+            </span>
+          </div>
+          <div className="space-y-2">
             {stagesWithPct.map((stage) => (
-              <div
-                key={stage.id}
-                className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-3"
-              >
-                <div>
-                  <span className="font-bold text-xs text-slate-900 block">{stage.name}</span>
-                  <span className="text-[11px] text-slate-500 font-mono-numbers">
-                    {stage.percentage.toFixed(1)}% du total
-                  </span>
+              <div key={stage.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="font-bold text-xs text-slate-900 block">{stage.name}</span>
+                    <span className="text-[11px] text-slate-500 font-mono-numbers">
+                      {stage.percentage.toFixed(1)}% du total · {stage.emissionKgCO2e.toFixed(2)} kg CO₂e
+                    </span>
+                  </div>
+                  {!stage.factorApplications?.length && (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={stage.emissionKgCO2e}
+                        onChange={(e) => handleStageEmissionChange(stage.id, parseFloat(e.target.value) || 0)}
+                        className="w-20 px-2 py-1.5 rounded-lg border border-slate-300 text-base sm:text-xs font-bold font-mono-numbers text-slate-900 text-right bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 min-h-[36px]"
+                        aria-label={`Émission estimée pour ${stage.name}`}
+                      />
+                      <span className="text-xs text-slate-500">kg</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={stage.emissionKgCO2e}
-                    onChange={(e) => handleStageEmissionChange(stage.id, parseFloat(e.target.value) || 0)}
-                    className="w-20 px-2 py-1.5 rounded-lg border border-slate-300 text-base sm:text-xs font-bold font-mono-numbers text-slate-900 text-right bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 min-h-[36px]"
-                  />
-                  <span className="text-xs text-slate-500">kg</span>
-                </div>
+                {!!stage.factorApplications?.length && (
+                  <div className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
+                    {stage.factorApplications.map((line) => (
+                      <div key={line.id} className="flex items-center gap-2 text-[11px]">
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold text-slate-800" title={line.name}>
+                            {line.name}
+                          </span>
+                          <span className="block text-[10px] text-slate-500 font-mono-numbers">
+                            {line.factorKgCO2e.toFixed(4)} kg CO₂e / {line.unit}
+                            {line.ademeId ? ` · ID ${line.ademeId}` : ''}
+                            {line.version ? ` · v${line.version}` : ''}
+                            {line.uncertaintyPct ? ` · ±${line.uncertaintyPct}%` : ''}
+                          </span>
+                        </div>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={line.quantity}
+                          onChange={(e) => handleFactorQuantityChange(stage.id, line.id, e.target.value)}
+                          className="w-20 px-2 py-1 rounded-lg border border-slate-300 text-xs font-bold font-mono-numbers text-slate-900 text-right bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                          aria-label={`Quantité pour ${line.name}`}
+                        />
+                        <span className="w-20 text-right font-bold font-mono-numbers text-slate-900">
+                          {line.emissionKgCO2e.toFixed(2)} kg
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFactorLine(stage.id, line.id)}
+                          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          aria-label={`Retirer ${line.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
+          <p className="text-[10px] text-slate-500 leading-normal">
+            Total et pourcentages recalculés automatiquement à partir des quantités et des facteurs ADEME. Une étape sans facteur affiché reste une estimation à confirmer.
+          </p>
         </div>
 
         {/* ADEME Base Carbone® Reference Factors & Live Calculator */}
@@ -671,7 +790,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                 <span>Calculateur &amp; Référentiel ADEME Base Carbone®</span>
               </h4>
               <p className="text-[11px] text-stone-500 mt-0.5">
-                Interrogez les facteurs d'émission officiels (data.ademe.fr) pour calibrer et vérifier chaque poste du cycle de vie.
+                Chaque poste est calculé par quantité × facteur ADEME (data.ademe.fr), avec ID, version, unité et incertitude conservés.
               </p>
             </div>
           </div>
@@ -806,6 +925,11 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
 
                 {selectedAdemeFactor && (
                   <div className="p-3 rounded-lg border border-[#10634e]/30 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end text-xs">
+                    <div className="sm:col-span-12 text-[10px] text-stone-500 font-mono-numbers">
+                      ID {selectedAdemeFactor.id} · {selectedAdemeFactor.version ? `v${selectedAdemeFactor.version}` : 'version n/d'}
+                      {selectedAdemeFactor.uncertaintyPct ? ` · ±${selectedAdemeFactor.uncertaintyPct}%` : ''}
+                      {selectedAdemeFactor.program ? ` · ${selectedAdemeFactor.program}` : ''}
+                    </div>
                     <div className="sm:col-span-3 space-y-1">
                       <label className="text-[10px] font-bold uppercase text-stone-500 block">
                         Quantité ({selectedAdemeFactor.unit.split('/')[1] || 'unité'})
@@ -846,7 +970,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                         type="button"
                         onClick={() => handleApplyAdemeFactor('add')}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#063428] hover:bg-[#0b4a3a] text-white font-bold cursor-pointer"
-                        title="Ajouter ce calcul à l'étape sélectionnée"
+                        title="Ajouter une ligne de calcul (quantité × facteur) à l'étape sélectionnée"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Ajouter</span>
@@ -855,7 +979,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                         type="button"
                         onClick={() => handleApplyAdemeFactor('replace')}
                         className="px-2.5 py-1.5 rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-800 font-semibold cursor-pointer"
-                        title="Remplacer la valeur de l'étape par ce calcul"
+                        title="Remplacer toutes les lignes de calcul de l'étape par cette seule ligne"
                       >
                         Remplacer
                       </button>

@@ -5,6 +5,7 @@ import {
   getBaseCarboneIndexStatus,
   BASE_CARBONE_VERSION,
 } from '../src/utils/baseCarbone.ts';
+import { normalizeCarbonFootprint } from '../src/utils/normalizeProject.ts';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -1233,6 +1234,10 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
    - KPI DE SUIVI ET STANDARDS GRI / CSRD : Spécifier au moins 1 KPI d'impact chiffrable et les liens normatifs pertinents (ex: GRI 302, GRI 303, GRI 305, GRI 306, ESRS E1, ESRS E5, ESRS S1).
    - RÈGLE IMPÉRATIVE POUR LES PROJETS EDTECH / ÉDUCATION : Pour tout projet relevant de l'éducation, de la formation, de l'EdTech, de l'inclusion (ex: enfants TSA, DYS) ou de la pédagogie, tu DOIS obligatoirement inclure l'**ODD 4 (Éducation de qualité)** en premier et au niveau 'Majeur' (avec les sous-cibles 4.1, 4.4, 4.5 et 4.7), complété par les ODD 10, 8 et 12.
 6. Indicateurs d'impact : Bilan carbone normé selon ISO 14067:2018 (par unité fonctionnelle) et ISO 14064-1:2018 (Catégories 1 à 6), calibré à l'aide des facteurs d'émission ADEME Base Carbone® fournis. Analyse de cycle de vie étape par étape (Approvisionnement Cat 4, Fabrication Cat 1-2, Conditionnement Cat 4, Transport Cat 3, Utilisation Cat 5, Fin de vie Cat 5) avec exclusion stricte de toute compensation carbone fictive, citation explicite des IDs ADEME retenus dans les descriptions et ademeReferenceFactors. Pour benchmarkComparison : si le projet appartient à une industrie lourde ou polluante, totalCarbonKgCO2e DOIT être STRICTEMENT SUPÉRIEUR à industryAverageKgCO2e (+20% à +60% de sur-émissions) ; si éco-innovation vertueuse, totalCarbonKgCO2e DOIT être INFÉRIEUR (-20% à -65%). Actions de décarbonation quantifiées (P1/P2/P3), intensité eau chiffrée.
+6 bis. UNITÉ FONCTIONNELLE ET CALCUL PAR FACTEURS (OBLIGATOIRE, ISO 14067) :
+   - Le champ functionalUnit DOIT être une unité fonctionnelle CONCRÈTE, MESURABLE et quantifiée, déduite de la description du projet. Exemples conformes : "1 paire de chaussures de sécurité EN ISO 20345", "1 kg de plastique injecté", "1 000 pièces de bandes de plâtre stériles", "1 kWh d'électricité produite", "1 tonne de matière traitée". INTERDICTION FORMELLE des formulations génériques type "1 unité", "unité fonctionnelle / service", "1 unité fonctionnelle / lot standardisé" : toute réponse générique est invalide.
+   - Chaque élément de lifecycleStages DOIT contenir factorApplications : une liste de postes de calcul {ademeId, name, quantity, unit, factorKgCO2e, emissionKgCO2e}. "quantity" est la quantité d'activité POUR l'unité fonctionnelle, exprimée dans l'unité du facteur ADEME retenu. "emissionKgCO2e" = quantity × factorKgCO2e, recalculé par le système.
+   - L'émission d'une étape est EXACTEMENT la somme de ses factorApplications, et totalCarbonKgCO2e est EXACTEMENT la somme des émissions des étapes. Aucune étape ne doit recevoir une émission sans au moins un poste factorApplications traçable à un ID ADEME. Si aucun facteur exact n'existe, utiliser le facteur ADEME le plus proche et signaler son incertitude — ne jamais renvoyer zéro ni inventer une valeur.
 7. Financements et labels verts : Statut d'éligibilité réel (exclusion formelle des labels verts si activité polluante), fonds de mise en conformité et dépollution (FODEP, BERD Climat).
 8. Plan d'action prioritaire : Actions concrètes d'urgence (0-12 mois) priorisées avec livrables opérationnels pour la neutralisation des AES.
 `;
@@ -1505,7 +1510,10 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
                 carbonFootprint: {
                   type: Type.OBJECT,
                   properties: {
-                    functionalUnit: { type: Type.STRING },
+                    functionalUnit: {
+                      type: Type.STRING,
+                      description: 'Unité fonctionnelle concrète et quantifiée, ex: "1 paire de chaussures", "1 kg de produit", "1 kWh produit". Jamais de formulation générique.',
+                    },
                     totalCarbonKgCO2e: { type: Type.NUMBER },
                     benchmarkComparison: {
                       type: Type.OBJECT,
@@ -1531,8 +1539,24 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
                           percentage: { type: Type.NUMBER },
                           description: { type: Type.STRING },
                           reductionOpportunity: { type: Type.STRING },
+                          factorApplications: {
+                            type: Type.ARRAY,
+                            description: 'Postes de calcul : chaque émission = quantity × factorKgCO2e, traçable à un ID ADEME',
+                            items: {
+                              type: Type.OBJECT,
+                              properties: {
+                                ademeId: { type: Type.STRING },
+                                name: { type: Type.STRING },
+                                quantity: { type: Type.NUMBER },
+                                unit: { type: Type.STRING },
+                                factorKgCO2e: { type: Type.NUMBER },
+                                emissionKgCO2e: { type: Type.NUMBER },
+                              },
+                              required: ['ademeId', 'name', 'quantity', 'unit', 'factorKgCO2e', 'emissionKgCO2e'],
+                            },
+                          },
                         },
-                        required: ['id', 'name', 'category', 'emissionKgCO2e', 'percentage', 'description', 'reductionOpportunity'],
+                        required: ['id', 'name', 'category', 'emissionKgCO2e', 'percentage', 'description', 'reductionOpportunity', 'factorApplications'],
                       },
                     },
                     highImpactDecarbonizationActions: {
@@ -1725,6 +1749,24 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       baseCarboneCtx.factors.length > 0
     ) {
       parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors = baseCarboneCtx.factors.slice(0, 6);
+    }
+
+    // Deterministic factor-based recomputation: stage = Σ(quantity × ADEME factor),
+    // total = Σ(stages). Applies even when the AI returns incomplete lines.
+    if (parsedData?.impactIndicators?.carbonFootprint) {
+      parsedData.impactIndicators.carbonFootprint = normalizeCarbonFootprint(
+        parsedData.impactIndicators.carbonFootprint,
+        parsedData.impactIndicators.carbonFootprint.benchmarkComparison || {
+          industryAverageKgCO2e: 180.0,
+          ecoDesignedTargetKgCO2e: 100.0,
+          commentary: 'Benchmark sectoriel non renseigné par le modèle.',
+        },
+        {
+          title: parsedData.title || title,
+          description: parsedData.description || description,
+          sector: finalSector,
+        }
+      );
     }
 
     const auditResult = {
