@@ -68,9 +68,12 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   const initialModel = indicators.carbonFootprint;
   // The headline figure is the sum of stages: never render 0.00 when the model
   // carries a positive footprint total but no usable stage breakdown.
-  const baselineStages = initialModel.lifecycleStages?.length
-    ? initialModel.lifecycleStages
-    : buildDefaultLifecycleStages(initialModel.totalCarbonKgCO2e);
+  const baselineStages =
+    initialModel.totalCarbonKgCO2e > 0
+      ? initialModel.lifecycleStages?.length
+        ? initialModel.lifecycleStages
+        : buildDefaultLifecycleStages(initialModel.totalCarbonKgCO2e)
+      : [];
 
   const [stages, setStages] = useState<LifecycleStageCarbon[]>(baselineStages);
   const [ademeFactors, setAdemeFactors] = useState<AdemeReferenceFactor[]>(
@@ -406,9 +409,11 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
             <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block">Empreinte Carbone Unitaire</span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-3xl font-black text-[#063428] font-mono-numbers">
-                {totalCarbonKgCO2e.toFixed(2)}
+                {totalCarbonKgCO2e > 0 ? totalCarbonKgCO2e.toFixed(2) : '—'}
               </span>
-              <span className="text-xs font-semibold text-stone-600">kg CO₂e / unité</span>
+              <span className="text-xs font-semibold text-stone-600">
+                {totalCarbonKgCO2e > 0 ? 'kg CO₂e / unité' : 'empreinte non calculée'}
+              </span>
             </div>
             <p className="text-[11px] text-stone-600 font-medium">Cycle complet du berceau à la tombe</p>
           </div>
@@ -434,7 +439,13 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                     : 'bg-stone-100 text-stone-700 border-stone-300'
                 }`}
               >
-                {isExcess ? 'Sur-émission sectorielle' : isCarbonSaving ? 'Surperformance bas-carbone' : 'Parité marché'}
+                {industryKg <= 0
+                  ? 'Référence indisponible'
+                  : isExcess
+                  ? 'Sur-émission sectorielle'
+                  : isCarbonSaving
+                  ? 'Surperformance bas-carbone'
+                  : 'Parité marché'}
               </span>
             </div>
             <div className="flex items-baseline gap-2">
@@ -443,14 +454,16 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                   isExcess ? 'text-rose-700' : isCarbonSaving ? 'text-[#10634e]' : 'text-stone-800'
                 }`}
               >
-                {isExcess ? `+${absDiffPct}%` : isCarbonSaving ? `-${absDiffPct}%` : '0%'}
+                {industryKg <= 0 ? '—' : isExcess ? `+${absDiffPct}%` : isCarbonSaving ? `-${absDiffPct}%` : '0%'}
               </span>
               <span className="text-xs text-stone-600 font-mono-numbers font-medium">
-                (Moyenne : {industryKg.toFixed(2)} kg)
+                {industryKg > 0 ? `(Moyenne : ${industryKg.toFixed(2)} kg)` : 'référence sectorielle indisponible'}
               </span>
             </div>
             <p className="text-[11px] leading-tight text-stone-600">
-              {isExcess
+              {industryKg <= 0
+                ? 'Référence sectorielle non renseignée par le modèle : aucun écart calculé.'
+                : isExcess
                 ? `Excédent critique de +${diffPerUnitKg.toFixed(2)} kg CO₂e / unité vs les pratiques du marché`
                 : isCarbonSaving
                 ? `Gain net de ${diffPerUnitKg.toFixed(2)} kg CO₂e / unité évités par éco-conception`

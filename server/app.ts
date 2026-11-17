@@ -7,7 +7,7 @@ import {
   BASE_CARBONE_DATASET,
   BASE_CARBONE_DOC_URL,
 } from '../src/utils/baseCarbone.ts';
-import { normalizeCarbonFootprint } from '../src/utils/normalizeProject.ts';
+import { isConcreteFunctionalUnit, normalizeCarbonFootprint } from '../src/utils/normalizeProject.ts';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -1736,10 +1736,30 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       return;
     }
 
-    if (!parsedData || !parsedData.projectSynthesis) {
+    const carbonCheck = parsedData?.impactIndicators?.carbonFootprint;
+    const traceableStages = Array.isArray(carbonCheck?.lifecycleStages)
+      ? carbonCheck.lifecycleStages.filter(
+          (stage: any) =>
+            Array.isArray(stage?.factorApplications) &&
+            stage.factorApplications.some(
+              (line: any) =>
+                String(line?.ademeId || '').length > 0 &&
+                Number(line?.quantity) > 0 &&
+                Number(line?.factorKgCO2e) > 0
+            )
+        )
+      : [];
+
+    if (
+      !parsedData ||
+      !parsedData.projectSynthesis ||
+      !isConcreteFunctionalUnit(carbonCheck?.functionalUnit) ||
+      !(Number(carbonCheck?.totalCarbonKgCO2e) > 0) ||
+      traceableStages.length === 0
+    ) {
       res.status(502).json({
         success: false,
-        error: '[Mode STRICT_IA] La réponse de l\'IA est incomplète ou non conforme. Aucun fallback déterministe n\'est autorisé.',
+        error: '[Mode STRICT_IA] La réponse de l\'IA est incomplète : bilan carbone ADEME V23.11 absent ou non traçable (unité fonctionnelle, étapes et facteurs). Aucun total carbone n\'a été inventé et aucun fallback déterministe n\'est autorisé.',
       });
       return;
     }
@@ -1761,8 +1781,8 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       parsedData.impactIndicators.carbonFootprint = normalizeCarbonFootprint(
         parsedData.impactIndicators.carbonFootprint,
         parsedData.impactIndicators.carbonFootprint.benchmarkComparison || {
-          industryAverageKgCO2e: 180.0,
-          ecoDesignedTargetKgCO2e: 100.0,
+          industryAverageKgCO2e: 0,
+          ecoDesignedTargetKgCO2e: 0,
           commentary: 'Benchmark sectoriel non renseigné par le modèle.',
         },
         {

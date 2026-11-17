@@ -1,6 +1,6 @@
 import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../../src/utils/geminiModels.ts';
 import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
-import { normalizeCarbonFootprint } from '../../src/utils/normalizeProject.ts';
+import { isConcreteFunctionalUnit, normalizeCarbonFootprint } from '../../src/utils/normalizeProject.ts';
 
 type Context = {
   request: Request;
@@ -18,6 +18,47 @@ const respond = (data: unknown, status = 200) =>
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     },
   });
+
+/**
+ * STRICT_IA gate: a diagnostic is usable only when the model returned the full
+ * carbon section with a concrete functional unit, positive stage breakdown and
+ * at least one calculation line traceable to an ADEME factor ID.
+ * No server-side deterministic value may replace a missing section.
+ */
+function hasTraceableCarbonFootprint(data: any): boolean {
+  const cf = data?.impactIndicators?.carbonFootprint;
+  if (!cf || typeof cf !== 'object') return false;
+  if (!isConcreteFunctionalUnit(cf.functionalUnit)) return false;
+
+  const declaredTotal = Number(cf.totalCarbonKgCO2e);
+  if (!Number.isFinite(declaredTotal) || declaredTotal <= 0) return false;
+
+  const stages = Array.isArray(cf.lifecycleStages) ? cf.lifecycleStages : [];
+  if (stages.length === 0) return false;
+
+  const traceableStages = stages.filter(
+    (stage: any) =>
+      stage &&
+      typeof stage === 'object' &&
+      Array.isArray(stage.factorApplications) &&
+      stage.factorApplications.some(
+        (line: any) =>
+          line &&
+          String(line.ademeId || '').length > 0 &&
+          Number.isFinite(Number(line.quantity)) &&
+          Number(line.quantity) > 0 &&
+          Number.isFinite(Number(line.factorKgCO2e)) &&
+          Number(line.factorKgCO2e) > 0
+      )
+  );
+
+  const stageSum = stages.reduce((sum: number, stage: any) => {
+    const emission = Number(stage?.emissionKgCO2e);
+    return sum + (Number.isFinite(emission) && emission > 0 ? emission : 0);
+  }, 0);
+
+  return traceableStages.length > 0 && stageSum > 0;
+}
 
 export const onRequestPost = async ({ request, env }: Context): Promise<Response> => {
   let body: any;
@@ -174,7 +215,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
             contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
             generationConfig: {
               responseMimeType: 'application/json',
-              maxOutputTokens: 16384,
+              maxOutputTokens: 32768,
               thinkingConfig: { thinkingLevel: "LOW" },
               responseSchema: {
                 type: "OBJECT",
@@ -548,7 +589,17 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
                     },
                     required: ["phase1_0to3months", "phase2_3to6months", "phase3_6to12months"]
                   }
-                }
+                },
+                required: [
+                  "projectSynthesis",
+                  "environmentalAspects",
+                  "socialAspects",
+                  "greenEntrepreneurshipIntegration",
+                  "sdgAlignment",
+                  "impactIndicators",
+                  "greenFinancingAndLabels",
+                  "priorityActionPlan",
+                ],
               }
             },
           }),
@@ -564,8 +615,19 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
         const rawText = parts.filter((p: any) => p && typeof p.text === 'string' && !p.thought).map((p: any) => p.text).join('') || parts[0]?.text || '';
         const text = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
         if (text) {
-          parsedData = JSON.parse(text);
-          break;
+          const candidate = JSON.parse(text);
+          if (candidate?.needsInfo === true) {
+            parsedData = candidate;
+            break;
+          }
+          if (candidate?.projectSynthesis && hasTraceableCarbonFootprint(candidate)) {
+            parsedData = candidate;
+            break;
+          }
+          lastError = new Error(
+            `Réponse incomplète du modèle ${model} : impactIndicators.carbonFootprint absent ou non traçable aux facteurs ADEME.`
+          );
+          continue;
         }
         lastError = new Error(`Réponse vide du modèle ${model}`);
       } else {
@@ -578,47 +640,62 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
     }
   }
 
-  if (!parsedData || !parsedData.projectSynthesis) {
+  if (parsedData?.needsInfo) {
+    return respond({ success: true, needsInfo: true, questions: parsedData.questions });
+  }
+
+  if (!parsedData || !parsedData.projectSynthesis || !hasTraceableCarbonFootprint(parsedData)) {
     return respond(
       {
         success: false,
-        error: `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${lastError?.message || 'Erreur IA'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`,
+        error: `[Mode STRICT_IA] Échec du diagnostic : le modèle n'a pas fourni un bilan carbone complet et traçable (unité fonctionnelle concrète, étapes et facteurs ADEME V23.11). Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé. (${lastError?.message || 'Réponse IA incomplète'})`,
       },
       503
     );
   }
 
-  if (parsedData.needsInfo) {
-    return respond({ success: true, needsInfo: true, questions: parsedData.questions });
-  }
-
   const finalSector = parsedData.detectedSector || sector || 'Économie Circulaire & Éco-innovation';
-  if (
-    parsedData?.impactIndicators?.carbonFootprint &&
-    (!Array.isArray(parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors) ||
-      parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors.length === 0) &&
-    baseCarboneCtx.factors.length > 0
-  ) {
-    parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors = baseCarboneCtx.factors.slice(0, 6);
+  const carbonFootprint = parsedData.impactIndicators.carbonFootprint;
+
+  // Traceability: rebuild the ADEME reference table exclusively from the frozen
+  // local V23.11 index. Empty, invalid or AI-invented tables are replaced; every
+  // retained line keeps ID, version, unit, uncertainty, programme and source.
+  const localFactors = baseCarboneCtx.factors;
+  const localFactorsById = new Map(localFactors.map((factor) => [factor.id, factor]));
+  const referencedIds = new Set<string>();
+  for (const stage of carbonFootprint.lifecycleStages || []) {
+    for (const line of stage?.factorApplications || []) {
+      const id = String(line?.ademeId || '');
+      if (id) referencedIds.add(id);
+    }
   }
+  const resolvedFromStages = [...referencedIds]
+    .map((id) => localFactorsById.get(id))
+    .filter((factor): factor is (typeof localFactors)[number] => Boolean(factor));
+  const seenFactorIds = new Set<string>();
+  carbonFootprint.ademeReferenceFactors = [...resolvedFromStages, ...localFactors.slice(0, 6)].filter(
+    (factor) => {
+      if (!factor?.id || seenFactorIds.has(factor.id)) return false;
+      seenFactorIds.add(factor.id);
+      return true;
+    }
+  );
 
   // Deterministic factor-based recomputation: stage = Σ(quantity × ADEME factor),
-  // total = Σ(stages). Applied server-side so every API consumer sees the same figures.
-  if (parsedData?.impactIndicators?.carbonFootprint) {
-    parsedData.impactIndicators.carbonFootprint = normalizeCarbonFootprint(
-      parsedData.impactIndicators.carbonFootprint,
-      parsedData.impactIndicators.carbonFootprint.benchmarkComparison || {
-        industryAverageKgCO2e: 180.0,
-        ecoDesignedTargetKgCO2e: 100.0,
-        commentary: "Benchmark sectoriel non renseigné par le modèle.",
-      },
-      {
-        title: parsedData.title || title,
-        description: parsedData.description || description,
-        sector: finalSector,
-      }
-    );
-  }
+  // total = Σ(stages). A benchmark is context only and never seeds a total.
+  parsedData.impactIndicators.carbonFootprint = normalizeCarbonFootprint(
+    carbonFootprint,
+    carbonFootprint.benchmarkComparison || {
+      industryAverageKgCO2e: 0,
+      ecoDesignedTargetKgCO2e: 0,
+      commentary: 'Benchmark sectoriel non renseigné par le modèle.',
+    },
+    {
+      title: parsedData.title || title,
+      description: parsedData.description || description,
+      sector: finalSector,
+    }
+  );
 
   const auditResult = {
     id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,

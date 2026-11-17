@@ -7,8 +7,6 @@ import {
   ProjectAudit,
 } from '../types';
 
-const DEFAULT_CARBON_TOTAL = 120.5;
-
 const CARBON_STAGE_CATEGORIES: LifecycleStageCarbon['category'][] = [
   'raw_materials',
   'manufacturing',
@@ -80,10 +78,12 @@ export function normalizeFactorApplications(
       const emissionRaw = Number(a.emissionKgCO2e);
       const quantity = Number.isFinite(quantityRaw) && quantityRaw >= 0 ? quantityRaw : 0;
       let factor = Number.isFinite(factorRaw) && factorRaw >= 0 ? factorRaw : 0;
+      // The frozen local index is the single source of truth: whenever the ADEME
+      // ID resolves locally, its V23.11 value overrides any model-supplied value.
+      if (match && match.factorKgCO2e > 0) factor = match.factorKgCO2e;
       if (factor <= 0 && quantity > 0 && Number.isFinite(emissionRaw) && emissionRaw > 0) {
         factor = emissionRaw / quantity;
       }
-      if (factor <= 0 && match) factor = match.factorKgCO2e;
 
       const name = String(a.name || match?.name || `Facteur ADEME ${ademeId || 'inconnu'}`);
       const unit = String(a.unit || match?.unit || 'kgCO2e/unité');
@@ -120,6 +120,8 @@ export function buildDefaultLifecycleStages(
   totalKgCO2e: number,
   ademeFactors: AdemeReferenceFactor[] = []
 ): LifecycleStageCarbon[] {
+  // Never manufacture a breakdown from an absent or zero total.
+  if (!Number.isFinite(totalKgCO2e) || totalKgCO2e <= 0) return [];
   const definitions = [
     { id: 'raw_materials', name: 'Approvisionnement & matières premières', category: 'raw_materials' as const, weight: 0.34, description: 'Intrants et matières premières (Catégorie 4 ISO 14064-1).', reductionOpportunity: 'Privilégier matières recyclées et circuits courts.' },
     { id: 'manufacturing', name: 'Fabrication & procédés', category: 'manufacturing' as const, weight: 0.26, description: 'Procédés de production et énergie importée (Catégories 1-2).', reductionOpportunity: 'Électrifier les procédés et recourir aux énergies renouvelables.' },
@@ -197,7 +199,6 @@ export function normalizeCarbonFootprint(
         }))
     : [];
 
-  const rawTotal = Number(carbon?.totalCarbonKgCO2e);
   const rawStages = Array.isArray(carbon?.lifecycleStages) ? carbon.lifecycleStages : [];
 
   const stages: LifecycleStageCarbon[] = rawStages
@@ -225,17 +226,19 @@ export function normalizeCarbonFootprint(
       };
     });
 
-  // The total is derived from the breakdown, never trusted from the AI.
+  // The total is derived from factor-based stages, never from the AI total or
+  // from a benchmark. Without any traceable emission, the footprint stays at 0
+  // and the UI displays "empreinte non calculée" instead of an invented value.
   let total = stages.reduce((sum, s) => sum + s.emissionKgCO2e, 0);
   if (!Number.isFinite(total) || total <= 0) {
-    const baseline =
-      Number.isFinite(rawTotal) && rawTotal > 0
-        ? rawTotal
-        : Number.isFinite(benchmark.industryAverageKgCO2e) && benchmark.industryAverageKgCO2e > 0
-          ? benchmark.industryAverageKgCO2e
-          : DEFAULT_CARBON_TOTAL;
-    stages.splice(0, stages.length, ...buildDefaultLifecycleStages(baseline, ademeFactors));
-    total = stages.reduce((sum, s) => sum + s.emissionKgCO2e, 0);
+    const declaredTotal = Number(carbon?.totalCarbonKgCO2e);
+    if (Number.isFinite(declaredTotal) && declaredTotal > 0 && ademeFactors.length > 0) {
+      stages.splice(0, stages.length, ...buildDefaultLifecycleStages(declaredTotal, ademeFactors));
+      total = stages.reduce((sum, s) => sum + s.emissionKgCO2e, 0);
+    } else {
+      stages.splice(0, stages.length);
+      total = 0;
+    }
   }
 
   const normalizedStages = stages.map((s) => ({
@@ -347,9 +350,9 @@ export function normalizeProjectAudit(raw: any, fallbackTitle?: string, fallback
       carbonFootprint: normalizeCarbonFootprint(
         carbon,
         carbon.benchmarkComparison || {
-          industryAverageKgCO2e: 180.0,
-          ecoDesignedTargetKgCO2e: 100.0,
-          commentary: 'Performance carbone optimisée par rapport au benchmark sectoriel.'
+          industryAverageKgCO2e: 0,
+          ecoDesignedTargetKgCO2e: 0,
+          commentary: 'Benchmark sectoriel non renseigné par le modèle.'
         },
         {
           title: raw?.title || fallbackTitle,
