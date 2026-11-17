@@ -1,5 +1,6 @@
 import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../../src/utils/geminiModels.ts';
 import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
+import { normalizeCarbonFootprint } from '../../src/utils/normalizeProject.ts';
 
 type Context = {
   request: Request;
@@ -114,6 +115,11 @@ Le rapport DOIT être structuré en JSON selon les 8 sections officielles :
 6. impactIndicators (carbonFootprint, circularityRate, wasteAvoided, waterPreservation, localJobsProjection, keyMetrics)
 7. greenFinancingAndLabels (labels, fundings)
 8. priorityActionPlan (phase1_0to3months, phase2_3to6months, phase3_6to12months)
+
+RÈGLES OBLIGATOIRES DE CALCUL CARBONE (ISO 14067 / Base Carbone® ADEME) :
+- functionalUnit DOIT être une unité fonctionnelle CONCRÈTE, MESURABLE et quantifiée déduite du projet (ex: "1 paire de chaussures de sécurité EN ISO 20345", "1 kg de plastique injecté", "1 000 pièces de bandes de plâtre stériles", "1 kWh d'électricité produite"). INTERDICTION FORMELLE des valeurs génériques ("1 unité", "unité fonctionnelle / service").
+- Chaque lifecycleStages DOIT contenir factorApplications : postes {ademeId, name, quantity, unit, factorKgCO2e, emissionKgCO2e} où quantity est la quantité d'activité POUR l'unité fonctionnelle dans l'unité du facteur, et emissionKgCO2e = quantity × factorKgCO2e.
+- L'émission d'une étape = somme de ses factorApplications ; totalCarbonKgCO2e = somme des émissions des étapes. Aucune émission d'étape sans poste traçable à un ID ADEME. Ne jamais renvoyer zéro faute de facteur exact : utiliser le facteur le plus proche avec son incertitude.
 `;
 
   const baseCarboneCtx = await fetchContextualBaseCarboneFactors({
@@ -366,7 +372,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
                       carbonFootprint: {
                         type: "OBJECT",
                         properties: {
-                          functionalUnit: { type: "STRING" },
+                          functionalUnit: { type: "STRING", description: "Unité fonctionnelle concrète et quantifiée (ex: '1 paire de chaussures', '1 kg de produit'). Jamais de formulation générique." },
                           totalCarbonKgCO2e: { type: "NUMBER" },
                           benchmarkComparison: {
                             type: "OBJECT",
@@ -388,9 +394,25 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
                                 emissionKgCO2e: { type: "NUMBER" },
                                 percentage: { type: "NUMBER" },
                                 description: { type: "STRING" },
-                                reductionOpportunity: { type: "STRING" }
+                                reductionOpportunity: { type: "STRING" },
+                                factorApplications: {
+                                  type: "ARRAY",
+                                  description: "Postes de calcul : émission = quantity × factorKgCO2e, traçable à un ID ADEME",
+                                  items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                      ademeId: { type: "STRING" },
+                                      name: { type: "STRING" },
+                                      quantity: { type: "NUMBER" },
+                                      unit: { type: "STRING" },
+                                      factorKgCO2e: { type: "NUMBER" },
+                                      emissionKgCO2e: { type: "NUMBER" }
+                                    },
+                                    required: ["ademeId", "name", "quantity", "unit", "factorKgCO2e", "emissionKgCO2e"]
+                                  }
+                                }
                               },
-                              required: ["id", "name", "category", "emissionKgCO2e", "percentage", "description", "reductionOpportunity"]
+                              required: ["id", "name", "category", "emissionKgCO2e", "percentage", "description", "reductionOpportunity", "factorApplications"]
                             }
                           },
                           highImpactDecarbonizationActions: {
@@ -578,6 +600,24 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
     baseCarboneCtx.factors.length > 0
   ) {
     parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors = baseCarboneCtx.factors.slice(0, 6);
+  }
+
+  // Deterministic factor-based recomputation: stage = Σ(quantity × ADEME factor),
+  // total = Σ(stages). Applied server-side so every API consumer sees the same figures.
+  if (parsedData?.impactIndicators?.carbonFootprint) {
+    parsedData.impactIndicators.carbonFootprint = normalizeCarbonFootprint(
+      parsedData.impactIndicators.carbonFootprint,
+      parsedData.impactIndicators.carbonFootprint.benchmarkComparison || {
+        industryAverageKgCO2e: 180.0,
+        ecoDesignedTargetKgCO2e: 100.0,
+        commentary: "Benchmark sectoriel non renseigné par le modèle.",
+      },
+      {
+        title: parsedData.title || title,
+        description: parsedData.description || description,
+        sector: finalSector,
+      }
+    );
   }
 
   const auditResult = {
