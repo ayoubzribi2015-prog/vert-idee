@@ -152,6 +152,16 @@ export interface AdemeReferenceFactor {
   uncertaintyPct?: number;
   appliedStage?: string;
   source?: string;
+  /** ADEME Base Carbone version used (e.g. "V23.11", or "API-live" for the online fallback). */
+  version?: string;
+  /** ADEME validity period. */
+  validity?: string;
+  /** ADEME programme / contributor attached to the factor. */
+  program?: string;
+  /** Original ADEME "Source" field (e.g. "GIEC (AR6 - 2023)"). */
+  sourceDetail?: string;
+  /** Local index relevance score, when returned by the offline lookup. */
+  matchScore?: number;
 }
 
 export interface CarbonFootprintModel {

@@ -1,5 +1,10 @@
 import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../src/utils/geminiModels.ts';
-import { fetchContextualBaseCarboneFactors, searchBaseCarbone } from '../src/utils/baseCarbone.ts';
+import {
+  fetchContextualBaseCarboneFactors,
+  searchBaseCarbone,
+  getBaseCarboneIndexStatus,
+  BASE_CARBONE_VERSION,
+} from '../src/utils/baseCarbone.ts';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -439,7 +444,12 @@ app.get('/api/ai-status', async (req: express.Request, res: express.Response) =>
   res.json(status);
 });
 
-// ADEME Base Carbone® Live Emission Factors Search API
+// ADEME Base Carbone® local index status (frozen V23.11 reference, offline-first)
+app.get('/api/base-carbone/status', (_req: express.Request, res: express.Response) => {
+  res.json({ success: true, ...getBaseCarboneIndexStatus() });
+});
+
+// ADEME Base Carbone® Emission Factors Search API (local index first, API fallback)
 app.get('/api/base-carbone/search', async (req: express.Request, res: express.Response) => {
   try {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -452,6 +462,7 @@ app.get('/api/base-carbone/search', async (req: express.Request, res: express.Re
     res.json({
       success: true,
       source: 'ADEME Base Carbone®',
+      version: BASE_CARBONE_VERSION,
       dataset: 'base-carboner',
       count: results.length,
       results,
