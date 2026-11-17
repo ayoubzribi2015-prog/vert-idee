@@ -660,9 +660,11 @@ export default function App() {
                     </span>
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-2xl font-black text-[#10634e] font-mono-numbers">
-                        {carbonKg.toFixed(2)}
+                        {carbonKg > 0 ? carbonKg.toFixed(2) : '—'}
                       </span>
-                      <span className="text-xs font-semibold text-stone-500">kg CO₂e</span>
+                      <span className="text-xs font-semibold text-stone-500">
+                        {carbonKg > 0 ? 'kg CO₂e' : 'empreinte non calculée'}
+                      </span>
                     </div>
                   </div>
 
@@ -712,7 +714,7 @@ export default function App() {
                           : '—'}
                       </span>
                       <span className="text-xs font-semibold text-stone-500 font-mono-numbers">
-                        (Moy. {benchmarkIndustry.toFixed(1)} kg)
+                        {benchmarkIndustry > 0 ? `(Moy. ${benchmarkIndustry.toFixed(1)} kg)` : 'référence sectorielle indisponible'}
                       </span>
                     </div>
                   </div>
