@@ -10,7 +10,7 @@
  * local makes carbon calculations reproducible, offline and auditable: every
  * factor is traceable to an ADEME id, version, unit, uncertainty and source.
  */
-import rawIndex from './baseCarboneV2311.generated.json';
+import rawIndex from './baseCarboneV2311.generated.json' with { type: 'json' };
 
 /** [id, name, attribute, category, unit, value, geo, subGeo, uncertainty, program, validity, source] */
 export type FactorTuple = [
