@@ -1,5 +1,9 @@
 import { discoverGeminiModels } from '../../src/utils/geminiModels.ts';
-import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
+import {
+  fetchContextualBaseCarboneFactors,
+  BASE_CARBONE_VERSION,
+  BASE_CARBONE_DOC_URL,
+} from '../../src/utils/baseCarbone.ts';
 
 type Context = { request: Request; env: { GEMINI_API_KEY?: string; GEMINI_MODEL?: string } };
 
@@ -91,7 +95,7 @@ export const onRequestPost = async ({ request, env }: Context): Promise<Response
 - **ISO 14001** : Méthodologie d'Analyse Environnementale et de hiérarchisation des Aspects Environnementaux Significatifs (AES) selon la matrice **Criticité = (Fréquence × Gravité × Sensibilité) / Maîtrise**.
 - **Guide & Panorama Institut Agro Montpellier (HAL)** : Sélection et combinaison multi-méthodes d'évaluation environnementale : ACV multi-critères (ISO 14040/14044), Bilan Carbone (GHG Protocol Scopes 1-2-3), MFA (Analyse des Flux de Matière), ERA (Évaluation des Risques Écotoxiques), AMC/MCDA (Analyse Multicritère de Décision) et MEA/IPBES (Valuation des Services Écosystémiques).
 - **Guide OSS (Observatoire du Sahara et du Sahel) & REPSAHEL** : Éco-responsabilité, préservation stricte des ressources en eau en milieu aride, lutte contre la dégradation des sols et résilience hydro-climatique.
-- **Normes Internationales & Base Carbone® ADEME** : CSRD, Taxonomie UE, ISO 14040/14044 (ACV), ISO 14067:2018 (ECP Produit), GHG Protocol (Scopes 1-2-3), Base Carbone® officielle de l'ADEME (data.ademe.fr/datasets/base-carboner), lois AGEC/ESPR.
+- **Normes Internationales & Base Empreinte® / Base Carbone® ADEME** : CSRD, Taxonomie UE, ISO 14040/14044 (ACV), ISO 14067:2018 (ECP Produit), GHG Protocol (Scopes 1-2-3), référentiel officiel ADEME (${BASE_CARBONE_DOC_URL}, version figée ${BASE_CARBONE_VERSION} intégrée localement, sans repli réseau), lois AGEC/ESPR.
 
 Ton expertise couvre :
 1. **Évaluation Sincère des AES & Impacts Écologiques :** Analyse critique des cycles de vie, hiérarchisation normée des impacts (ISO 14001), identification des externalités négatives cachées, des risques de transfert de pollution et des véritables gains nets.

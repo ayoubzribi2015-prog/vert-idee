@@ -27,6 +27,7 @@ import {
   CarbonFactorApplication,
 } from '../types';
 import { buildDefaultLifecycleStages } from '../utils/normalizeProject';
+import { BASE_CARBONE_VERSION, BASE_CARBONE_DOC_URL } from '../utils/baseCarbone';
 
 interface ImpactIndicatorsTabProps {
   indicators: ImpactIndicators;
@@ -79,7 +80,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   const [hasChanges, setHasChanges] = useState<boolean>(false);
   const [appliedSimulation, setAppliedSimulation] = useState<string | null>(null);
 
-  // ADEME Base Carbone® live search & calculator state
+  // ADEME Base Carbone® offline search against the frozen V23.11 index & calculator state
   const [ademeQuery, setAdemeQuery] = useState<string>('');
   const [ademeResults, setAdemeResults] = useState<AdemeReferenceFactor[]>([]);
   const [isSearchingAdeme, setIsSearchingAdeme] = useState<boolean>(false);
@@ -193,7 +194,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
         setSelectedAdemeFactor(null);
       }
     } catch (err: any) {
-      setAdemeError(err?.message || 'Impossible de joindre la Base Carbone ADEME.');
+      setAdemeError(err?.message || 'Impossible d’interroger l’index local Base Carbone ADEME.');
     } finally {
       setIsSearchingAdeme(false);
     }
@@ -357,14 +358,14 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                 ISO 14064-1:2018
               </span>
               <a
-                href="https://data.ademe.fr/datasets/base-carboner"
+                href={BASE_CARBONE_DOC_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#edf5f0] text-[#063428] border border-[#0b4a3a]/25 hover:bg-[#dfeee5] transition-colors"
-                title="Base Carbone® officielle de l'ADEME"
+                title={`Base Empreinte® / Base Carbone® ADEME — version figée ${BASE_CARBONE_VERSION} (index local, sans repli réseau)`}
               >
                 <Database className="w-3 h-3 text-[#10634e]" />
-                <span>ADEME Base Carbone®</span>
+                <span>ADEME Base Empreinte® · {BASE_CARBONE_VERSION}</span>
                 <ExternalLink className="w-2.5 h-2.5" />
               </a>
             </div>
@@ -781,16 +782,16 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
           </p>
         </div>
 
-        {/* ADEME Base Carbone® Reference Factors & Live Calculator */}
+        {/* ADEME Base Carbone® Reference Factors & Offline Calculator (frozen index) */}
         <div className="space-y-4 pt-4 border-t border-stone-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#063428] flex items-center gap-1.5">
                 <Database className="w-4 h-4 text-[#10634e]" />
-                <span>Calculateur &amp; Référentiel ADEME Base Carbone®</span>
+                <span>Calculateur &amp; Référentiel ADEME Base Empreinte® / Base Carbone®</span>
               </h4>
               <p className="text-[11px] text-stone-500 mt-0.5">
-                Chaque poste est calculé par quantité × facteur ADEME (data.ademe.fr), avec ID, version, unité et incertitude conservés.
+                Chaque poste est calculé par quantité × facteur ADEME (Base Empreinte® / Base Carbone® {BASE_CARBONE_VERSION}, index local figé, sans appel réseau), avec ID, version, unité et incertitude conservés.
               </p>
             </div>
           </div>

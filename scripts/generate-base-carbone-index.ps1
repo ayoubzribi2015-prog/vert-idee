@@ -1,10 +1,13 @@
 <#
 .SYNOPSIS
-  Builds the local ADEME Base Carbone index from the official V23.11 CSV export.
+  Builds the frozen local ADEME Base Empreinte / Base Carbone V23.11 index from
+  the official CSV export. This index is the single source of truth: no online
+  fallback and no mixed-version lookup are used at runtime.
 
 .DESCRIPTION
   The official CSV is CP1252 encoded, semicolon delimited and uses French decimal
-  commas. Only non-archived "Elément" rows with a numeric total are kept.
+  commas. Only non-archived "Elément" rows with a numeric total are kept. The
+  source CSV is never modified; its SHA256 is recorded in the generated JSON.
 
   Usage:
     powershell -ExecutionPolicy Bypass -File scripts/generate-base-carbone-index.ps1 `

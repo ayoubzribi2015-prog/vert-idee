@@ -9,25 +9,10 @@ import {
 
 export { getIndexStats as getBaseCarboneIndexStatus, BASE_CARBONE_VERSION };
 
-const ADEME_BASE_CARBONE_LINES_URL =
-  'https://data.ademe.fr/data-fair/api/v1/datasets/base-carboner/lines';
-
-const BASE_QS =
-  'Type_Ligne:"Elément" AND Type_de_l\'élément:"Facteur d\'émission" AND NOT Statut_de_l\'élément:"Archivé"';
-
-const SELECT_FIELDS = [
-  "Identifiant_de_l'élément",
-  'Nom_base_français',
-  'Nom_attribut_français',
-  'Code_de_la_catégorie',
-  'Total_poste_non_décomposé',
-  'Unité_français',
-  'Localisation_géographique',
-  'Sous-localisation_géographique_français',
-  'Incertitude',
-  "Statut_de_l'élément",
-  'Date_de_modification',
-].join(',');
+/** Stable API identifier for the single, frozen reference dataset. */
+export const BASE_CARBONE_DATASET = `base-carbone-${BASE_CARBONE_VERSION}-local`;
+/** Public documentation of the ADEME Base Empreinte® / Base Carbone® reference. */
+export const BASE_CARBONE_DOC_URL = 'https://base-empreinte.ademe.fr/documentation/base-carbone';
 
 interface CacheEntry {
   expiresAt: number;
@@ -36,55 +21,6 @@ interface CacheEntry {
 
 const queryCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 15 * 60 * 1000;
-
-/** Live API rows are labelled distinctly from the frozen local V23.11 index. */
-const LIVE_API_VERSION = 'API-live';
-
-function mapRowToFactor(row: any): AdemeReferenceFactor | null {
-  if (!row) return null;
-  const rawVal = Number(row['Total_poste_non_décomposé']);
-  const name = typeof row['Nom_base_français'] === 'string' ? row['Nom_base_français'].trim() : '';
-  const unit = typeof row['Unité_français'] === 'string' ? row['Unité_français'].trim() : '';
-
-  if (!name || !unit || !Number.isFinite(rawVal)) return null;
-
-  const id = String(row["Identifiant_de_l'élément"] || row._id || '');
-  const attr =
-    typeof row['Nom_attribut_français'] === 'string' && row['Nom_attribut_français'].trim()
-      ? row['Nom_attribut_français'].trim()
-      : undefined;
-  const geo =
-    typeof row['Localisation_géographique'] === 'string' && row['Localisation_géographique'].trim()
-      ? row['Localisation_géographique'].trim()
-      : 'France / International';
-  const subGeo =
-    typeof row['Sous-localisation_géographique_français'] === 'string' &&
-    row['Sous-localisation_géographique_français'].trim()
-      ? row['Sous-localisation_géographique_français'].trim()
-      : undefined;
-  const uncertaintyRaw = Number(row['Incertitude']);
-  const validity =
-    typeof row['Date_de_modification'] === 'string' && row['Date_de_modification'].trim()
-      ? row['Date_de_modification'].trim()
-      : undefined;
-
-  return {
-    id,
-    name,
-    ...(attr ? { attribute: attr } : {}),
-    category:
-      typeof row['Code_de_la_catégorie'] === 'string' && row['Code_de_la_catégorie'].trim()
-        ? row['Code_de_la_catégorie'].trim()
-        : 'Base Carbone ADEME',
-    factorKgCO2e: rawVal,
-    unit,
-    geography: subGeo ? `${geo} (${subGeo})` : geo,
-    ...(Number.isFinite(uncertaintyRaw) && uncertaintyRaw > 0 ? { uncertaintyPct: uncertaintyRaw } : {}),
-    ...(validity ? { validity } : {}),
-    version: LIVE_API_VERSION,
-    source: 'ADEME Base Carbone® (API live — repli)',
-  };
-}
 
 /** Map a local V23.11 factor to the public API shape, keeping full provenance. */
 function mapLocalFactorToFactor(f: LocalFactor, matchScore?: number): AdemeReferenceFactor {
@@ -108,11 +44,12 @@ function mapLocalFactorToFactor(f: LocalFactor, matchScore?: number): AdemeRefer
 }
 
 /**
- * Deterministic, offline-first factor lookup.
+ * Deterministic, offline-only factor lookup.
  *
- * The local V23.11 index is authoritative: the same query always returns the
- * same factors, so an audit can be reproduced without network access. The live
- * ADEME API is only consulted when the local index has too few candidates.
+ * The frozen local V23.11 index (downloaded from the ADEME Base Empreinte®
+ * / Base Carbone® reference) is the SINGLE source of truth: no network call is
+ * made, so the same query always returns the same factors and no older version
+ * can leak into an audit. `timeoutMs` is kept for API compatibility only.
  */
 export async function searchBaseCarbone(
   query: string,
@@ -122,7 +59,6 @@ export async function searchBaseCarbone(
   if (!cleanQuery) return [];
 
   const size = Math.min(25, Math.max(1, options?.size ?? 8));
-  const timeoutMs = options?.timeoutMs ?? 4000;
   const cacheKey = `${BASE_CARBONE_VERSION}::${cleanQuery.toLowerCase()}::${size}::${options?.unitHint || ''}`;
 
   const cached = queryCache.get(cacheKey);
@@ -130,8 +66,6 @@ export async function searchBaseCarbone(
 
   const factors: AdemeReferenceFactor[] = [];
   const seen = new Set<string>();
-
-  // 1. Authoritative local index (no network, no fuzzy API ranking).
   for (const local of searchLocalFactors(cleanQuery, {
     size,
     unitHint: options?.unitHint,
@@ -141,39 +75,6 @@ export async function searchBaseCarbone(
     if (!factor.id || seen.has(factor.id)) continue;
     seen.add(factor.id);
     factors.push(factor);
-  }
-
-  // 2. Live API fallback for concepts missing from the local index.
-  if (factors.length < Math.min(size, 3)) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const url =
-        `${ADEME_BASE_CARBONE_LINES_URL}?size=${size}` +
-        `&q=${encodeURIComponent(cleanQuery)}` +
-        `&qs=${encodeURIComponent(BASE_QS)}` +
-        `&select=${encodeURIComponent(SELECT_FIELDS)}`;
-
-      const res = await fetch(url, {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      });
-
-      if (res.ok) {
-        const data: any = await res.json();
-        const rows = Array.isArray(data?.results) ? data.results : [];
-        for (const row of rows) {
-          const factor = mapRowToFactor(row);
-          if (!factor || !factor.id || seen.has(factor.id)) continue;
-          seen.add(factor.id);
-          factors.push(factor);
-        }
-      }
-    } catch {
-      // Offline is a supported mode: keep the local results.
-    } finally {
-      clearTimeout(timer);
-    }
   }
 
   queryCache.set(cacheKey, {
@@ -283,11 +184,11 @@ export async function fetchContextualBaseCarboneFactors(params: {
     });
 
     const promptBlock = `
-RÉFÉRENTIEL OFFICIEL ADEME BASE CARBONE® — VERSION ${BASE_CARBONE_VERSION} (index local figé, source de vérité reproductible ; SHA256 ${BASE_CARBONE_SOURCE_SHA256.slice(0, 16)}…) :
+RÉFÉRENTIEL OFFICIEL ADEME BASE EMPREINTE® / BASE CARBONE® — VERSION ${BASE_CARBONE_VERSION} (index local figé, source de vérité unique et reproductible ; SHA256 ${BASE_CARBONE_SOURCE_SHA256.slice(0, 16)}…) :
 ${lines.join('\n')}
 
 RÈGLES DE CALCUL CARBONE — OBLIGATOIRES ET NON NÉGOCIABLES :
-- Utilise UNIQUEMENT les facteurs ci-dessus (ADEME Base Carbone® ${BASE_CARBONE_VERSION}) pour calibrer les émissions de chaque étape du cycle de vie (ISO 14067:2018 / ISO 14064-1:2018).
+- Utilise UNIQUEMENT les facteurs ci-dessus (ADEME Base Empreinte® / Base Carbone® ${BASE_CARBONE_VERSION}, référentiel figé, sans repli réseau) pour calibrer les émissions de chaque étape du cycle de vie (ISO 14067:2018 / ISO 14064-1:2018).
 - Applique rigoureusement les conversions d'unités entre l'unité du facteur et l'Unité Fonctionnelle du projet. Ne jamais moyenner des facteurs exprimés dans des unités différentes.
 - INTERDICTION ABSOLUE d'inventer, d'approximer ou de remplacer un facteur ADEME par une valeur mémorisée : si aucun facteur ne correspond exactement, cite le plus proche et signale explicitement l'incertitude.
 - Cite explicitement l'identifiant [ADEME ID #xxxxx], la valeur, l'unité et l'incertitude dans les descriptions des étapes, dans benchmarkComparison.commentary et dans le tableau ademeReferenceFactors (champs id, name, factorKgCO2e, unit, uncertaintyPct, source).
