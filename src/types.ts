@@ -184,8 +184,32 @@ export interface AdemeReferenceFactor {
   matchScore?: number;
 }
 
+/**
+ * One of the four functional units proposed by the expert college at the end
+ * of the diagnosis. The user validates exactly one of them before the carbon
+ * totals are finalised. `scaleFactor` is relative to the base calculation
+ * (fu1 = 1): the validated factor multiplies every ADEME activity quantity.
+ */
+export interface FunctionalUnitOption {
+  id: string;
+  label: string;
+  rationale: string;
+  proposedBy: string;
+  scaleFactor: number;
+}
+
 export interface CarbonFootprintModel {
   functionalUnit: string;
+  /** Functional unit on which the original ADEME quantities were computed. */
+  functionalUnitBase?: string;
+  /** Four expert proposals, presented to the user during the analysis. */
+  functionalUnitOptions?: FunctionalUnitOption[];
+  /** Id of the option validated by the user. */
+  selectedFunctionalUnitId?: string;
+  /** True once the user has validated one of the proposals. */
+  functionalUnitValidated?: boolean;
+  /** Scale factor applied to the base quantities for the validated option. */
+  appliedFunctionalUnitScale?: number;
   totalCarbonKgCO2e: number;
   benchmarkComparison: BenchmarkComparison;
   lifecycleStages: LifecycleStageCarbon[];
