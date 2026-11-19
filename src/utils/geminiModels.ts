@@ -122,8 +122,3 @@ export function isTransientGeminiError(status?: number | null, message?: string 
   return TRANSIENT_MESSAGE.test(message || '');
 }
 
-/** Short bounded wait used between two attempts on a temporarily overloaded model. */
-export function waitForRetry(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
