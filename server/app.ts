@@ -3,7 +3,6 @@ import {
   ORDERED_GEMINI_MODELS,
   isTransientGeminiError,
   isQuotaGeminiError,
-  waitForRetry,
 } from '../src/utils/geminiModels.ts';
 import {
   fetchContextualBaseCarboneFactors,
@@ -335,18 +334,9 @@ async function callGeminiStrict(options: {
   let sawQuotaError = false;
   let quotaDetail: string | undefined = undefined;
   let sawInvalidModelResponse = false;
-  const MAX_RETRIES_PER_MODEL = 2;
-  const MAX_TOTAL_RETRIES = 5;
-  let totalRetries = 0;
-  let retriedModel = '';
-  let retriesForCurrentModel = 0;
 
   for (let idx = 0; idx < modelsToTry.length; idx++) {
     const modelName = modelsToTry[idx];
-    if (modelName !== retriedModel) {
-      retriedModel = modelName;
-      retriesForCurrentModel = 0;
-    }
     // Laisser un budget confortable au 1er modèle, puis borner les modèles de repli pour éviter qu'un modèle bloqué ne fige toute la cascade
     const attemptTimeoutMs = idx === 0
       ? Math.min(baseTimeoutMs, 90000)
@@ -414,14 +404,6 @@ async function callGeminiStrict(options: {
       }
       if (isTransientGeminiError(result.status, result.error)) {
         sawTransientUpstreamError = true;
-        if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
-          retriesForCurrentModel++;
-          totalRetries++;
-          console.warn(`[Mode STRICT_IA] Surcharge temporaire de ${modelName}, nouvel essai dans un instant...`);
-          await waitForRetry(1000 * retriesForCurrentModel);
-          idx--; // same model: temporary overload, not an invalid answer
-          continue;
-        }
       }
       console.warn(`[Mode STRICT_IA] Le modèle ${modelName} a rencontré un problème (${lastError.message}). Passage au modèle suivant dans le classement...`);
     } catch (err: any) {
@@ -429,13 +411,6 @@ async function callGeminiStrict(options: {
       lastError = err;
       if (isTransientGeminiError(undefined, err?.message)) {
         sawTransientUpstreamError = true;
-        if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
-          retriesForCurrentModel++;
-          totalRetries++;
-          await waitForRetry(1000 * retriesForCurrentModel);
-          idx--; // same model: transient network failure
-          continue;
-        }
       }
       console.warn(`[Mode STRICT_IA] Le modèle ${modelName} a échoué (${err?.message}). Passage au modèle suivant dans le classement...`);
     }

@@ -3,7 +3,6 @@ import {
   ORDERED_GEMINI_MODELS,
   isTransientGeminiError,
   isQuotaGeminiError,
-  waitForRetry,
 } from '../../src/utils/geminiModels.ts';
 import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
 import {
@@ -217,18 +216,9 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   let sawQuotaError = false;
   let quotaDetail: string | undefined = undefined;
   let sawInvalidModelResponse = false;
-  const MAX_RETRIES_PER_MODEL = 2;
-  const MAX_TOTAL_RETRIES = 5;
-  let totalRetries = 0;
-  let retriedModel = '';
-  let retriesForCurrentModel = 0;
 
   for (let idx = 0; idx < models.length; idx++) {
     const model = models[idx];
-    if (model !== retriedModel) {
-      retriedModel = model;
-      retriesForCurrentModel = 0;
-    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), idx === 0 ? 90000 : 25000);
 
@@ -693,13 +683,6 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
         }
         if (isTransientGeminiError(upstream.status, message)) {
           sawTransientUpstreamError = true;
-          if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
-            retriesForCurrentModel++;
-            totalRetries++;
-            await waitForRetry(1000 * retriesForCurrentModel);
-            idx--; // same model: this is a temporary overload, not a bad answer
-            continue;
-          }
         }
       }
     } catch (err: any) {
@@ -707,13 +690,6 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
       lastError = err;
       if (isTransientGeminiError(undefined, err?.message)) {
         sawTransientUpstreamError = true;
-        if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
-          retriesForCurrentModel++;
-          totalRetries++;
-          await waitForRetry(1000 * retriesForCurrentModel);
-          idx--; // same model: transient network failure
-          continue;
-        }
       }
     }
   }
