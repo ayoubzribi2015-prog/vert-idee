@@ -2,6 +2,7 @@ import {
   discoverGeminiModels,
   ORDERED_GEMINI_MODELS,
   isTransientGeminiError,
+  isQuotaGeminiError,
   waitForRetry,
 } from '../../src/utils/geminiModels.ts';
 import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
@@ -213,6 +214,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   let parsedData: any = null;
   let lastError: any = null;
   let sawTransientUpstreamError = false;
+  let sawQuotaError = false;
   let sawInvalidModelResponse = false;
   const MAX_RETRIES_PER_MODEL = 2;
   const MAX_TOTAL_RETRIES = 5;
@@ -680,6 +682,11 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
         const errJson = await upstream.json().catch(() => ({}));
         const message = String(errJson?.error?.message || `HTTP ${upstream.status}`);
         lastError = new Error(message);
+        if (isQuotaGeminiError(upstream.status, message)) {
+          // Quota is attached to the API key, not to a model: stop the cascade.
+          sawQuotaError = true;
+          break;
+        }
         if (isTransientGeminiError(upstream.status, message)) {
           sawTransientUpstreamError = true;
           if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
@@ -712,6 +719,19 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   }
 
   if (!parsedData || !parsedData.projectSynthesis || !hasTraceableCarbonFootprint(parsedData)) {
+    if (sawQuotaError) {
+      return respond(
+        {
+          success: false,
+          retryable: false,
+          reason: 'quota',
+          error:
+            "[Mode STRICT_IA] Quota Gemini épuisé (HTTP 429) : la clé API de ce service a atteint sa limite ou sa facturation n'est pas active. Vérifiez le plan dans Google AI Studio, remplacez le secret GEMINI_API_KEY puis redéployez. Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
+          detail: lastError?.message || undefined,
+        },
+        503
+      );
+    }
     if (sawTransientUpstreamError && !sawInvalidModelResponse) {
       return respond(
         {
