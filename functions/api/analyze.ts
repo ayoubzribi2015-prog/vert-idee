@@ -1,6 +1,10 @@
 import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../../src/utils/geminiModels.ts';
 import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
-import { isConcreteFunctionalUnit, normalizeCarbonFootprint } from '../../src/utils/normalizeProject.ts';
+import {
+  isConcreteFunctionalUnit,
+  isValidFunctionalUnitOptions,
+  normalizeCarbonFootprint,
+} from '../../src/utils/normalizeProject.ts';
 
 type Context = {
   request: Request;
@@ -29,6 +33,8 @@ function hasTraceableCarbonFootprint(data: any): boolean {
   const cf = data?.impactIndicators?.carbonFootprint;
   if (!cf || typeof cf !== 'object') return false;
   if (!isConcreteFunctionalUnit(cf.functionalUnit)) return false;
+  // The user must be able to choose among exactly four expert proposals.
+  if (!isValidFunctionalUnitOptions(cf.functionalUnitOptions)) return false;
 
   const declaredTotal = Number(cf.totalCarbonKgCO2e);
   if (!Number.isFinite(declaredTotal) || declaredTotal <= 0) return false;
@@ -161,6 +167,12 @@ RÈGLES OBLIGATOIRES DE CALCUL CARBONE (ISO 14067 / Base Carbone® ADEME) :
 - functionalUnit DOIT être une unité fonctionnelle CONCRÈTE, MESURABLE et quantifiée déduite du projet (ex: "1 paire de chaussures de sécurité EN ISO 20345", "1 kg de plastique injecté", "1 000 pièces de bandes de plâtre stériles", "1 kWh d'électricité produite"). INTERDICTION FORMELLE des valeurs génériques ("1 unité", "unité fonctionnelle / service").
 - Chaque lifecycleStages DOIT contenir factorApplications : postes {ademeId, name, quantity, unit, factorKgCO2e, emissionKgCO2e} où quantity est la quantité d'activité POUR l'unité fonctionnelle dans l'unité du facteur, et emissionKgCO2e = quantity × factorKgCO2e.
 - L'émission d'une étape = somme de ses factorApplications ; totalCarbonKgCO2e = somme des émissions des étapes. Aucune émission d'étape sans poste traçable à un ID ADEME. Ne jamais renvoyer zéro faute de facteur exact : utiliser le facteur le plus proche avec son incertitude.
+
+QUATRE PROPOSITIONS D'UNITÉ FONCTIONNELLE (VALIDATION UTILISATEUR, OBLIGATOIRE) :
+- Le Collège des 4 Experts doit proposer EXACTEMENT 4 unités fonctionnelles dans functionalUnitOptions : {id, label, rationale, proposedBy, scaleFactor}, avec les identifiants "fu1", "fu2", "fu3", "fu4" et un expert différent par proposition (proposedBy = "Expert 1" à "Expert 4"). Chaque label porte sur le MÊME produit mais à une échelle de référence différente, et reste concret et quantifié.
+- functionalUnit et functionalUnitBase reprennent le libellé de "fu1". Toutes les quantités de factorApplications sont exprimées POUR "fu1" (scaleFactor = 1).
+- Pour chaque autre option, scaleFactor = (référence quantitative de l'option) / (référence quantitative de fu1). Exemple : si fu1 = "1 kg de plastique injecté", alors "1 tonne de plastique injecté" = 1000, "500 g de plastique injecté" = 0.5, "1 emballage de 500 g" = 0.5.
+- Le système recalculera les émissions, le total, les pourcentages et le benchmark en multipliant les quantités ADEME par le scaleFactor de l'option que l'utilisateur validera. Ne propose donc que des facteurs d'échelle exacts et positifs.
 `;
 
   const baseCarboneCtx = await fetchContextualBaseCarboneFactors({
@@ -413,7 +425,23 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
                       carbonFootprint: {
                         type: "OBJECT",
                         properties: {
-                          functionalUnit: { type: "STRING", description: "Unité fonctionnelle concrète et quantifiée (ex: '1 paire de chaussures', '1 kg de produit'). Jamais de formulation générique." },
+                          functionalUnit: { type: "STRING", description: "Unité fonctionnelle concrète et quantifiée de l'option fu1 (ex: '1 paire de chaussures', '1 kg de produit'). Jamais de formulation générique." },
+                          functionalUnitBase: { type: "STRING", description: "Unité fonctionnelle de référence utilisée pour les quantités de factorApplications (identique à fu1)." },
+                          functionalUnitOptions: {
+                            type: "ARRAY",
+                            description: "Exactement 4 propositions d'unités fonctionnelles, une par expert, à valider par l'utilisateur",
+                            items: {
+                              type: "OBJECT",
+                              properties: {
+                                id: { type: "STRING", description: "Identifiant stable : fu1, fu2, fu3 ou fu4" },
+                                label: { type: "STRING", description: "Unité fonctionnelle concrète et quantifiée du même produit" },
+                                rationale: { type: "STRING", description: "Justification courte de la pertinence de cette unité" },
+                                proposedBy: { type: "STRING", description: "Expert auteur de la proposition (Expert 1 à Expert 4)" },
+                                scaleFactor: { type: "NUMBER", description: "Multiplicateur exact par rapport à fu1 (fu1 = 1), strictement positif" },
+                              },
+                              required: ["id", "label", "rationale", "proposedBy", "scaleFactor"],
+                            },
+                          },
                           totalCarbonKgCO2e: { type: "NUMBER" },
                           benchmarkComparison: {
                             type: "OBJECT",
@@ -487,7 +515,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
                             }
                           }
                         },
-                        required: ["functionalUnit", "totalCarbonKgCO2e", "benchmarkComparison", "lifecycleStages", "highImpactDecarbonizationActions"]
+                        required: ["functionalUnit", "functionalUnitOptions", "totalCarbonKgCO2e", "benchmarkComparison", "lifecycleStages", "highImpactDecarbonizationActions"]
                       },
                       circularityRate: { type: "STRING" },
                       wasteAvoided: { type: "STRING" },

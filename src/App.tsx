@@ -29,7 +29,12 @@ import {
   Lock,
   RotateCcw,
 } from 'lucide-react';
-import { AssistantChatMessage, ProjectAudit, CarbonFootprintModel } from './types';
+import {
+  AssistantChatMessage,
+  ProjectAudit,
+  CarbonFootprintModel,
+  FunctionalUnitOption,
+} from './types';
 import { Header, TabKey } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { HomePageForm } from './components/HomePageForm';
@@ -48,7 +53,11 @@ import { GreenAssistantTab } from './components/GreenAssistantTab';
 import { MobileSectionNav } from './components/MobileSectionNav';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { generateAssistantChatWordReport, generateWordReport } from './utils/docxExport';
-import { normalizeProjectAudit } from './utils/normalizeProject';
+import {
+  applyFunctionalUnitScale,
+  isValidFunctionalUnitOptions,
+  normalizeProjectAudit,
+} from './utils/normalizeProject';
 import {
   auth,
   signInWithGoogle,
@@ -76,6 +85,11 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSavingCarbon, setIsSavingCarbon] = useState(false);
+  const [isValidatingFunctionalUnit, setIsValidatingFunctionalUnit] = useState(false);
+  const [pendingFunctionalUnit, setPendingFunctionalUnit] = useState<{
+    rawData: any;
+    formData: any;
+  } | null>(null);
   const [cloudSyncing, setCloudSyncing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -181,13 +195,94 @@ export default function App() {
     setIsModalOpen(false);
     setInfoRequest(null);
     setOriginalFormData(null);
+    setPendingFunctionalUnit(null);
   };
 
   // Strictly only active if activeProjectId is set! Otherwise home page fields remain empty.
   const activeProject = activeProjectId ? projects.find((p) => p.id === activeProjectId) || null : null;
 
+  /** Persist a fully normalised audit and activate it. Shared by the direct
+   *  analysis path and by the functional-unit validation path. */
+  const finalizeAnalysis = async (
+    rawData: any,
+    formData: any,
+    successToast?: string
+  ): Promise<ProjectAudit> => {
+    const newProject: ProjectAudit = normalizeProjectAudit(
+      rawData,
+      formData?.title,
+      formData?.description,
+      formData?.location
+    );
+
+    if (user) {
+      try {
+        await saveUserProject(user.uid, newProject);
+        setProjects((prev) => [newProject, ...prev.filter((p) => p.id !== newProject.id)]);
+        setToastMessage(successToast || `Diagnostic IA enregistré dans votre compte Cloud (${user.email}) !`);
+      } catch (cloudErr: any) {
+        console.warn('Erreur lors de la synchronisation cloud Firestore :', cloudErr);
+        setProjects((prev) => [newProject, ...prev.filter((p) => p.id !== newProject.id)]);
+        setToastMessage(successToast || 'Diagnostic IA généré avec succès !');
+      }
+    } else {
+      setProjects([newProject]);
+      setToastMessage(successToast || 'Diagnostic IA certifié généré avec succès en Mode STRICT_IA !');
+    }
+
+    setActiveProjectId(newProject.id);
+    setIsModalOpen(false);
+    setInfoRequest(null);
+    setOriginalFormData(null);
+    setActiveTab('synthesis');
+    return newProject;
+  };
+
+  /** Final step of the analysis: recompute every carbon figure on the unit
+   *  validated by the user, then persist and activate the report. */
+  const handleValidateFunctionalUnit = async (optionId: string) => {
+    if (!pendingFunctionalUnit) return;
+    const { rawData, formData } = pendingFunctionalUnit;
+    setIsValidatingFunctionalUnit(true);
+    setErrorMessage(null);
+    try {
+      const scaledCarbon = applyFunctionalUnitScale(
+        rawData?.impactIndicators?.carbonFootprint,
+        optionId
+      );
+      if (!scaledCarbon) {
+        throw new Error('[Mode STRICT_IA] Unité fonctionnelle validée introuvable parmi les 4 propositions de l’IA.');
+      }
+      await finalizeAnalysis(
+        {
+          ...rawData,
+          impactIndicators: {
+            ...rawData.impactIndicators,
+            carbonFootprint: scaledCarbon,
+          },
+        },
+        formData,
+        `Empreinte carbone calculée sur : ${scaledCarbon.functionalUnit}`
+      );
+      setPendingFunctionalUnit(null);
+    } catch (err: any) {
+      console.error('Functional unit validation error:', err);
+      setErrorMessage(err?.message || 'Impossible de finaliser le calcul sur l’unité fonctionnelle choisie.');
+    } finally {
+      setIsValidatingFunctionalUnit(false);
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleCancelFunctionalUnitSelection = () => {
+    setPendingFunctionalUnit(null);
+    setIsAnalyzing(false);
+    setToastMessage('Sélection annulée : relancez le diagnostic pour obtenir de nouvelles propositions.');
+  };
+
   // Analysis with ONLY the 3 requested fields: title, description, location
   const handleAnalyzeProject = async (formData: any, answers?: Record<string, string>) => {
+    let keepLoading = false;
     try {
       setIsAnalyzing(true);
       setErrorMessage(null);
@@ -246,28 +341,18 @@ export default function App() {
           return;
         }
 
-        const newProject: ProjectAudit = normalizeProjectAudit(result.data, formData?.title, formData?.description, formData?.location);
-
-        if (user) {
-          try {
-            await saveUserProject(user.uid, newProject);
-            setProjects((prev) => [newProject, ...prev.filter((p) => p.id !== newProject.id)]);
-            setToastMessage(`Diagnostic IA enregistré dans votre compte Cloud (${user.email}) !`);
-          } catch (cloudErr: any) {
-            console.warn('Erreur lors de la synchronisation cloud Firestore :', cloudErr);
-            setProjects((prev) => [newProject, ...prev.filter((p) => p.id !== newProject.id)]);
-            setToastMessage('Diagnostic IA généré avec succès !');
-          }
-        } else {
-          setProjects([newProject]);
-          setToastMessage('Diagnostic IA certifié généré avec succès en Mode STRICT_IA !');
+        const options = result.data?.impactIndicators?.carbonFootprint?.functionalUnitOptions;
+        if (isValidFunctionalUnitOptions(options)) {
+          // Stay in the "Expertise Environnementale en Cours" card: the user
+          // must validate one of the four expert proposals before the carbon
+          // figures are computed and the report is persisted.
+          setPendingFunctionalUnit({ rawData: result.data, formData });
+          keepLoading = true;
+          return;
         }
 
-        setActiveProjectId(newProject.id);
-        setIsModalOpen(false);
-        setInfoRequest(null);
-        setOriginalFormData(null);
-        setActiveTab('synthesis');
+        // Backward compatibility: older audits carry no proposals.
+        await finalizeAnalysis(result.data, formData);
         return;
       }
 
@@ -284,7 +369,7 @@ export default function App() {
       console.error('Analysis error:', err);
       setErrorMessage(err?.message || "Échec de l'expertise environnementale.");
     } finally {
-      setIsAnalyzing(false);
+      if (!keepLoading) setIsAnalyzing(false);
     }
   };
 
@@ -800,7 +885,18 @@ export default function App() {
             </div>
           ) : (
             /* Render empty diagnostic form with empty fields */
-            <HomePageForm onSubmit={handleAnalyzeProject} isLoading={isAnalyzing} />
+            <HomePageForm
+              onSubmit={handleAnalyzeProject}
+              isLoading={isAnalyzing}
+              pendingFunctionalUnitOptions={
+                pendingFunctionalUnit?.rawData?.impactIndicators?.carbonFootprint?.functionalUnitOptions as
+                  | FunctionalUnitOption[]
+                  | undefined
+              }
+              onValidateFunctionalUnit={handleValidateFunctionalUnit}
+              onCancelFunctionalUnitSelection={handleCancelFunctionalUnitSelection}
+              isValidatingFunctionalUnit={isValidatingFunctionalUnit}
+            />
           )
         )}
       </main>
@@ -814,6 +910,14 @@ export default function App() {
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleAnalyzeProject}
         isLoading={isAnalyzing}
+        pendingFunctionalUnitOptions={
+          pendingFunctionalUnit?.rawData?.impactIndicators?.carbonFootprint?.functionalUnitOptions as
+            | FunctionalUnitOption[]
+            | undefined
+        }
+        onValidateFunctionalUnit={handleValidateFunctionalUnit}
+        onCancelFunctionalUnitSelection={handleCancelFunctionalUnitSelection}
+        isValidatingFunctionalUnit={isValidatingFunctionalUnit}
       />
       
       {/* Information Request Modal for missing info */}

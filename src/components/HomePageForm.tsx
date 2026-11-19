@@ -11,7 +11,9 @@ import {
   Users,
   Compass,
 } from 'lucide-react';
+import type { FunctionalUnitOption } from '../types';
 import { DescriptionFileInput } from './DescriptionFileInput';
+import { FunctionalUnitSelection } from './FunctionalUnitSelection';
 
 interface HomePageFormProps {
   onSubmit: (data: {
@@ -21,6 +23,10 @@ interface HomePageFormProps {
     fullDocumentContent?: string;
   }) => Promise<void>;
   isLoading: boolean;
+  pendingFunctionalUnitOptions?: FunctionalUnitOption[];
+  onValidateFunctionalUnit?: (optionId: string) => Promise<void>;
+  onCancelFunctionalUnitSelection?: () => void;
+  isValidatingFunctionalUnit?: boolean;
 }
 
 const PRESET_EXAMPLES = [
@@ -44,7 +50,14 @@ const PRESET_EXAMPLES = [
   },
 ];
 
-export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading }) => {
+export const HomePageForm: React.FC<HomePageFormProps> = ({
+  onSubmit,
+  isLoading,
+  pendingFunctionalUnitOptions,
+  onValidateFunctionalUnit,
+  onCancelFunctionalUnitSelection,
+  isValidatingFunctionalUnit,
+}) => {
   // All fields start completely empty
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -167,6 +180,14 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
 
         {/* Loading State or Form */}
         {isLoading ? (
+          pendingFunctionalUnitOptions && pendingFunctionalUnitOptions.length === 4 && onValidateFunctionalUnit ? (
+            <FunctionalUnitSelection
+              options={pendingFunctionalUnitOptions}
+              onValidate={onValidateFunctionalUnit}
+              onCancel={onCancelFunctionalUnitSelection}
+              isSubmitting={isValidatingFunctionalUnit}
+            />
+          ) : (
           <div className="p-12 text-center space-y-6">
             <div className="relative mx-auto w-24 h-24">
               <div className="absolute inset-0 rounded-full border-4 border-emerald-100 animate-pulse" />
@@ -198,6 +219,7 @@ export const HomePageForm: React.FC<HomePageFormProps> = ({ onSubmit, isLoading 
               ))}
             </div>
           </div>
+          )
         ) : (
           <form onSubmit={handleSubmit} className="p-4 sm:p-7 space-y-4 sm:space-y-6">
             {/* Field 1: Titre du projet / Produit (starts empty) */}
