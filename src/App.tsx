@@ -93,9 +93,11 @@ export default function App() {
   const [cloudSyncing, setCloudSyncing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryableError, setRetryableError] = useState(false);
   const [dismissedLoginBanner, setDismissedLoginBanner] = useState(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const projectsRef = useRef<ProjectAudit[]>([]);
+  const lastAnalysisArgsRef = useRef<{ formData: any; answers?: Record<string, string> } | null>(null);
 
   useEffect(() => {
     projectsRef.current = projects;
@@ -283,9 +285,11 @@ export default function App() {
   // Analysis with ONLY the 3 requested fields: title, description, location
   const handleAnalyzeProject = async (formData: any, answers?: Record<string, string>) => {
     let keepLoading = false;
+    lastAnalysisArgsRef.current = { formData, answers };
     try {
       setIsAnalyzing(true);
       setErrorMessage(null);
+      setRetryableError(false);
       
       const payload = answers 
         ? { ...originalFormData, answers, shouldSave: !!user }
@@ -360,6 +364,8 @@ export default function App() {
       const failureReason =
         result?.error ||
         `Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`;
+      // A temporary upstream overload is not a STRICT_IA rejection: offer a retry.
+      setRetryableError(Boolean(result?.retryable));
       throw new Error(
         failureReason.startsWith('[Mode STRICT_IA]')
           ? failureReason
@@ -534,9 +540,28 @@ export default function App() {
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{errorMessage}</span>
           </div>
-          <button onClick={() => setErrorMessage(null)} className="text-rose-600 font-bold px-2 text-base">
-            ×
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {retryableError && (
+              <button
+                onClick={() => {
+                  const args = lastAnalysisArgsRef.current;
+                  if (args) void handleAnalyzeProject(args.formData, args.answers);
+                }}
+                className="px-3 py-1 rounded-md bg-rose-600 text-white font-bold hover:bg-rose-700"
+              >
+                Réessayer
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setErrorMessage(null);
+                setRetryableError(false);
+              }}
+              className="text-rose-600 font-bold px-2 text-base"
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
 
