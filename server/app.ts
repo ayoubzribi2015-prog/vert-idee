@@ -1,4 +1,9 @@
-import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../src/utils/geminiModels.ts';
+import {
+  discoverGeminiModels,
+  ORDERED_GEMINI_MODELS,
+  isTransientGeminiError,
+  waitForRetry,
+} from '../src/utils/geminiModels.ts';
 import {
   fetchContextualBaseCarboneFactors,
   searchBaseCarbone,
@@ -325,9 +330,20 @@ async function callGeminiStrict(options: {
   const baseTimeoutMs = options.timeoutMs || 300000; // 5 minutes max par défaut
   const expectsJson = options.config?.responseMimeType === 'application/json';
   let lastError: any = null;
+  let sawTransientUpstreamError = false;
+  let sawInvalidModelResponse = false;
+  const MAX_RETRIES_PER_MODEL = 2;
+  const MAX_TOTAL_RETRIES = 5;
+  let totalRetries = 0;
+  let retriedModel = '';
+  let retriesForCurrentModel = 0;
 
   for (let idx = 0; idx < modelsToTry.length; idx++) {
     const modelName = modelsToTry[idx];
+    if (modelName !== retriedModel) {
+      retriedModel = modelName;
+      retriesForCurrentModel = 0;
+    }
     // Laisser un budget confortable au 1er modèle, puis borner les modèles de repli pour éviter qu'un modèle bloqué ne fige toute la cascade
     const attemptTimeoutMs = idx === 0
       ? Math.min(baseTimeoutMs, 90000)
@@ -359,6 +375,7 @@ async function callGeminiStrict(options: {
             JSON.parse(cleanedText);
           } catch (jsonErr: any) {
             isValid = false;
+            sawInvalidModelResponse = true;
             lastError = new Error(`JSON invalide/tronqué renvoyé par ${modelName} (${jsonErr?.message || 'SyntaxError'})`);
             console.warn(`[Mode STRICT_IA] ${lastError.message}. Passage au modèle suivant...`);
           }
@@ -366,6 +383,7 @@ async function callGeminiStrict(options: {
 
         if (isValid && options.validateResponse && !options.validateResponse(cleanedText)) {
           isValid = false;
+          sawInvalidModelResponse = true;
           lastError = new Error(`Réponse incomplète renvoyée par ${modelName}`);
           console.warn(`[Mode STRICT_IA] ${lastError.message}. Passage au modèle suivant...`);
         }
@@ -383,12 +401,40 @@ async function callGeminiStrict(options: {
       lastError = new Error(
         result.error || (result.ok ? `Réponse vide du modèle ${modelName}` : `Erreur HTTP ${result.status}`)
       );
+      if (isTransientGeminiError(result.status, result.error)) {
+        sawTransientUpstreamError = true;
+        if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
+          retriesForCurrentModel++;
+          totalRetries++;
+          console.warn(`[Mode STRICT_IA] Surcharge temporaire de ${modelName}, nouvel essai dans un instant...`);
+          await waitForRetry(1000 * retriesForCurrentModel);
+          idx--; // same model: temporary overload, not an invalid answer
+          continue;
+        }
+      }
       console.warn(`[Mode STRICT_IA] Le modèle ${modelName} a rencontré un problème (${lastError.message}). Passage au modèle suivant dans le classement...`);
     } catch (err: any) {
       clearTimeout(timer);
       lastError = err;
+      if (isTransientGeminiError(undefined, err?.message)) {
+        sawTransientUpstreamError = true;
+        if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
+          retriesForCurrentModel++;
+          totalRetries++;
+          await waitForRetry(1000 * retriesForCurrentModel);
+          idx--; // same model: transient network failure
+          continue;
+        }
+      }
       console.warn(`[Mode STRICT_IA] Le modèle ${modelName} a échoué (${err?.message}). Passage au modèle suivant dans le classement...`);
     }
+  }
+
+  if (sawTransientUpstreamError && !sawInvalidModelResponse) {
+    throw Object.assign(
+      new Error("Le modèle d'intelligence artificielle est momentanément surchargé (forte demande)."),
+      { retryable: true }
+    );
   }
 
   throw new Error(
@@ -1755,6 +1801,15 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       console.log(`[Audit Engine - Mode STRICT_IA] Diagnostic analysé avec succès via ${modelUsed} !`);
     } catch (aiErr: any) {
       console.error('[Audit Engine - Mode STRICT_IA] Échec de l\'analyse IA (aucun fallback autorisé) :', aiErr?.message);
+      if (aiErr?.retryable) {
+        res.status(503).json({
+          success: false,
+          retryable: true,
+          error: "[Mode STRICT_IA] Le modèle d'intelligence artificielle est momentanément surchargé (forte demande). Réessayez dans quelques instants : aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
+          detail: aiErr?.message,
+        });
+        return;
+      }
       res.status(503).json({
         success: false,
         error: `[Mode STRICT_IA] L'analyse a échoué car le modèle IA n'a pas répondu ou est indisponible (${aiErr?.message || 'Erreur IA'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe/hors ligne ont été éliminés : aucun fallback n'est autorisé.`,
