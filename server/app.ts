@@ -2,6 +2,7 @@ import {
   discoverGeminiModels,
   ORDERED_GEMINI_MODELS,
   isTransientGeminiError,
+  isQuotaGeminiError,
   waitForRetry,
 } from '../src/utils/geminiModels.ts';
 import {
@@ -331,6 +332,7 @@ async function callGeminiStrict(options: {
   const expectsJson = options.config?.responseMimeType === 'application/json';
   let lastError: any = null;
   let sawTransientUpstreamError = false;
+  let sawQuotaError = false;
   let sawInvalidModelResponse = false;
   const MAX_RETRIES_PER_MODEL = 2;
   const MAX_TOTAL_RETRIES = 5;
@@ -401,6 +403,11 @@ async function callGeminiStrict(options: {
       lastError = new Error(
         result.error || (result.ok ? `Réponse vide du modèle ${modelName}` : `Erreur HTTP ${result.status}`)
       );
+      if (isQuotaGeminiError(result.status, result.error)) {
+        // Quota is attached to the key: no other model can help.
+        sawQuotaError = true;
+        break;
+      }
       if (isTransientGeminiError(result.status, result.error)) {
         sawTransientUpstreamError = true;
         if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
@@ -430,6 +437,12 @@ async function callGeminiStrict(options: {
     }
   }
 
+  if (sawQuotaError) {
+    throw Object.assign(
+      new Error("Quota Gemini épuisé (HTTP 429) : clé API à sa limite / facturation inactive."),
+      { retryable: false, reason: 'quota' }
+    );
+  }
   if (sawTransientUpstreamError && !sawInvalidModelResponse) {
     throw Object.assign(
       new Error("Le modèle d'intelligence artificielle est momentanément surchargé (forte demande)."),
@@ -1801,6 +1814,16 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       console.log(`[Audit Engine - Mode STRICT_IA] Diagnostic analysé avec succès via ${modelUsed} !`);
     } catch (aiErr: any) {
       console.error('[Audit Engine - Mode STRICT_IA] Échec de l\'analyse IA (aucun fallback autorisé) :', aiErr?.message);
+      if (aiErr?.reason === 'quota') {
+        res.status(503).json({
+          success: false,
+          retryable: false,
+          reason: 'quota',
+          error: "[Mode STRICT_IA] Quota Gemini épuisé (HTTP 429) : la clé API de ce service a atteint sa limite ou sa facturation n'est pas active. Vérifiez le plan dans Google AI Studio, remplacez le secret GEMINI_API_KEY puis redéployez. Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
+          detail: aiErr?.message,
+        });
+        return;
+      }
       if (aiErr?.retryable) {
         res.status(503).json({
           success: false,
