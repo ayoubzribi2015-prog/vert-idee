@@ -3,6 +3,7 @@ import type {
   BenchmarkComparison,
   CarbonFactorApplication,
   CarbonFootprintModel,
+  FunctionalUnitOption,
   LifecycleStageCarbon,
   ProjectAudit,
 } from '../types.ts';
@@ -59,6 +60,111 @@ export function deriveFunctionalUnit(params: {
   }
   const title = (params.title || '').trim().replace(/\s+/g, ' ').slice(0, 90);
   return title ? `1 unité de ${title}` : '1 unité fonctionnelle du projet';
+}
+
+/**
+ * STRICT_IA gate for the four expert proposals. A diagnostic is only accepted
+ * when the model returned exactly four distinct, concrete functional units
+ * with a finite positive scale factor. No deterministic option may be invented.
+ */
+export function isValidFunctionalUnitOptions(value: unknown): value is FunctionalUnitOption[] {
+  if (!Array.isArray(value) || value.length !== 4) return false;
+  const ids = new Set<string>();
+  let hasBaseline = false;
+  for (const option of value) {
+    if (!option || typeof option !== 'object') return false;
+    const candidate = option as Record<string, unknown>;
+    const id = String(candidate.id ?? '').trim();
+    if (!id || ids.has(id)) return false;
+    ids.add(id);
+    if (!isConcreteFunctionalUnit(candidate.label)) return false;
+    if (typeof candidate.rationale !== 'string' || !candidate.rationale.trim()) return false;
+    if (typeof candidate.proposedBy !== 'string' || !candidate.proposedBy.trim()) return false;
+    const scale = Number(candidate.scaleFactor);
+    if (!Number.isFinite(scale) || scale <= 0) return false;
+    // At least one option (fu1) is the baseline on which the ADEME quantities
+    // were computed: without a scale of 1 the multiplier semantics break.
+    if (scale === 1) hasBaseline = true;
+  }
+  return hasBaseline;
+}
+
+/**
+ * Recompute the whole footprint on the functional unit validated by the user.
+ * The four proposals are relative to the base calculation (fu1 = 1): the
+ * validated scale factor multiplies every ADEME activity quantity, then each
+ * emission, stage total, percentage, headline total and benchmark are derived
+ * again from `quantity × factor`. Nothing is trusted from the AI total.
+ */
+export function applyFunctionalUnitScale(rawCarbon: any, optionId: string): any | null {
+  const options = rawCarbon?.functionalUnitOptions;
+  if (!isValidFunctionalUnitOptions(options)) return null;
+  const option = options.find((o) => o.id === optionId);
+  if (!option) return null;
+
+  const scale = Number(option.scaleFactor);
+  const scaledStages = (Array.isArray(rawCarbon?.lifecycleStages) ? rawCarbon.lifecycleStages : []).map(
+    (stage: any) => {
+      const lines = Array.isArray(stage?.factorApplications) ? stage.factorApplications : [];
+      const scaledLines = lines.map((line: any) => {
+        const quantity = Number(Number(line?.quantity || 0) * scale);
+        const factor = Number(line?.factorKgCO2e || 0);
+        return {
+          ...line,
+          quantity: Number(quantity.toFixed(6)),
+          emissionKgCO2e: Number((quantity * factor).toFixed(6)),
+        };
+      });
+      const emission = scaledLines.reduce(
+        (sum: number, line: any) => sum + Number(line.emissionKgCO2e || 0),
+        0
+      );
+      return {
+        ...stage,
+        ...(scaledLines.length > 0 ? { factorApplications: scaledLines } : {}),
+        emissionKgCO2e: scaledLines.length > 0
+          ? Number(emission.toFixed(4))
+          : Number((Number(stage?.emissionKgCO2e || 0) * scale).toFixed(4)),
+      };
+    }
+  );
+
+  const total = scaledStages.reduce(
+    (sum: number, stage: any) => sum + Number(stage.emissionKgCO2e || 0),
+    0
+  );
+  const benchmark = rawCarbon?.benchmarkComparison || {};
+  const baseUnit =
+    typeof rawCarbon?.functionalUnitBase === 'string' && rawCarbon.functionalUnitBase.trim()
+      ? rawCarbon.functionalUnitBase
+      : String(rawCarbon?.functionalUnit || option.label);
+
+  return {
+    ...rawCarbon,
+    functionalUnit: option.label,
+    functionalUnitBase: baseUnit,
+    functionalUnitOptions: options,
+    selectedFunctionalUnitId: option.id,
+    functionalUnitValidated: true,
+    appliedFunctionalUnitScale: scale,
+    totalCarbonKgCO2e: Number(total.toFixed(4)),
+    lifecycleStages: scaledStages.map((stage: any) => ({
+      ...stage,
+      percentage:
+        total > 0
+          ? Number(((Number(stage.emissionKgCO2e || 0) / total) * 100).toFixed(1))
+          : 0,
+    })),
+    benchmarkComparison: {
+      ...benchmark,
+      industryAverageKgCO2e: Number(
+        (Number(benchmark.industryAverageKgCO2e || 0) * scale).toFixed(4)
+      ),
+      ecoDesignedTargetKgCO2e: Number(
+        (Number(benchmark.ecoDesignedTargetKgCO2e || 0) * scale).toFixed(4)
+      ),
+    },
+  };
 }
 
 /** Normalize factor lines and recompute their emissions (quantity × factor). */
@@ -248,10 +354,39 @@ export function normalizeCarbonFootprint(
   }));
   total = Number(total.toFixed(4));
 
-  return {
-    functionalUnit: isConcreteFunctionalUnit(carbon?.functionalUnit)
+  const options = isValidFunctionalUnitOptions(carbon?.functionalUnitOptions)
+    ? carbon.functionalUnitOptions
+    : undefined;
+  const validatedOption = options?.find((option) => option.id === carbon?.selectedFunctionalUnitId);
+  const functionalUnit = validatedOption?.label
+    || (isConcreteFunctionalUnit(carbon?.functionalUnit)
       ? (carbon.functionalUnit as string).trim()
-      : deriveFunctionalUnit(context),
+      : deriveFunctionalUnit(context));
+  const appliedScale = Number(carbon?.appliedFunctionalUnitScale);
+
+  return {
+    functionalUnit,
+    ...(options
+      ? {
+          functionalUnitOptions: options.map((option) => ({
+            id: String(option.id),
+            label: String(option.label).trim(),
+            rationale: String(option.rationale),
+            proposedBy: String(option.proposedBy),
+            scaleFactor: Number(option.scaleFactor),
+          })),
+        }
+      : {}),
+    ...(typeof carbon?.functionalUnitBase === 'string' && carbon.functionalUnitBase.trim()
+      ? { functionalUnitBase: carbon.functionalUnitBase }
+      : {}),
+    ...(carbon?.selectedFunctionalUnitId ? { selectedFunctionalUnitId: String(carbon.selectedFunctionalUnitId) } : {}),
+    ...(carbon?.functionalUnitValidated === true || validatedOption
+      ? { functionalUnitValidated: true }
+      : {}),
+    ...(Number.isFinite(appliedScale) && appliedScale > 0
+      ? { appliedFunctionalUnitScale: appliedScale }
+      : {}),
     totalCarbonKgCO2e: total,
     benchmarkComparison: benchmark,
     lifecycleStages: normalizedStages,
