@@ -1,4 +1,9 @@
-import { discoverGeminiModels, ORDERED_GEMINI_MODELS } from '../../src/utils/geminiModels.ts';
+import {
+  discoverGeminiModels,
+  ORDERED_GEMINI_MODELS,
+  isTransientGeminiError,
+  waitForRetry,
+} from '../../src/utils/geminiModels.ts';
 import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
 import {
   isConcreteFunctionalUnit,
@@ -207,9 +212,20 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
 
   let parsedData: any = null;
   let lastError: any = null;
+  let sawTransientUpstreamError = false;
+  let sawInvalidModelResponse = false;
+  const MAX_RETRIES_PER_MODEL = 2;
+  const MAX_TOTAL_RETRIES = 5;
+  let totalRetries = 0;
+  let retriedModel = '';
+  let retriesForCurrentModel = 0;
 
   for (let idx = 0; idx < models.length; idx++) {
     const model = models[idx];
+    if (model !== retriedModel) {
+      retriedModel = model;
+      retriesForCurrentModel = 0;
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), idx === 0 ? 90000 : 25000);
 
@@ -652,19 +668,42 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
             parsedData = candidate;
             break;
           }
+          sawInvalidModelResponse = true;
           lastError = new Error(
             `Réponse incomplète du modèle ${model} : impactIndicators.carbonFootprint absent ou non traçable aux facteurs ADEME.`
           );
           continue;
         }
+        sawInvalidModelResponse = true;
         lastError = new Error(`Réponse vide du modèle ${model}`);
       } else {
         const errJson = await upstream.json().catch(() => ({}));
-        lastError = new Error(errJson?.error?.message || `HTTP ${upstream.status}`);
+        const message = String(errJson?.error?.message || `HTTP ${upstream.status}`);
+        lastError = new Error(message);
+        if (isTransientGeminiError(upstream.status, message)) {
+          sawTransientUpstreamError = true;
+          if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
+            retriesForCurrentModel++;
+            totalRetries++;
+            await waitForRetry(1000 * retriesForCurrentModel);
+            idx--; // same model: this is a temporary overload, not a bad answer
+            continue;
+          }
+        }
       }
     } catch (err: any) {
       clearTimeout(timer);
       lastError = err;
+      if (isTransientGeminiError(undefined, err?.message)) {
+        sawTransientUpstreamError = true;
+        if (retriesForCurrentModel < MAX_RETRIES_PER_MODEL && totalRetries < MAX_TOTAL_RETRIES) {
+          retriesForCurrentModel++;
+          totalRetries++;
+          await waitForRetry(1000 * retriesForCurrentModel);
+          idx--; // same model: transient network failure
+          continue;
+        }
+      }
     }
   }
 
@@ -673,6 +712,18 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   }
 
   if (!parsedData || !parsedData.projectSynthesis || !hasTraceableCarbonFootprint(parsedData)) {
+    if (sawTransientUpstreamError && !sawInvalidModelResponse) {
+      return respond(
+        {
+          success: false,
+          retryable: true,
+          error:
+            "[Mode STRICT_IA] Le modèle d'intelligence artificielle est momentanément surchargé (forte demande). Réessayez dans quelques instants : aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
+          detail: lastError?.message || undefined,
+        },
+        503
+      );
+    }
     return respond(
       {
         success: false,

@@ -92,3 +92,24 @@ export async function discoverGeminiModels(apiKey: string, _preferred?: string):
   // 1. gemini-4-hydrogen, 2. gemini-3.8-flash, 3. gemini-3.5-flash-lite, 4. gemini-3.6, 5. gemini-3.6-flash, 6. gemini-3.1-flash-lite
   return { ...base, models: [...ORDERED_GEMINI_MODELS] };
 }
+
+/**
+ * A capacity problem upstream (Gemini "high demand", rate limit, 5xx) is NOT
+ * the same thing as a model that answered with an unusable carbon section.
+ * Detect it so the caller can retry briefly instead of reporting a bogus
+ * STRICT_IA rejection. Strict mode is preserved: this never invents a value.
+ */
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+const TRANSIENT_MESSAGE =
+  /high demand|overload|rate.?limit|resource.?exhausted|temporarily unavailable|try again later|too many requests|service unavailable/i;
+
+export function isTransientGeminiError(status?: number | null, message?: string | null): boolean {
+  if (status != null && TRANSIENT_STATUSES.has(status)) return true;
+  return TRANSIENT_MESSAGE.test(message || '');
+}
+
+/** Short bounded wait used between two attempts on a temporarily overloaded model. */
+export function waitForRetry(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
