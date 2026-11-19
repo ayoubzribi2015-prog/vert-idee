@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Lightbulb, Compass, MapPin, ArrowRight, CheckCircle2 } from 'lucide-react';
+import type { FunctionalUnitOption } from '../types';
 import { DescriptionFileInput } from './DescriptionFileInput';
+import { FunctionalUnitSelection } from './FunctionalUnitSelection';
 
 interface ProjectInputModalProps {
   isOpen: boolean;
@@ -12,6 +14,10 @@ interface ProjectInputModalProps {
     fullDocumentContent?: string;
   }) => Promise<void>;
   isLoading: boolean;
+  pendingFunctionalUnitOptions?: FunctionalUnitOption[];
+  onValidateFunctionalUnit?: (optionId: string) => Promise<void>;
+  onCancelFunctionalUnitSelection?: () => void;
+  isValidatingFunctionalUnit?: boolean;
 }
 
 const PRESET_EXAMPLES = [
@@ -40,6 +46,10 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
   onClose,
   onSubmit,
   isLoading,
+  pendingFunctionalUnitOptions,
+  onValidateFunctionalUnit,
+  onCancelFunctionalUnitSelection,
+  isValidatingFunctionalUnit,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -116,8 +126,16 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
           )}
         </div>
 
-        {/* Loading Overlay */}
+        {/* Loading Overlay or functional-unit validation */}
         {isLoading ? (
+          pendingFunctionalUnitOptions && pendingFunctionalUnitOptions.length === 4 && onValidateFunctionalUnit ? (
+            <FunctionalUnitSelection
+              options={pendingFunctionalUnitOptions}
+              onValidate={onValidateFunctionalUnit}
+              onCancel={onCancelFunctionalUnitSelection}
+              isSubmitting={isValidatingFunctionalUnit}
+            />
+          ) : (
           <div className="p-12 text-center space-y-6">
             <div className="relative mx-auto w-24 h-24">
               <div className="absolute inset-0 rounded-full border-4 border-emerald-100 animate-pulse" />
@@ -149,6 +167,7 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
               ))}
             </div>
           </div>
+          )
         ) : (
           <form onSubmit={handleSubmit} className="p-7 space-y-6">
             {/* Presets Bar */}
