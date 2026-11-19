@@ -354,7 +354,9 @@ export function normalizeCarbonFootprint(
   }));
   total = Number(total.toFixed(4));
 
-  const options = isValidFunctionalUnitOptions(carbon?.functionalUnitOptions)
+  const options: FunctionalUnitOption[] | undefined = isValidFunctionalUnitOptions(
+    carbon?.functionalUnitOptions
+  )
     ? carbon.functionalUnitOptions
     : undefined;
   const validatedOption = options?.find((option) => option.id === carbon?.selectedFunctionalUnitId);
