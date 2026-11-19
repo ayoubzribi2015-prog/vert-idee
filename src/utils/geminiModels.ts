@@ -99,8 +99,11 @@ export async function discoverGeminiModels(apiKey: string, _preferred?: string):
  * Detect it so the caller can retry briefly instead of reporting a bogus
  * STRICT_IA rejection. Strict mode is preserved: this never invents a value.
  *
- * A quota/billing exhaustion is different again: it is tied to the API key,
- * shared by every model, and cannot be fixed by retrying or switching model.
+ * A quota/billing exhaustion is different again: Google names the model in the
+ * error (free-tier limits such as 20 requests/day are per model). Retrying that
+ * model cannot help, but the strict six-model cascade must still try the next
+ * one: only when every model is out of quota may the caller report a quota
+ * failure. This never invents a deterministic carbon value.
  */
 const QUOTA_MESSAGE = /exceeded your current quota|check your plan and billing|billing details|quota exceeded/i;
 const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -112,7 +115,8 @@ export function isQuotaGeminiError(status?: number | null, message?: string | nu
 }
 
 export function isTransientGeminiError(status?: number | null, message?: string | null): boolean {
-  // Quota exhaustion is not transient and is common to all models of a key.
+  // Quota exhaustion cannot be fixed by retrying the same model, but the
+  // caller must still move on to the next model of the strict cascade.
   if (isQuotaGeminiError(status, message)) return false;
   if (status != null && TRANSIENT_STATUSES.has(status)) return true;
   return TRANSIENT_MESSAGE.test(message || '');

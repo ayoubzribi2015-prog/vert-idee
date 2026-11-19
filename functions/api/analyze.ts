@@ -215,6 +215,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   let lastError: any = null;
   let sawTransientUpstreamError = false;
   let sawQuotaError = false;
+  let quotaDetail: string | undefined = undefined;
   let sawInvalidModelResponse = false;
   const MAX_RETRIES_PER_MODEL = 2;
   const MAX_TOTAL_RETRIES = 5;
@@ -683,9 +684,12 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
         const message = String(errJson?.error?.message || `HTTP ${upstream.status}`);
         lastError = new Error(message);
         if (isQuotaGeminiError(upstream.status, message)) {
-          // Quota is attached to the API key, not to a model: stop the cascade.
+          // Google reports free-tier quota per model. Keep the strict cascade:
+          // no retry on this model, but try the next one in the ranking.
           sawQuotaError = true;
-          break;
+          quotaDetail = quotaDetail || message;
+          console.warn(`[Mode STRICT_IA] Quota atteint pour ${model}. Passage au modèle suivant dans le classement...`);
+          continue;
         }
         if (isTransientGeminiError(upstream.status, message)) {
           sawTransientUpstreamError = true;
@@ -726,8 +730,8 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
           retryable: false,
           reason: 'quota',
           error:
-            "[Mode STRICT_IA] Quota Gemini épuisé (HTTP 429) : la clé API de ce service a atteint sa limite ou sa facturation n'est pas active. Vérifiez le plan dans Google AI Studio, remplacez le secret GEMINI_API_KEY puis redéployez. Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
-          detail: lastError?.message || undefined,
+            "[Mode STRICT_IA] Quota Gemini épuisé (HTTP 429) : la limite du free tier (20 requêtes/jour) est atteinte pour tous les modèles de la cascade. Vérifiez le plan dans Google AI Studio, remplacez le secret GEMINI_API_KEY puis redéployez. Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
+          detail: quotaDetail || lastError?.message || undefined,
         },
         503
       );
