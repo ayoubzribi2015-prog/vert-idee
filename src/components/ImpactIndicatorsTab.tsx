@@ -18,6 +18,7 @@ import {
   Plus,
   Loader2,
   ExternalLink,
+  Pencil,
 } from 'lucide-react';
 import {
   ImpactIndicators,
@@ -80,6 +81,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
     initialModel.ademeReferenceFactors || []
   );
   const [annualVolume, setAnnualVolume] = useState<number>(10000);
+  const [functionalUnit, setFunctionalUnit] = useState<string>(initialModel.functionalUnit || '');
   const [hasChanges, setHasChanges] = useState<boolean>(false);
   const [appliedSimulation, setAppliedSimulation] = useState<string | null>(null);
 
@@ -95,6 +97,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   useEffect(() => {
     setStages(baselineStages);
     setAdemeFactors(initialModel.ademeReferenceFactors || []);
+    setFunctionalUnit(initialModel.functionalUnit || '');
     setHasChanges(false);
     setAppliedSimulation(null);
     if (baselineStages.length > 0) {
@@ -174,6 +177,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   const handleResetToBaseline = () => {
     setStages(baselineStages);
     setAdemeFactors(initialModel.ademeReferenceFactors || []);
+    setFunctionalUnit(initialModel.functionalUnit || '');
     setHasChanges(false);
     setAppliedSimulation(null);
   };
@@ -278,6 +282,7 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
   const handleSaveToCloud = async () => {
     const updatedModel: CarbonFootprintModel = {
       ...initialModel,
+      functionalUnit: functionalUnit.trim() || initialModel.functionalUnit,
       totalCarbonKgCO2e: Number(totalCarbonKgCO2e.toFixed(2)),
       lifecycleStages: stagesWithPct.map((s) => ({
         ...s,
@@ -372,9 +377,31 @@ export const ImpactIndicatorsTab: React.FC<ImpactIndicatorsTabProps> = ({
                 <ExternalLink className="w-2.5 h-2.5" />
               </a>
             </div>
-            <h3 className="text-base font-bold text-stone-900 font-heading">
-              Unité fonctionnelle : {initialModel.functionalUnit}
-            </h3>
+            <div className="space-y-1">
+              <label
+                htmlFor="functional-unit-input"
+                className="flex flex-wrap items-center gap-2 text-base font-bold text-stone-900 font-heading"
+              >
+                <span>Unité fonctionnelle :</span>
+                <span className="inline-flex items-center">
+                  <input
+                    id="functional-unit-input"
+                    type="text"
+                    value={functionalUnit}
+                    onChange={(e) => {
+                      setFunctionalUnit(e.target.value);
+                      setHasChanges(true);
+                    }}
+                    placeholder="Ex. 1 emballage de 500 ml"
+                    className="w-full sm:w-[24rem] px-2.5 py-1 rounded-lg border border-stone-300 bg-white text-sm font-semibold text-stone-900 focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                  />
+                  <Pencil className="w-3.5 h-3.5 text-stone-400 shrink-0 ml-1.5" aria-hidden="true" />
+                </span>
+              </label>
+              <p className="text-[11px] text-stone-500">
+                Valeur proposée par l’IA, modifiable puis enregistrée dans le Cloud.
+              </p>
+            </div>
             <p className="text-xs text-stone-500">
               Modélisation normée du cycle de vie sans compensation fictive (ISO 14067) et ventilation en 6 catégories (ISO 14064-1)
             </p>
