@@ -7,7 +7,11 @@ import {
   BASE_CARBONE_DATASET,
   BASE_CARBONE_DOC_URL,
 } from '../src/utils/baseCarbone.ts';
-import { isConcreteFunctionalUnit, normalizeCarbonFootprint } from '../src/utils/normalizeProject.ts';
+import {
+  isConcreteFunctionalUnit,
+  isValidFunctionalUnitOptions,
+  normalizeCarbonFootprint,
+} from '../src/utils/normalizeProject.ts';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -1242,6 +1246,9 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
    - Le champ functionalUnit DOIT être une unité fonctionnelle CONCRÈTE, MESURABLE et quantifiée, déduite de la description du projet. Exemples conformes : "1 paire de chaussures de sécurité EN ISO 20345", "1 kg de plastique injecté", "1 000 pièces de bandes de plâtre stériles", "1 kWh d'électricité produite", "1 tonne de matière traitée". INTERDICTION FORMELLE des formulations génériques type "1 unité", "unité fonctionnelle / service", "1 unité fonctionnelle / lot standardisé" : toute réponse générique est invalide.
    - Chaque élément de lifecycleStages DOIT contenir factorApplications : une liste de postes de calcul {ademeId, name, quantity, unit, factorKgCO2e, emissionKgCO2e}. "quantity" est la quantité d'activité POUR l'unité fonctionnelle, exprimée dans l'unité du facteur ADEME retenu. "emissionKgCO2e" = quantity × factorKgCO2e, recalculé par le système.
    - L'émission d'une étape est EXACTEMENT la somme de ses factorApplications, et totalCarbonKgCO2e est EXACTEMENT la somme des émissions des étapes. Aucune étape ne doit recevoir une émission sans au moins un poste factorApplications traçable à un ID ADEME. Si aucun facteur exact n'existe, utiliser le facteur ADEME le plus proche et signaler son incertitude — ne jamais renvoyer zéro ni inventer une valeur.
+    - Chacun des 4 Experts doit proposer UNE unité fonctionnelle dans functionalUnitOptions : {id, label, rationale, proposedBy, scaleFactor}, avec les identifiants "fu1", "fu2", "fu3", "fu4" et proposedBy = "Expert 1" à "Expert 4". Les 4 labels portent sur le MÊME produit à des échelles de référence différentes, concretes et quantifiées.
+    - functionalUnit et functionalUnitBase reprennent le libellé de "fu1" ; toutes les quantités de factorApplications sont exprimées POUR "fu1" (scaleFactor = 1). Pour chaque autre option, scaleFactor = (référence quantitative de l'option) / (référence de fu1). Exemple : si fu1 = "1 kg de plastique injecté", alors "1 tonne" = 1000, "500 g" = 0.5, "1 emballage de 500 g" = 0.5.
+    - Le système recalculera émissions, total, pourcentages et benchmark avec le scaleFactor de l'option validée par l'utilisateur : ne fournir que des facteurs d'échelle exacts et strictement positifs. Aucune proposition générique n'est acceptée.
 7. Financements et labels verts : Statut d'éligibilité réel (exclusion formelle des labels verts si activité polluante), fonds de mise en conformité et dépollution (FODEP, BERD Climat).
 8. Plan d'action prioritaire : Actions concrètes d'urgence (0-12 mois) priorisées avec livrables opérationnels pour la neutralisation des AES.
 `;
@@ -1516,7 +1523,26 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
                   properties: {
                     functionalUnit: {
                       type: Type.STRING,
-                      description: 'Unité fonctionnelle concrète et quantifiée, ex: "1 paire de chaussures", "1 kg de produit", "1 kWh produit". Jamais de formulation générique.',
+                      description: 'Unité fonctionnelle concrète et quantifiée de l’option fu1, ex: "1 paire de chaussures", "1 kg de produit", "1 kWh produit". Jamais de formulation générique.',
+                    },
+                    functionalUnitBase: {
+                      type: Type.STRING,
+                      description: 'Unité fonctionnelle de référence utilisée pour les quantités de factorApplications (identique à fu1).',
+                    },
+                    functionalUnitOptions: {
+                      type: Type.ARRAY,
+                      description: 'Exactement 4 propositions d’unités fonctionnelles, une par expert, à valider par l’utilisateur',
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          id: { type: Type.STRING, description: 'Identifiant stable : fu1, fu2, fu3 ou fu4' },
+                          label: { type: Type.STRING, description: 'Unité fonctionnelle concrète et quantifiée du même produit' },
+                          rationale: { type: Type.STRING, description: 'Justification courte de la pertinence de cette unité' },
+                          proposedBy: { type: Type.STRING, description: 'Expert auteur de la proposition (Expert 1 à Expert 4)' },
+                          scaleFactor: { type: Type.NUMBER, description: 'Multiplicateur exact par rapport à fu1 (fu1 = 1), strictement positif' },
+                        },
+                        required: ['id', 'label', 'rationale', 'proposedBy', 'scaleFactor'],
+                      },
                     },
                     totalCarbonKgCO2e: { type: Type.NUMBER },
                     benchmarkComparison: {
@@ -1595,7 +1621,7 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
                       },
                     },
                   },
-                  required: ['functionalUnit', 'totalCarbonKgCO2e', 'benchmarkComparison', 'lifecycleStages', 'highImpactDecarbonizationActions'],
+                  required: ['functionalUnit', 'functionalUnitOptions', 'totalCarbonKgCO2e', 'benchmarkComparison', 'lifecycleStages', 'highImpactDecarbonizationActions'],
                 },
                 circularityRate: { type: Type.STRING },
                 wasteAvoided: { type: Type.STRING },
@@ -1754,6 +1780,7 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       !parsedData ||
       !parsedData.projectSynthesis ||
       !isConcreteFunctionalUnit(carbonCheck?.functionalUnit) ||
+      !isValidFunctionalUnitOptions(carbonCheck?.functionalUnitOptions) ||
       !(Number(carbonCheck?.totalCarbonKgCO2e) > 0) ||
       traceableStages.length === 0
     ) {
