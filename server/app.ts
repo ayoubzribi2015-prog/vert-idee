@@ -333,6 +333,7 @@ async function callGeminiStrict(options: {
   let lastError: any = null;
   let sawTransientUpstreamError = false;
   let sawQuotaError = false;
+  let quotaDetail: string | undefined = undefined;
   let sawInvalidModelResponse = false;
   const MAX_RETRIES_PER_MODEL = 2;
   const MAX_TOTAL_RETRIES = 5;
@@ -404,9 +405,12 @@ async function callGeminiStrict(options: {
         result.error || (result.ok ? `Réponse vide du modèle ${modelName}` : `Erreur HTTP ${result.status}`)
       );
       if (isQuotaGeminiError(result.status, result.error)) {
-        // Quota is attached to the key: no other model can help.
+        // Google reports free-tier quota per model. Keep the strict cascade:
+        // no retry on this model, but try the next one in the ranking.
         sawQuotaError = true;
-        break;
+        quotaDetail = quotaDetail || lastError.message;
+        console.warn(`[Mode STRICT_IA] Quota atteint pour ${modelName}. Passage au modèle suivant dans le classement...`);
+        continue;
       }
       if (isTransientGeminiError(result.status, result.error)) {
         sawTransientUpstreamError = true;
@@ -438,9 +442,10 @@ async function callGeminiStrict(options: {
   }
 
   if (sawQuotaError) {
+    // Every model of the strict cascade returned a quota/billing error.
     throw Object.assign(
-      new Error("Quota Gemini épuisé (HTTP 429) : clé API à sa limite / facturation inactive."),
-      { retryable: false, reason: 'quota' }
+      new Error("Quota Gemini épuisé (HTTP 429) : limite free tier atteinte pour tous les modèles de la cascade."),
+      { retryable: false, reason: 'quota', detail: quotaDetail }
     );
   }
   if (sawTransientUpstreamError && !sawInvalidModelResponse) {
@@ -1819,8 +1824,8 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
           success: false,
           retryable: false,
           reason: 'quota',
-          error: "[Mode STRICT_IA] Quota Gemini épuisé (HTTP 429) : la clé API de ce service a atteint sa limite ou sa facturation n'est pas active. Vérifiez le plan dans Google AI Studio, remplacez le secret GEMINI_API_KEY puis redéployez. Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
-          detail: aiErr?.message,
+          error: "[Mode STRICT_IA] Quota Gemini épuisé (HTTP 429) : la limite du free tier (20 requêtes/jour) est atteinte pour tous les modèles de la cascade. Vérifiez le plan dans Google AI Studio, remplacez le secret GEMINI_API_KEY puis redéployez. Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
+          detail: aiErr?.detail || aiErr?.message,
         });
         return;
       }
