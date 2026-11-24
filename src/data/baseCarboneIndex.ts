@@ -66,6 +66,8 @@ interface IndexedFactor extends LocalFactor {
   searchCategory: string;
   searchProgram: string;
   searchUnit: string;
+  searchGeography: string;
+  searchSubGeography: string;
   tokens: string[];
 }
 
@@ -91,6 +93,8 @@ const index: IndexedFactor[] = (rawIndex.factors as FactorTuple[]).map((f) => {
   const searchCategory = normalizeText(factor.category);
   const searchProgram = normalizeText(factor.program);
   const searchUnit = normalizeText(factor.unit);
+  const searchGeography = normalizeText(factor.geography);
+  const searchSubGeography = normalizeText(factor.subGeography);
 
   return {
     ...factor,
@@ -99,7 +103,15 @@ const index: IndexedFactor[] = (rawIndex.factors as FactorTuple[]).map((f) => {
     searchCategory,
     searchProgram,
     searchUnit,
-    tokens: Array.from(new Set(`${searchName} ${searchAttribute}`.split(' ').filter((t) => t.length > 1))),
+    searchGeography,
+    searchSubGeography,
+    tokens: Array.from(
+      new Set(
+        `${searchName} ${searchAttribute} ${searchSubGeography}`
+          .split(' ')
+          .filter((t) => t.length > 1)
+      )
+    ),
   };
 });
 
@@ -117,6 +129,8 @@ for (const f of index) {
 const idf = (token: string): number =>
   1 + Math.log(index.length / (1 + (tokenDocumentFrequency.get(token) || 0)));
 
+const indexById = new Map<string, LocalFactor>(index.map((f) => [f.id, f]));
+
 export function getIndexStats() {
   return {
     version: BASE_CARBONE_VERSION,
@@ -129,12 +143,52 @@ export function getIndexStats() {
 }
 
 export function getFactorById(id: string): LocalFactor | undefined {
-  return index.find((f) => f.id === id);
+  return indexById.get(id);
 }
+
+/** Resolve an ADEME ID cleanly even when prefixed with '#' or whitespace. */
+export function resolveFactorById(rawId: string): LocalFactor | undefined {
+  const clean = String(rawId || '')
+    .replace(/^#/, '')
+    .trim();
+  if (!clean) return undefined;
+  return indexById.get(clean);
+}
+
+export type AcvStageCategory =
+  | 'raw_materials'
+  | 'manufacturing'
+  | 'packaging'
+  | 'transport'
+  | 'usage'
+  | 'end_of_life';
+
+const STAGE_CATEGORY_BOOSTS: Record<AcvStageCategory, string[]> = {
+  raw_materials: ['achats de biens', 'agriculture', 'metaux', 'plastiques', 'mineraux', 'textile', 'bois'],
+  manufacturing: ['electricite', 'combustibles', 'process', 'reseaux de chaleur'],
+  packaging: ['papier carton', 'emballage', 'plastiques', 'verre'],
+  transport: ['transport de marchandises'],
+  usage: ['electricite', 'combustibles', 'achats de services', 'transport'],
+  end_of_life: ['traitement des dechets'],
+};
+
+const STAGE_CATEGORY_PENALTIES: Partial<Record<AcvStageCategory, string[]>> = {
+  raw_materials: ['traitement des dechets', 'statistiques territoriales'],
+  packaging: ['traitement des dechets', 'combustibles'],
+  transport: ['combustibles', 'statistiques territoriales'],
+  end_of_life: ['transport de personnes'],
+};
 
 export function searchLocalFactors(
   query: string,
-  options: { size?: number; unitHint?: string; categoryHint?: string; allowNegative?: boolean } = {}
+  options: {
+    size?: number;
+    unitHint?: string;
+    categoryHint?: string;
+    stageCategory?: AcvStageCategory;
+    geographyHint?: string;
+    allowNegative?: boolean;
+  } = {}
 ): Array<LocalFactor & { matchScore: number }> {
   const searchQuery = normalizeText(query);
   if (!searchQuery) return [];
@@ -144,6 +198,9 @@ export function searchLocalFactors(
 
   const unitHint = normalizeText(options.unitHint || '');
   const categoryHint = normalizeText(options.categoryHint || '');
+  const geographyHint = normalizeText(options.geographyHint || '');
+  const stageBoosts = options.stageCategory ? STAGE_CATEGORY_BOOSTS[options.stageCategory] || [] : [];
+  const stagePenalties = options.stageCategory ? STAGE_CATEGORY_PENALTIES[options.stageCategory] || [] : [];
   const size = Math.min(50, Math.max(1, options.size ?? 8));
 
   const totalIdf = queryTokens.reduce((sum, token) => sum + idf(token), 0) || 1;
@@ -162,19 +219,32 @@ export function searchLocalFactors(
     if (f.searchName === searchQuery) score += 120;
     else if (f.searchName.includes(searchQuery)) score += 80;
     if (f.searchAttribute && f.searchAttribute.includes(searchQuery)) score += 60;
+    if (f.searchSubGeography && f.searchSubGeography.includes(searchQuery)) score += 95;
+    if (f.searchGeography && f.searchGeography.includes(searchQuery)) score += 25;
 
     // A full phrase in the ADEME category path is the strongest disambiguator:
     // "Transport de marchandises > Routier" beats "Train de marchandises".
     if (f.searchCategory.includes(searchQuery)) score += 95;
-    const fullHaystack = `${f.searchName} ${f.searchAttribute} ${f.searchCategory} ${f.searchProgram} ${f.searchUnit}`;
+    const fullHaystack = `${f.searchName} ${f.searchAttribute} ${f.searchCategory} ${f.searchProgram} ${f.searchUnit} ${f.searchGeography} ${f.searchSubGeography}`;
     if (fullHaystack.includes(searchQuery)) score += 40;
 
     score += weightedHits(f.searchName) * 60;
     score += weightedHits(f.searchAttribute) * 25;
     score += weightedHits(f.searchCategory) * 35;
+    score += weightedHits(`${f.searchGeography} ${f.searchSubGeography}`) * 45;
 
     if (unitHint && f.searchUnit.includes(unitHint)) score += 20;
-    if (categoryHint && f.searchCategory.includes(categoryHint)) score += 15;
+    if (categoryHint && f.searchCategory.includes(categoryHint)) score += 35;
+    if (geographyHint && (f.searchSubGeography.includes(geographyHint) || f.searchGeography.includes(geographyHint))) {
+      score += 30;
+    }
+
+    if (score > 0 && stageBoosts.length > 0) {
+      if (stageBoosts.some((prefix) => f.searchCategory.includes(prefix))) score += 28;
+    }
+    if (score > 0 && stagePenalties.length > 0) {
+      if (stagePenalties.some((prefix) => f.searchCategory.includes(prefix))) score -= 24;
+    }
 
     // Prefer documented, recent factors when relevance is otherwise equal.
     if (f.uncertaintyPct !== null && f.uncertaintyPct <= 30) score += 5;
@@ -204,6 +274,14 @@ export function searchLocalFactors(
   return scored.slice(0, size);
 }
 
+/** Extract clean denominator label from an ADEME factor unit (e.g. "kgCO2e/tonne" -> "tonne"). */
+export function extractFactorDenominatorUnit(factorUnit: string): string {
+  const raw = String(factorUnit || '').trim();
+  const slashIdx = raw.indexOf('/');
+  if (slashIdx === -1) return raw || 'unité';
+  return raw.slice(slashIdx + 1).trim() || 'unité';
+}
+
 /**
  * Converts an activity quantity into the reference quantity of a factor unit.
  * Example: 500 kg of a product -> 0.5 tonne for a `kgCO2e/tonne` factor.
@@ -213,22 +291,31 @@ export function convertActivityQuantity(
   fromUnit: string,
   factorUnit: string
 ): number | null {
+  if (!Number.isFinite(quantity)) return null;
   // ADEME units look like "kgCO2e/tonne": strip the numerator before
   // inspecting the denominator, otherwise every factor looks like a "kg".
-  const denominator = (u: string): string => u.replace(/^kgco2e\s*/, '').trim();
+  const denominator = (u: string): string =>
+    u.replace(/^kgco2e\s*/, '').replace(/^kg\s*co2e\s*/, '').trim();
   const from = denominator(normalizeText(fromUnit));
   const to = denominator(normalizeText(factorUnit));
 
-  const kgPer = (u: string): number | null => {
-    if (u.includes('tonne')) return 1000;
-    if (u.startsWith('kg') || u.includes(' kg')) return 1;
-    if (u === 't') return 1000;
-    // "t km" is a tonne-kilometre, not a plain tonne: refuse the ambiguity.
-    return null;
-  };
-
   // Same unit family: no conversion needed.
   if (from === to) return quantity;
+
+  const isTkm = (u: string) => u.includes('t km') || u.includes('tonne km');
+  const isKgKm = (u: string) => u.includes('kg km');
+  if (isKgKm(from) && isTkm(to)) return quantity / 1000;
+  if (isTkm(from) && isKgKm(to)) return quantity * 1000;
+  if (isTkm(from) && isTkm(to)) return quantity;
+
+  const kgPer = (u: string): number | null => {
+    if (isTkm(u) || isKgKm(u)) return null;
+    if (u.includes('tonne')) return 1000;
+    if (u === 't') return 1000;
+    if (u === 'g' || u.startsWith('g ') || u.includes('gramme')) return 0.001;
+    if (u.startsWith('kg') || u.includes(' kg')) return 1;
+    return null;
+  };
 
   const fromKg = kgPer(from);
   const toKg = kgPer(to);
@@ -236,9 +323,31 @@ export function convertActivityQuantity(
     return (quantity * fromKg) / toKg;
   }
 
-  // Energy units.
-  if (from.includes('mwh') && to.includes('kwh')) return quantity * 1000;
-  if (from.includes('kwh') && to.includes('mwh')) return quantity / 1000;
+  // Energy units (kWh, MWh, GJ, MJ).
+  const kwhPer = (u: string): number | null => {
+    if (u.includes('mwh')) return 1000;
+    if (u.includes('kwh')) return 1;
+    if (u.includes('gj')) return 277.7778;
+    if (u.includes('mj')) return 0.277778;
+    return null;
+  };
+  const fromKwh = kwhPer(from);
+  const toKwh = kwhPer(to);
+  if (fromKwh !== null && toKwh !== null) {
+    return (quantity * fromKwh) / toKwh;
+  }
+
+  // Volume units (L, m3) for liquids/water.
+  const literPer = (u: string): number | null => {
+    if (u === 'l' || u.includes('litre')) return 1;
+    if (u.includes('m3') || u.includes('m³')) return 1000;
+    return null;
+  };
+  const fromL = literPer(from);
+  const toL = literPer(to);
+  if (fromL !== null && toL !== null) {
+    return (quantity * fromL) / toL;
+  }
 
   return null;
 }

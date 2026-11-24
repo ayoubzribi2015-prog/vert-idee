@@ -124,6 +124,16 @@ export interface CarbonFactorApplication {
   id: string;
   ademeId: string;
   name: string;
+  /** Business/technical label of the input or process step from the technical study. */
+  posteLabel?: string;
+  /** Technical derivation linking the project's technical study and functional unit to the quantity. */
+  technicalJustification?: string;
+  /** Origin of the activity quantity (e.g. "Étude technique / Document", "Bilan matière ACV"). */
+  sourceBasis?: string;
+  /** Normative ISO 14064-1 category ("Catégorie 1" .. "Catégorie 5"). */
+  iso14064Category?: string;
+  /** True when ademeId is verified against the frozen ADEME V23.11 local index. */
+  verifiedAdeme?: boolean;
   quantity: number;
   unit: string;
   factorKgCO2e: number;

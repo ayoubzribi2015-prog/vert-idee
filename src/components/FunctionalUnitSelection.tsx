@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, Check, Gauge, Sparkles } from 'lucide-react';
-import type { FunctionalUnitOption } from '../types';
+import { ArrowRight, Check, Database, Gauge, Sparkles } from 'lucide-react';
+import type { CarbonFootprintModel, FunctionalUnitOption } from '../types';
+import { computeCarbonUncertainty } from '../utils/normalizeProject';
 
 interface FunctionalUnitSelectionProps {
   options: FunctionalUnitOption[];
+  carbonFootprint?: CarbonFootprintModel;
   onValidate: (optionId: string) => Promise<void>;
   onCancel?: () => void;
   isSubmitting?: boolean;
@@ -19,6 +21,7 @@ const formatScale = (value: number): string =>
  */
 export const FunctionalUnitSelection: React.FC<FunctionalUnitSelectionProps> = ({
   options,
+  carbonFootprint,
   onValidate,
   onCancel,
   isSubmitting = false,
@@ -30,6 +33,18 @@ export const FunctionalUnitSelection: React.FC<FunctionalUnitSelectionProps> = (
   }, [options]);
 
   const selected = options.find((option) => option.id === selectedId) || options[0];
+
+  const stages = carbonFootprint?.lifecycleStages || [];
+  const appliedScale =
+    Number.isFinite(Number(carbonFootprint?.appliedFunctionalUnitScale)) &&
+    Number(carbonFootprint?.appliedFunctionalUnitScale) > 0
+      ? Number(carbonFootprint?.appliedFunctionalUnitScale)
+      : 1;
+  const rawStageTotal = stages.reduce((sum, s) => sum + Number(s.emissionKgCO2e || 0), 0);
+  const rawTotal = rawStageTotal > 0 ? rawStageTotal : Number(carbonFootprint?.totalCarbonKgCO2e || 0);
+  const baseTotal = rawTotal > 0 ? rawTotal / appliedScale : 0;
+  const uncertainty = computeCarbonUncertainty(stages);
+  const activeStagesCount = stages.filter((s) => (s.factorApplications?.length || 0) > 0 || s.emissionKgCO2e > 0).length;
 
   return (
     <div className="p-6 sm:p-8 space-y-5">
@@ -53,10 +68,27 @@ export const FunctionalUnitSelection: React.FC<FunctionalUnitSelectionProps> = (
         </p>
       </div>
 
+      {baseTotal > 0 && (
+        <div className="flex flex-wrap items-center justify-center gap-2 text-[11px]">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#edf5f0] text-[#063428] border border-emerald-200 font-semibold">
+            <Database className="w-3.5 h-3.5 text-[#10634e]" />
+            <span>
+              {activeStagesCount} étapes ACV · {uncertainty.totalLines} postes ADEME ({uncertainty.verifiedCount} V23.11 vérifiés)
+            </span>
+          </span>
+          {uncertainty.totalLines > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 font-mono-numbers font-semibold">
+              Incertitude propagée : ±{uncertainty.relativePct}%
+            </span>
+          )}
+        </div>
+      )}
+
       <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
         <legend className="sr-only">Unités fonctionnelles proposées par les experts</legend>
         {options.map((option, index) => {
           const active = option.id === selected?.id;
+          const previewKg = baseTotal > 0 ? baseTotal * Number(option.scaleFactor || 1) : 0;
           return (
             <label
               key={option.id}
@@ -93,6 +125,11 @@ export const FunctionalUnitSelection: React.FC<FunctionalUnitSelectionProps> = (
               <span className="block mt-1 text-[11px] text-slate-500 leading-relaxed">
                 {option.rationale}
               </span>
+              {previewKg > 0 && (
+                <span className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold font-mono-numbers bg-white/90 border border-emerald-200/80 text-[#063428]">
+                  Aperçu : {previewKg.toFixed(2)} kg CO₂e
+                </span>
+              )}
               {active && (
                 <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-md">
                   <Check className="w-3.5 h-3.5" />
@@ -102,6 +139,16 @@ export const FunctionalUnitSelection: React.FC<FunctionalUnitSelectionProps> = (
           );
         })}
       </fieldset>
+
+      {selected && baseTotal > 0 && (
+        <div className="text-center text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
+          Empreinte calculée pour le choix retenu :{' '}
+          <strong className="text-[#063428] font-mono-numbers">
+            {(baseTotal * Number(selected.scaleFactor || 1)).toFixed(2)} kg CO₂e
+          </strong>{' '}
+          ({selected.label})
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
         {onCancel && (

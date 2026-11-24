@@ -91,10 +91,9 @@ export function isValidFunctionalUnitOptions(value: unknown): value is Functiona
 
 /**
  * Recompute the whole footprint on the functional unit validated by the user.
- * The four proposals are relative to the base calculation (fu1 = 1): the
- * validated scale factor multiplies every ADEME activity quantity, then each
- * emission, stage total, percentage, headline total and benchmark are derived
- * again from `quantity × factor`. Nothing is trusted from the AI total.
+ * The four proposals are relative to the base calculation (fu1 = 1): switching
+ * between options computes `ratio = option.scaleFactor / previousScale` so
+ * repeated switches across fu1..fu4 remain exact and never compound.
  */
 export function applyFunctionalUnitScale(rawCarbon: any, optionId: string): any | null {
   const options = rawCarbon?.functionalUnitOptions;
@@ -103,11 +102,16 @@ export function applyFunctionalUnitScale(rawCarbon: any, optionId: string): any 
   if (!option) return null;
 
   const scale = Number(option.scaleFactor);
+  const previousScaleRaw = Number(rawCarbon?.appliedFunctionalUnitScale);
+  const previousScale =
+    Number.isFinite(previousScaleRaw) && previousScaleRaw > 0 ? previousScaleRaw : 1;
+  const ratio = scale / previousScale;
+
   const scaledStages = (Array.isArray(rawCarbon?.lifecycleStages) ? rawCarbon.lifecycleStages : []).map(
     (stage: any) => {
       const lines = Array.isArray(stage?.factorApplications) ? stage.factorApplications : [];
       const scaledLines = lines.map((line: any) => {
-        const quantity = Number(Number(line?.quantity || 0) * scale);
+        const quantity = Number(Number(line?.quantity || 0) * ratio);
         const factor = Number(line?.factorKgCO2e || 0);
         return {
           ...line,
@@ -124,7 +128,7 @@ export function applyFunctionalUnitScale(rawCarbon: any, optionId: string): any 
         ...(scaledLines.length > 0 ? { factorApplications: scaledLines } : {}),
         emissionKgCO2e: scaledLines.length > 0
           ? Number(emission.toFixed(4))
-          : Number((Number(stage?.emissionKgCO2e || 0) * scale).toFixed(4)),
+          : Number((Number(stage?.emissionKgCO2e || 0) * ratio).toFixed(4)),
       };
     }
   );
@@ -158,12 +162,176 @@ export function applyFunctionalUnitScale(rawCarbon: any, optionId: string): any 
     benchmarkComparison: {
       ...benchmark,
       industryAverageKgCO2e: Number(
-        (Number(benchmark.industryAverageKgCO2e || 0) * scale).toFixed(4)
+        (Number(benchmark.industryAverageKgCO2e || 0) * ratio).toFixed(4)
       ),
       ecoDesignedTargetKgCO2e: Number(
-        (Number(benchmark.ecoDesignedTargetKgCO2e || 0) * scale).toFixed(4)
+        (Number(benchmark.ecoDesignedTargetKgCO2e || 0) * ratio).toFixed(4)
       ),
     },
+  };
+}
+
+export const BASE_CARBONE_VERSION = 'V23.11';
+export const BASE_CARBONE_DOC_URL = 'https://base-empreinte.ademe.fr/documentation/base-carbone';
+
+/** Extract denominator unit from an ADEME factor unit string (e.g. "kgCO2e/tonne" -> "tonne"). */
+export function getFactorDenominator(unit: string): string {
+  const raw = String(unit || '').trim();
+  const idx = raw.indexOf('/');
+  if (idx === -1) return raw || 'unité';
+  return raw.slice(idx + 1).trim() || 'unité';
+}
+
+const normUnitText = (u: string): string =>
+  String(u || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9³.]+/g, ' ')
+    .trim();
+
+/** Return selectable activity input units compatible with an ADEME factor denominator. */
+export function getCompatibleActivityUnits(factorUnit: string): Array<{ id: string; label: string }> {
+  const denom = getFactorDenominator(factorUnit);
+  const d = normUnitText(denom);
+  const isTkm = d.includes('t km') || d.includes('tonne km') || d.includes('t.km');
+  const isKgKm = d.includes('kg km') || d.includes('kg.km');
+
+  if (isTkm || isKgKm) {
+    return [
+      { id: denom, label: `${denom} (natif)` },
+      { id: 't.km', label: 't.km (tonne × km)' },
+      { id: 'kg.km', label: 'kg.km (kg × km)' },
+    ].filter((item, idx, arr) => arr.findIndex((x) => normUnitText(x.id) === normUnitText(item.id)) === idx);
+  }
+  if (d.includes('tonne') || d === 't' || d.startsWith('kg') || d.includes(' kg') || d === 'g' || d.includes('gramme')) {
+    return [
+      { id: denom, label: `${denom} (natif)` },
+      { id: 'g', label: 'g (grammes)' },
+      { id: 'kg', label: 'kg (kilogrammes)' },
+      { id: 'tonne', label: 'tonne (1 000 kg)' },
+    ].filter((item, idx, arr) => arr.findIndex((x) => normUnitText(x.id) === normUnitText(item.id)) === idx);
+  }
+  if (d.includes('kwh') || d.includes('mwh') || d.includes('gj') || d.includes('mj')) {
+    return [
+      { id: denom, label: `${denom} (natif)` },
+      { id: 'kWh', label: 'kWh' },
+      { id: 'MWh', label: 'MWh (1 000 kWh)' },
+      { id: 'MJ', label: 'MJ' },
+      { id: 'GJ', label: 'GJ' },
+    ].filter((item, idx, arr) => arr.findIndex((x) => normUnitText(x.id) === normUnitText(item.id)) === idx);
+  }
+  if (d === 'l' || d.includes('litre') || d.includes('m3') || d.includes('m³')) {
+    return [
+      { id: denom, label: `${denom} (natif)` },
+      { id: 'L', label: 'L (litres)' },
+      { id: 'm3', label: 'm³ (1 000 L)' },
+    ].filter((item, idx, arr) => arr.findIndex((x) => normUnitText(x.id) === normUnitText(item.id)) === idx);
+  }
+  return [{ id: denom, label: denom }];
+}
+
+/** Convert user-entered activity quantity from `fromUnit` into the factor denominator unit. */
+export function convertActivityToDenominator(
+  quantity: number,
+  fromUnit: string,
+  factorUnit: string
+): number {
+  if (!Number.isFinite(quantity) || quantity <= 0) return 0;
+  const from = normUnitText(fromUnit);
+  const to = normUnitText(getFactorDenominator(factorUnit));
+  if (!from || from === to) return quantity;
+
+  const isTkm = (u: string) => u.includes('t km') || u.includes('tonne km') || u.includes('t.km');
+  const isKgKm = (u: string) => u.includes('kg km') || u.includes('kg.km');
+  if (isKgKm(from) && isTkm(to)) return quantity / 1000;
+  if (isTkm(from) && isKgKm(to)) return quantity * 1000;
+  if ((isTkm(from) && isTkm(to)) || (isKgKm(from) && isKgKm(to))) return quantity;
+
+  const kgPer = (u: string): number | null => {
+    if (isTkm(u) || isKgKm(u)) return null;
+    if (u.includes('tonne') || u === 't') return 1000;
+    if (u === 'g' || u.startsWith('g ') || u.includes('gramme')) return 0.001;
+    if (u.startsWith('kg') || u.includes(' kg')) return 1;
+    return null;
+  };
+  const fromKg = kgPer(from);
+  const toKg = kgPer(to);
+  if (fromKg !== null && toKg !== null) return (quantity * fromKg) / toKg;
+
+  const kwhPer = (u: string): number | null => {
+    if (u.includes('mwh')) return 1000;
+    if (u.includes('kwh')) return 1;
+    if (u.includes('gj')) return 277.7778;
+    if (u.includes('mj')) return 0.277778;
+    return null;
+  };
+  const fromKwh = kwhPer(from);
+  const toKwh = kwhPer(to);
+  if (fromKwh !== null && toKwh !== null) return (quantity * fromKwh) / toKwh;
+
+  const literPer = (u: string): number | null => {
+    if (u === 'l' || u.includes('litre')) return 1;
+    if (u.includes('m3') || u.includes('m³')) return 1000;
+    return null;
+  };
+  const fromL = literPer(from);
+  const toL = literPer(to);
+  if (fromL !== null && toL !== null) return (quantity * fromL) / toL;
+
+  return quantity;
+}
+
+/** Propagate ADEME uncertainty percentages across all factor lines (ISO 14067 / GHG Protocol RSS). */
+export function computeCarbonUncertainty(stages: LifecycleStageCarbon[]): {
+  hasUncertainty: boolean;
+  relativePct: number;
+  absKgCO2e: number;
+  minKgCO2e: number;
+  maxKgCO2e: number;
+  verifiedCount: number;
+  totalLines: number;
+} {
+  let total = 0;
+  let sumSquares = 0;
+  let hasUncertainty = false;
+  let verifiedCount = 0;
+  let totalLines = 0;
+
+  for (const stage of stages || []) {
+    const lines = stage.factorApplications || [];
+    if (lines.length === 0) {
+      total += Number(stage.emissionKgCO2e || 0);
+      continue;
+    }
+    for (const line of lines) {
+      totalLines += 1;
+      if (line.verifiedAdeme || (line.ademeId && line.version)) verifiedCount += 1;
+      const emission = Math.max(0, Number(line.emissionKgCO2e || 0));
+      total += emission;
+      const uPct = Number(line.uncertaintyPct);
+      if (Number.isFinite(uPct) && uPct > 0 && emission > 0) {
+        hasUncertainty = true;
+        const absU = emission * (uPct / 100);
+        sumSquares += absU * absU;
+      } else if (emission > 0) {
+        // Default conservative 20% uncertainty when not specified in ADEME record
+        const absU = emission * 0.2;
+        sumSquares += absU * absU;
+      }
+    }
+  }
+
+  const absKgCO2e = Math.sqrt(sumSquares);
+  const relativePct = total > 0 ? Math.round((absKgCO2e / total) * 100) : 0;
+  return {
+    hasUncertainty,
+    relativePct,
+    absKgCO2e: Number(absKgCO2e.toFixed(3)),
+    minKgCO2e: Number(Math.max(0, total - absKgCO2e).toFixed(2)),
+    maxKgCO2e: Number((total + absKgCO2e).toFixed(2)),
+    verifiedCount,
+    totalLines,
   };
 }
 
@@ -177,8 +345,10 @@ export function normalizeFactorApplications(
   return list
     .filter((a: any) => a && typeof a === 'object')
     .map((a: any, index: number) => {
-      const ademeId = String(a.ademeId ?? a.id ?? '');
-      const match = ademeId ? ademeFactors.find((f) => f.id === ademeId) : undefined;
+      const ademeId = String(a.ademeId ?? a.id ?? '')
+        .replace(/^#/, '')
+        .trim();
+      const match = ademeId ? ademeFactors.find((f) => String(f.id).replace(/^#/, '').trim() === ademeId) : undefined;
       const quantityRaw = Number(a.quantity);
       const factorRaw = Number(a.factorKgCO2e ?? a.factorKgCO2ePerUnit);
       const emissionRaw = Number(a.emissionKgCO2e);
@@ -191,26 +361,46 @@ export function normalizeFactorApplications(
         factor = emissionRaw / quantity;
       }
 
-      const name = String(a.name || match?.name || `Facteur ADEME ${ademeId || 'inconnu'}`);
-      const unit = String(a.unit || match?.unit || 'kgCO2e/unité');
-      const uncertaintyPct = Number.isFinite(Number(a.uncertaintyPct))
+      const name = String(match?.name || a.name || `Facteur ADEME ${ademeId || 'inconnu'}`);
+      const unit = String(match?.unit || a.unit || 'kgCO2e/unité');
+      const uncertaintyPct = Number.isFinite(Number(match?.uncertaintyPct))
+        ? Number(match?.uncertaintyPct)
+        : Number.isFinite(Number(a.uncertaintyPct))
         ? Number(a.uncertaintyPct)
-        : match?.uncertaintyPct;
-      const version = a.version ? String(a.version) : match?.version;
+        : undefined;
+      const version = match?.version ? String(match.version) : a.version ? String(a.version) : undefined;
+      const posteLabel =
+        typeof a.posteLabel === 'string' && a.posteLabel.trim() ? a.posteLabel.trim() : undefined;
+      const technicalJustification =
+        typeof a.technicalJustification === 'string' && a.technicalJustification.trim()
+          ? a.technicalJustification.trim()
+          : undefined;
+      const sourceBasis =
+        typeof a.sourceBasis === 'string' && a.sourceBasis.trim() ? a.sourceBasis.trim() : undefined;
+      const iso14064Category =
+        typeof a.iso14064Category === 'string' && a.iso14064Category.trim()
+          ? a.iso14064Category.trim()
+          : undefined;
+      const verifiedAdeme = Boolean(a.verifiedAdeme || (match && match.version));
 
       return {
         id: String(a.id || `app_${ademeId || 'x'}_${index}`),
         ademeId,
         name,
+        ...(posteLabel ? { posteLabel } : {}),
+        ...(technicalJustification ? { technicalJustification } : {}),
+        ...(sourceBasis ? { sourceBasis } : {}),
+        ...(iso14064Category ? { iso14064Category } : {}),
+        ...(verifiedAdeme ? { verifiedAdeme: true } : {}),
         quantity,
         unit,
         factorKgCO2e: factor,
         emissionKgCO2e: Number((quantity * factor).toFixed(6)),
-        ...(a.category || match?.category ? { category: String(a.category || match?.category) } : {}),
-        ...(a.geography || match?.geography ? { geography: String(a.geography || match?.geography) } : {}),
+        ...(match?.category || a.category ? { category: String(match?.category || a.category) } : {}),
+        ...(match?.geography || a.geography ? { geography: String(match?.geography || a.geography) } : {}),
         ...(Number.isFinite(uncertaintyPct as number) ? { uncertaintyPct: Number(uncertaintyPct) } : {}),
         ...(version ? { version } : {}),
-        ...(a.program || match?.program ? { program: String(a.program || match?.program) } : {}),
+        ...(match?.program || a.program ? { program: String(match?.program || a.program) } : {}),
         appliedStage: String(a.appliedStage || stageName),
       };
     })

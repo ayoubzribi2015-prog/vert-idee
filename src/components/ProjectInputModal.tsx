@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Lightbulb, Compass, MapPin, ArrowRight, CheckCircle2 } from 'lucide-react';
-import type { FunctionalUnitOption } from '../types';
+import type { CarbonFootprintModel, FunctionalUnitOption } from '../types';
 import { DescriptionFileInput } from './DescriptionFileInput';
 import { FunctionalUnitSelection } from './FunctionalUnitSelection';
 
@@ -15,6 +15,7 @@ interface ProjectInputModalProps {
   }) => Promise<void>;
   isLoading: boolean;
   pendingFunctionalUnitOptions?: FunctionalUnitOption[];
+  pendingCarbonFootprint?: CarbonFootprintModel;
   onValidateFunctionalUnit?: (optionId: string) => Promise<void>;
   onCancelFunctionalUnitSelection?: () => void;
   isValidatingFunctionalUnit?: boolean;
@@ -47,6 +48,7 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
   onSubmit,
   isLoading,
   pendingFunctionalUnitOptions,
+  pendingCarbonFootprint,
   onValidateFunctionalUnit,
   onCancelFunctionalUnitSelection,
   isValidatingFunctionalUnit,
@@ -131,6 +133,7 @@ export const ProjectInputModal: React.FC<ProjectInputModalProps> = ({
           pendingFunctionalUnitOptions && pendingFunctionalUnitOptions.length === 4 && onValidateFunctionalUnit ? (
             <FunctionalUnitSelection
               options={pendingFunctionalUnitOptions}
+              carbonFootprint={pendingCarbonFootprint}
               onValidate={onValidateFunctionalUnit}
               onCancel={onCancelFunctionalUnitSelection}
               isSubmitting={isValidatingFunctionalUnit}

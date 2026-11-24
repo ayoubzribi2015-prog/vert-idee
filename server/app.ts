@@ -7,10 +7,14 @@ import {
 import {
   fetchContextualBaseCarboneFactors,
   searchBaseCarbone,
+  suggestBaseCarboneFactors,
+  resolveFactorById,
+  mapLocalFactorToFactor,
   getBaseCarboneIndexStatus,
   BASE_CARBONE_VERSION,
   BASE_CARBONE_DATASET,
   BASE_CARBONE_DOC_URL,
+  type AcvStageCategory,
 } from '../src/utils/baseCarbone.ts';
 import {
   isConcreteFunctionalUnit,
@@ -501,11 +505,15 @@ app.get('/api/base-carbone/search', async (req: express.Request, res: express.Re
   try {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const size = Math.min(25, Math.max(1, Number(req.query.size) || 12));
+    const stageRaw = typeof req.query.stage === 'string' ? req.query.stage.trim() : '';
+    const geographyHint = typeof req.query.geography === 'string' ? req.query.geography.trim() : undefined;
+    const validStages = new Set(['raw_materials', 'manufacturing', 'packaging', 'transport', 'usage', 'end_of_life']);
+    const stageCategory = validStages.has(stageRaw) ? (stageRaw as AcvStageCategory) : undefined;
     if (!q) {
       res.status(400).json({ success: false, error: 'Paramètre de recherche "q" requis.' });
       return;
     }
-    const results = await searchBaseCarbone(q, { size, timeoutMs: 6000 });
+    const results = await searchBaseCarbone(q, { size, stageCategory, geographyHint, timeoutMs: 6000 });
     res.json({
       success: true,
       source: 'ADEME Base Empreinte® / Base Carbone®',
@@ -520,6 +528,37 @@ app.get('/api/base-carbone/search', async (req: express.Request, res: express.Re
     res.status(500).json({
       success: false,
       error: err?.message || 'Erreur lors de la consultation de l’index local Base Carbone ADEME.',
+    });
+  }
+});
+
+// Contextual ADEME factor suggestions per ACV stage and project technical profile
+app.get('/api/base-carbone/suggest', async (req: express.Request, res: express.Response) => {
+  try {
+    const stageRaw = typeof req.query.stage === 'string' ? req.query.stage.trim() : '';
+    const validStages = new Set(['raw_materials', 'manufacturing', 'packaging', 'transport', 'usage', 'end_of_life']);
+    const stageCategory = validStages.has(stageRaw) ? (stageRaw as AcvStageCategory) : undefined;
+    const results = await suggestBaseCarboneFactors({
+      stageCategory,
+      title: typeof req.query.title === 'string' ? req.query.title : undefined,
+      sector: typeof req.query.sector === 'string' ? req.query.sector : undefined,
+      description: typeof req.query.description === 'string' ? req.query.description : undefined,
+      location: typeof req.query.location === 'string' ? req.query.location : undefined,
+      query: typeof req.query.q === 'string' ? req.query.q : undefined,
+      size: Math.min(20, Math.max(1, Number(req.query.size) || 8)),
+    });
+    res.json({
+      success: true,
+      source: 'ADEME Base Empreinte® / Base Carbone®',
+      version: BASE_CARBONE_VERSION,
+      offline: true,
+      count: results.length,
+      results,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'Erreur lors de la suggestion de facteurs ADEME.',
     });
   }
 });
@@ -1289,12 +1328,19 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
    - RÈGLE IMPÉRATIVE POUR LES PROJETS EDTECH / ÉDUCATION : Pour tout projet relevant de l'éducation, de la formation, de l'EdTech, de l'inclusion (ex: enfants TSA, DYS) ou de la pédagogie, tu DOIS obligatoirement inclure l'**ODD 4 (Éducation de qualité)** en premier et au niveau 'Majeur' (avec les sous-cibles 4.1, 4.4, 4.5 et 4.7), complété par les ODD 10, 8 et 12.
 6. Indicateurs d'impact : Bilan carbone normé selon ISO 14067:2018 (par unité fonctionnelle) et ISO 14064-1:2018 (Catégories 1 à 6), calibré à l'aide des facteurs d'émission ADEME Base Empreinte® / Base Carbone® fournis (version figée ${BASE_CARBONE_VERSION}, index local unique). Analyse de cycle de vie étape par étape (Approvisionnement Cat 4, Fabrication Cat 1-2, Conditionnement Cat 4, Transport Cat 3, Utilisation Cat 5, Fin de vie Cat 5) avec exclusion stricte de toute compensation carbone fictive, citation explicite des IDs ADEME retenus dans les descriptions et ademeReferenceFactors. Pour benchmarkComparison : si le projet appartient à une industrie lourde ou polluante, totalCarbonKgCO2e DOIT être STRICTEMENT SUPÉRIEUR à industryAverageKgCO2e (+20% à +60% de sur-émissions) ; si éco-innovation vertueuse, totalCarbonKgCO2e DOIT être INFÉRIEUR (-20% à -65%). Actions de décarbonation quantifiées (P1/P2/P3), intensité eau chiffrée.
 6 bis. UNITÉ FONCTIONNELLE ET CALCUL PAR FACTEURS (OBLIGATOIRE, ISO 14067) :
-   - Le champ functionalUnit DOIT être une unité fonctionnelle CONCRÈTE, MESURABLE et quantifiée, déduite de la description du projet. Exemples conformes : "1 paire de chaussures de sécurité EN ISO 20345", "1 kg de plastique injecté", "1 000 pièces de bandes de plâtre stériles", "1 kWh d'électricité produite", "1 tonne de matière traitée". INTERDICTION FORMELLE des formulations génériques type "1 unité", "unité fonctionnelle / service", "1 unité fonctionnelle / lot standardisé" : toute réponse générique est invalide.
-   - Chaque élément de lifecycleStages DOIT contenir factorApplications : une liste de postes de calcul {ademeId, name, quantity, unit, factorKgCO2e, emissionKgCO2e}. "quantity" est la quantité d'activité POUR l'unité fonctionnelle, exprimée dans l'unité du facteur ADEME retenu. "emissionKgCO2e" = quantity × factorKgCO2e, recalculé par le système.
+   - Le champ functionalUnit DOIT être une unité fonctionnelle CONCRÈTE, MESURABLE et quantifiée, déduite de la description et de l'étude technique du projet. Exemples conformes : "1 paire de chaussures de sécurité EN ISO 20345", "1 kg de plastique injecté", "1 000 pièces de bandes de plâtre stériles", "1 kWh d'électricité produite", "1 tonne de matière traitée". INTERDICTION FORMELLE des formulations génériques type "1 unité", "unité fonctionnelle / service", "1 unité fonctionnelle / lot standardisé" : toute réponse générique est invalide.
+   - Chaque élément de lifecycleStages DOIT correspondre aux flux physiques identifiés dans l'ACV (section 2) et l'étude technique, et contenir factorApplications : une liste de postes de calcul {ademeId, name, posteLabel, technicalJustification, sourceBasis, iso14064Category, quantity, unit, factorKgCO2e, emissionKgCO2e}.
+   - RÈGLE DE PERTINENCE DES POSTES / INTRANTS :
+     * Choisis 1 à 4 postes ADEME par étape active, directement tirés des intrants matières, énergies (électricité du pays d'implantation, gaz naturel, carburant), emballages, distances de fret (masse transportée en tonnes × km = t.km), consommation d'usage et traitement de fin de vie décrits dans l'étude technique.
+     * "quantity" est la quantité d'activité POUR 1 unité fonctionnelle \`fu1\`, IMPÉRATIVEMENT convertie dans l'unité du facteur ADEME (ex. : si le facteur ADEME est en \`kgCO2e/tonne\` et que la fiche technique donne 450 g/UF avec 5 % de chute, \`quantity = 0.0004725\` tonne).
+     * "posteLabel" nomme clairement l'intrant ou procédé du projet (ex: "Polyuréthane injecté semelle (taux de perte 5 %)").
+     * "technicalJustification" détaille la formule d'ingénierie liant les données de l'étude technique à \`fu1\` (masses, rendements, kWh/cycle, distance en km).
+     * "sourceBasis" indique l'origine ("Étude technique / Document", "Bilan matière ACV" ou "Hypothèse experte ACV") et "iso14064Category" indique "Catégorie 1" à "Catégorie 5".
+     * "emissionKgCO2e" = quantity × factorKgCO2e, recalculé par le système.
    - L'émission d'une étape est EXACTEMENT la somme de ses factorApplications, et totalCarbonKgCO2e est EXACTEMENT la somme des émissions des étapes. Aucune étape ne doit recevoir une émission sans au moins un poste factorApplications traçable à un ID ADEME. Si aucun facteur exact n'existe, utiliser le facteur ADEME le plus proche et signaler son incertitude — ne jamais renvoyer zéro ni inventer une valeur.
-    - Chacun des 4 Experts doit proposer UNE unité fonctionnelle dans functionalUnitOptions : {id, label, rationale, proposedBy, scaleFactor}, avec les identifiants "fu1", "fu2", "fu3", "fu4" et proposedBy = "Expert 1" à "Expert 4". Les 4 labels portent sur le MÊME produit à des échelles de référence différentes, concretes et quantifiées.
-    - functionalUnit et functionalUnitBase reprennent le libellé de "fu1" ; toutes les quantités de factorApplications sont exprimées POUR "fu1" (scaleFactor = 1). Pour chaque autre option, scaleFactor = (référence quantitative de l'option) / (référence de fu1). Exemple : si fu1 = "1 kg de plastique injecté", alors "1 tonne" = 1000, "500 g" = 0.5, "1 emballage de 500 g" = 0.5.
-    - Le système recalculera émissions, total, pourcentages et benchmark avec le scaleFactor de l'option validée par l'utilisateur : ne fournir que des facteurs d'échelle exacts et strictement positifs. Aucune proposition générique n'est acceptée.
+   - Chacun des 4 Experts doit proposer UNE unité fonctionnelle dans functionalUnitOptions : {id, label, rationale, proposedBy, scaleFactor}, avec les identifiants "fu1", "fu2", "fu3", "fu4" et proposedBy = "Expert 1" à "Expert 4". Les 4 labels portent sur le MÊME produit à des échelles de référence différentes, concrètes et quantifiées.
+   - functionalUnit et functionalUnitBase reprennent le libellé de "fu1" ; toutes les quantités de factorApplications sont exprimées POUR "fu1" (scaleFactor = 1). Pour chaque autre option, scaleFactor = (référence quantitative de l'option) / (référence de fu1). Exemple : si fu1 = "1 kg de plastique injecté", alors "1 tonne" = 1000, "500 g" = 0.5, "1 emballage de 500 g" = 0.5.
+   - Le système recalculera émissions, total, pourcentages et benchmark avec le scaleFactor de l'option validée par l'utilisateur : ne fournir que des facteurs d'échelle exacts et strictement positifs. Aucune proposition générique n'est acceptée.
 7. Financements et labels verts : Statut d'éligibilité réel (exclusion formelle des labels verts si activité polluante), fonds de mise en conformité et dépollution (FODEP, BERD Climat).
 8. Plan d'action prioritaire : Actions concrètes d'urgence (0-12 mois) priorisées avec livrables opérationnels pour la neutralisation des AES.
 `;
@@ -1304,6 +1350,7 @@ Le rapport d'expertise DOIT OBLIGATOIREMENT être structuré selon EXACTEMENT le
       sector,
       description,
       location: resolveLocation(location),
+      lifeCycleDetails,
       fullDocumentContent,
       timeoutMs: 4500,
     });
@@ -1617,18 +1664,22 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
                           reductionOpportunity: { type: Type.STRING },
                           factorApplications: {
                             type: Type.ARRAY,
-                            description: 'Postes de calcul : chaque émission = quantity × factorKgCO2e, traçable à un ID ADEME',
+                            description: 'Postes de calcul issus de l’ACV et de l’étude technique : chaque émission = quantity × factorKgCO2e, traçable à un ID ADEME',
                             items: {
                               type: Type.OBJECT,
                               properties: {
                                 ademeId: { type: Type.STRING },
                                 name: { type: Type.STRING },
+                                posteLabel: { type: Type.STRING, description: 'Intitulé métier du poste ou intrant issu de l’étude technique' },
+                                technicalJustification: { type: Type.STRING, description: 'Détail du calcul de la quantité rapportée à l’unité fonctionnelle fu1 (masse, perte, rendement, distance)' },
+                                sourceBasis: { type: Type.STRING, description: 'Origine : Étude technique / Document, Bilan matière ACV, ou Hypothèse experte ACV' },
+                                iso14064Category: { type: Type.STRING, description: 'Catégorie ISO 14064-1 (Catégorie 1 à Catégorie 5)' },
                                 quantity: { type: Type.NUMBER },
                                 unit: { type: Type.STRING },
                                 factorKgCO2e: { type: Type.NUMBER },
                                 emissionKgCO2e: { type: Type.NUMBER },
                               },
-                              required: ['ademeId', 'name', 'quantity', 'unit', 'factorKgCO2e', 'emissionKgCO2e'],
+                              required: ['ademeId', 'name', 'posteLabel', 'technicalJustification', 'quantity', 'unit', 'factorKgCO2e', 'emissionKgCO2e'],
                             },
                           },
                         },
@@ -1833,15 +1884,50 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       return;
     }
 
-    // Build complete project object and ensure ADEME Base Carbone® reference factors are attached
+    // Build complete project object and rebuild ADEME Base Carbone® reference factors
+    // strictly from the frozen V23.11 local index so every factor line is verified.
     const finalSector = parsedData.detectedSector || sector || 'Économie Circulaire & Éco-innovation';
-    if (
-      parsedData?.impactIndicators?.carbonFootprint &&
-      (!Array.isArray(parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors) ||
-        parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors.length === 0) &&
-      baseCarboneCtx.factors.length > 0
-    ) {
-      parsedData.impactIndicators.carbonFootprint.ademeReferenceFactors = baseCarboneCtx.factors.slice(0, 6);
+    if (parsedData?.impactIndicators?.carbonFootprint) {
+      const cf = parsedData.impactIndicators.carbonFootprint;
+      const localFactorsById = new Map(baseCarboneCtx.factors.map((f) => [f.id, f]));
+      const resolvedList: any[] = [];
+      const seenIds = new Set<string>();
+
+      for (const stage of cf.lifecycleStages || []) {
+        for (const line of stage?.factorApplications || []) {
+          const cleanId = String(line?.ademeId || '')
+            .replace(/^#/, '')
+            .trim();
+          if (!cleanId) continue;
+          line.ademeId = cleanId;
+          let verified = localFactorsById.get(cleanId);
+          if (!verified) {
+            const localMatch = resolveFactorById(cleanId);
+            if (localMatch) {
+              verified = mapLocalFactorToFactor(localMatch, undefined, stage?.name);
+            }
+          }
+          if (verified && !seenIds.has(verified.id)) {
+            seenIds.add(verified.id);
+            resolvedList.push({
+              ...verified,
+              appliedStage: stage?.name || verified.appliedStage,
+            });
+          }
+        }
+      }
+
+      for (const ctxFactor of baseCarboneCtx.factors) {
+        if (resolvedList.length >= 16) break;
+        if (!seenIds.has(ctxFactor.id)) {
+          seenIds.add(ctxFactor.id);
+          resolvedList.push(ctxFactor);
+        }
+      }
+
+      if (resolvedList.length > 0) {
+        cf.ademeReferenceFactors = resolvedList;
+      }
     }
 
     // Deterministic factor-based recomputation: stage = Σ(quantity × ADEME factor),

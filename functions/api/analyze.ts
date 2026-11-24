@@ -4,7 +4,11 @@ import {
   isTransientGeminiError,
   isQuotaGeminiError,
 } from '../../src/utils/geminiModels.ts';
-import { fetchContextualBaseCarboneFactors } from '../../src/utils/baseCarbone.ts';
+import {
+  fetchContextualBaseCarboneFactors,
+  resolveFactorById,
+  mapLocalFactorToFactor,
+} from '../../src/utils/baseCarbone.ts';
 import {
   isConcreteFunctionalUnit,
   isValidFunctionalUnitOptions,
@@ -169,8 +173,8 @@ Le rapport DOIT être structuré en JSON selon les 8 sections officielles :
 8. priorityActionPlan (phase1_0to3months, phase2_3to6months, phase3_6to12months)
 
 RÈGLES OBLIGATOIRES DE CALCUL CARBONE (ISO 14067 / Base Carbone® ADEME) :
-- functionalUnit DOIT être une unité fonctionnelle CONCRÈTE, MESURABLE et quantifiée déduite du projet (ex: "1 paire de chaussures de sécurité EN ISO 20345", "1 kg de plastique injecté", "1 000 pièces de bandes de plâtre stériles", "1 kWh d'électricité produite"). INTERDICTION FORMELLE des valeurs génériques ("1 unité", "unité fonctionnelle / service").
-- Chaque lifecycleStages DOIT contenir factorApplications : postes {ademeId, name, quantity, unit, factorKgCO2e, emissionKgCO2e} où quantity est la quantité d'activité POUR l'unité fonctionnelle dans l'unité du facteur, et emissionKgCO2e = quantity × factorKgCO2e.
+- functionalUnit DOIT être une unité fonctionnelle CONCRÈTE, MESURABLE et quantifiée déduite du projet et de son étude technique (ex: "1 paire de chaussures de sécurité EN ISO 20345", "1 kg de plastique injecté", "1 000 pièces de bandes de plâtre stériles", "1 kWh d'électricité produite"). INTERDICTION FORMELLE des valeurs génériques ("1 unité", "unité fonctionnelle / service").
+- Chaque lifecycleStages DOIT correspondre aux flux de l'ACV et de l'étude technique et contenir factorApplications : postes {ademeId, name, posteLabel, technicalJustification, sourceBasis, iso14064Category, quantity, unit, factorKgCO2e, emissionKgCO2e} où quantity est la quantité d'activité POUR l'unité fonctionnelle fu1 dans l'unité exacte du facteur ADEME (avec conversion kg/tonne, g/kg, t.km), et emissionKgCO2e = quantity × factorKgCO2e.
 - L'émission d'une étape = somme de ses factorApplications ; totalCarbonKgCO2e = somme des émissions des étapes. Aucune émission d'étape sans poste traçable à un ID ADEME. Ne jamais renvoyer zéro faute de facteur exact : utiliser le facteur le plus proche avec son incertitude.
 
 QUATRE PROPOSITIONS D'UNITÉ FONCTIONNELLE (VALIDATION UTILISATEUR, OBLIGATOIRE) :
@@ -185,6 +189,7 @@ QUATRE PROPOSITIONS D'UNITÉ FONCTIONNELLE (VALIDATION UTILISATEUR, OBLIGATOIRE)
     sector,
     description,
     location: loc,
+    lifeCycleDetails,
     fullDocumentContent,
     timeoutMs: 4500,
   });
@@ -475,18 +480,22 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
                                 reductionOpportunity: { type: "STRING" },
                                 factorApplications: {
                                   type: "ARRAY",
-                                  description: "Postes de calcul : émission = quantity × factorKgCO2e, traçable à un ID ADEME",
+                                  description: "Postes de calcul issus de l'ACV et de l'étude technique : émission = quantity × factorKgCO2e, traçable à un ID ADEME",
                                   items: {
                                     type: "OBJECT",
                                     properties: {
                                       ademeId: { type: "STRING" },
                                       name: { type: "STRING" },
+                                      posteLabel: { type: "STRING" },
+                                      technicalJustification: { type: "STRING" },
+                                      sourceBasis: { type: "STRING" },
+                                      iso14064Category: { type: "STRING" },
                                       quantity: { type: "NUMBER" },
                                       unit: { type: "STRING" },
                                       factorKgCO2e: { type: "NUMBER" },
                                       emissionKgCO2e: { type: "NUMBER" }
                                     },
-                                    required: ["ademeId", "name", "quantity", "unit", "factorKgCO2e", "emissionKgCO2e"]
+                                    required: ["ademeId", "name", "posteLabel", "technicalJustification", "quantity", "unit", "factorKgCO2e", "emissionKgCO2e"]
                                   }
                                 }
                               },
@@ -741,24 +750,42 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   // retained line keeps ID, version, unit, uncertainty, programme and source.
   const localFactors = baseCarboneCtx.factors;
   const localFactorsById = new Map(localFactors.map((factor) => [factor.id, factor]));
-  const referencedIds = new Set<string>();
+  const seenFactorIds = new Set<string>();
+  const resolvedFactors: typeof localFactors = [];
+
   for (const stage of carbonFootprint.lifecycleStages || []) {
     for (const line of stage?.factorApplications || []) {
-      const id = String(line?.ademeId || '');
-      if (id) referencedIds.add(id);
+      const cleanId = String(line?.ademeId || '')
+        .replace(/^#/, '')
+        .trim();
+      if (!cleanId) continue;
+      line.ademeId = cleanId;
+      let resolved = localFactorsById.get(cleanId);
+      if (!resolved) {
+        const localMatch = resolveFactorById(cleanId);
+        if (localMatch) {
+          resolved = mapLocalFactorToFactor(localMatch, undefined, stage?.name);
+        }
+      }
+      if (resolved && !seenFactorIds.has(resolved.id)) {
+        seenFactorIds.add(resolved.id);
+        resolvedFactors.push({
+          ...resolved,
+          appliedStage: stage?.name || resolved.appliedStage,
+        });
+      }
     }
   }
-  const resolvedFromStages = [...referencedIds]
-    .map((id) => localFactorsById.get(id))
-    .filter((factor): factor is (typeof localFactors)[number] => Boolean(factor));
-  const seenFactorIds = new Set<string>();
-  carbonFootprint.ademeReferenceFactors = [...resolvedFromStages, ...localFactors.slice(0, 6)].filter(
-    (factor) => {
-      if (!factor?.id || seenFactorIds.has(factor.id)) return false;
-      seenFactorIds.add(factor.id);
-      return true;
+
+  for (const ctxFactor of localFactors) {
+    if (resolvedFactors.length >= 16) break;
+    if (!seenFactorIds.has(ctxFactor.id)) {
+      seenFactorIds.add(ctxFactor.id);
+      resolvedFactors.push(ctxFactor);
     }
-  );
+  }
+
+  carbonFootprint.ademeReferenceFactors = resolvedFactors;
 
   // Deterministic factor-based recomputation: stage = Σ(quantity × ADEME factor),
   // total = Σ(stages). A benchmark is context only and never seeds a total.

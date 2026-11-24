@@ -3,13 +3,26 @@ import {
   BASE_CARBONE_VERSION,
   BASE_CARBONE_DATASET,
   BASE_CARBONE_DOC_URL,
+  type AcvStageCategory,
 } from '../../../src/utils/baseCarbone.ts';
+
+const VALID_STAGES = new Set([
+  'raw_materials',
+  'manufacturing',
+  'packaging',
+  'transport',
+  'usage',
+  'end_of_life',
+]);
 
 export const onRequestGet = async ({ request }: { request: Request }): Promise<Response> => {
   try {
     const url = new URL(request.url);
     const q = (url.searchParams.get('q') || '').trim();
     const size = Math.min(25, Math.max(1, Number(url.searchParams.get('size')) || 12));
+    const stageRaw = (url.searchParams.get('stage') || '').trim();
+    const geographyHint = (url.searchParams.get('geography') || '').trim() || undefined;
+    const stageCategory = VALID_STAGES.has(stageRaw) ? (stageRaw as AcvStageCategory) : undefined;
 
     if (!q) {
       return Response.json(
@@ -18,7 +31,7 @@ export const onRequestGet = async ({ request }: { request: Request }): Promise<R
       );
     }
 
-    const results = await searchBaseCarbone(q, { size, timeoutMs: 6000 });
+    const results = await searchBaseCarbone(q, { size, stageCategory, geographyHint, timeoutMs: 6000 });
     return Response.json({
       success: true,
       source: 'ADEME Base Empreinte® / Base Carbone®',

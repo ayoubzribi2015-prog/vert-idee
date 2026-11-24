@@ -13,7 +13,11 @@ import {
   ShadingType,
 } from 'docx';
 import type { AssistantChatMessage, ProjectAudit } from '../types.ts';
-import { normalizeProjectAudit } from './normalizeProject.ts';
+import {
+  computeCarbonUncertainty,
+  getFactorDenominator,
+  normalizeProjectAudit,
+} from './normalizeProject.ts';
 
 const PRIMARY_COLOR = '047857'; // emerald-700
 const SECONDARY_COLOR = '065F46'; // emerald-800
@@ -669,6 +673,24 @@ export async function generateWordReport(rawProject: ProjectAudit): Promise<Blob
               }),
             ],
           }),
+          ...(() => {
+            const unc = computeCarbonUncertainty(
+              project.impactIndicators?.carbonFootprint?.lifecycleStages || []
+            );
+            if (unc.totalLines <= 0) return [];
+            return [
+              new Paragraph({
+                spacing: { before: 20, after: 60 },
+                children: [
+                  new TextRun({ text: 'Traçabilité & Incertitude ADEME V23.11 : ', bold: true }),
+                  new TextRun({
+                    text: `${unc.verifiedCount}/${unc.totalLines} postes vérifiés sur le référentiel ADEME V23.11 — Incertitude propagée : ±${unc.relativePct}% [${unc.minKgCO2e.toFixed(2)} – ${unc.maxKgCO2e.toFixed(2)} kg CO2e].`,
+                    color: TEXT_MUTED,
+                  }),
+                ],
+              }),
+            ];
+          })(),
           // Performance vs Moyenne Secteur
           (() => {
             const totalKg = project.impactIndicators?.carbonFootprint?.totalCarbonKgCO2e ?? 0;
@@ -720,6 +742,64 @@ export async function generateWordReport(rawProject: ProjectAudit): Promise<Blob
               ),
             ],
           }),
+          // Detailed factorApplications table (quantité × facteur ADEME)
+          ...(() => {
+            const stagesList = project.impactIndicators?.carbonFootprint?.lifecycleStages || [];
+            const factorRows = stagesList.flatMap((stage) =>
+              (stage.factorApplications || []).map((line) => ({ stageName: stage.name, line }))
+            );
+            if (!factorRows.length) return [];
+            return [
+              new Paragraph({
+                heading: HeadingLevel.HEADING_2,
+                spacing: { before: 180, after: 80 },
+                children: [
+                  new TextRun({
+                    text: "Détail du Calcul par Facteurs ADEME (quantité × facteur) selon l'ACV :",
+                    bold: true,
+                    color: SECONDARY_COLOR,
+                    size: 20,
+                  }),
+                ],
+              }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [
+                  new TableRow({
+                    children: [
+                      createHeaderCell('Étape ACV'),
+                      createHeaderCell('Poste / Intrant & ID ADEME'),
+                      createHeaderCell('Quantité × Facteur'),
+                      createHeaderCell('Émission (kg CO2e)'),
+                      createHeaderCell('Justification technique / ACV'),
+                    ],
+                  }),
+                  ...factorRows.map(({ stageName, line }) => {
+                    const denom = getFactorDenominator(line.unit);
+                    const titleParts = [
+                      line.posteLabel || line.name,
+                      line.posteLabel && line.posteLabel !== line.name ? `ADEME : ${line.name}` : '',
+                      line.ademeId ? `ID #${line.ademeId}${line.version ? ` (v${line.version})` : ''}` : '',
+                    ].filter(Boolean);
+                    const justifParts = [
+                      line.sourceBasis ? `[${line.sourceBasis}]` : '',
+                      line.technicalJustification || '',
+                      line.iso14064Category ? `(${line.iso14064Category})` : '',
+                    ].filter(Boolean);
+                    return new TableRow({
+                      children: [
+                        createDataCell(stageName || '', true),
+                        createDataCell(titleParts.join('\n')),
+                        createDataCell(`${line.quantity} ${denom} × ${line.factorKgCO2e.toFixed(4)} kg/${denom}`),
+                        createDataCell(`${line.emissionKgCO2e.toFixed(3)} kg`, true),
+                        createDataCell(justifParts.join(' ') || 'Calculé selon l’ACV et l’unité fonctionnelle.'),
+                      ],
+                    });
+                  }),
+                ],
+              }),
+            ];
+          })(),
           // ADEME Base Carbone reference factors table
           ...(project.impactIndicators?.carbonFootprint?.ademeReferenceFactors &&
           project.impactIndicators.carbonFootprint.ademeReferenceFactors.length > 0

@@ -865,6 +865,12 @@ export default function App() {
                 <ImpactIndicatorsTab
                   indicators={activeProject.impactIndicators}
                   projectId={activeProject.id}
+                  projectContext={{
+                    title: activeProject.title,
+                    sector: activeProject.sector,
+                    description: activeProject.description,
+                    location: activeProject.location,
+                  }}
                   onSaveCarbonUpdates={handleSaveCarbonUpdates}
                   isSaving={isSavingCarbon}
                 />
@@ -918,6 +924,11 @@ export default function App() {
                   | FunctionalUnitOption[]
                   | undefined
               }
+              pendingCarbonFootprint={
+                pendingFunctionalUnit?.rawData?.impactIndicators?.carbonFootprint as
+                  | CarbonFootprintModel
+                  | undefined
+              }
               onValidateFunctionalUnit={handleValidateFunctionalUnit}
               onCancelFunctionalUnitSelection={handleCancelFunctionalUnitSelection}
               isValidatingFunctionalUnit={isValidatingFunctionalUnit}
@@ -938,6 +949,11 @@ export default function App() {
         pendingFunctionalUnitOptions={
           pendingFunctionalUnit?.rawData?.impactIndicators?.carbonFootprint?.functionalUnitOptions as
             | FunctionalUnitOption[]
+            | undefined
+        }
+        pendingCarbonFootprint={
+          pendingFunctionalUnit?.rawData?.impactIndicators?.carbonFootprint as
+            | CarbonFootprintModel
             | undefined
         }
         onValidateFunctionalUnit={handleValidateFunctionalUnit}
