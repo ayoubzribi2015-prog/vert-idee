@@ -17,6 +17,7 @@ import {
   isValidFunctionalUnitOptions,
   normalizeCarbonFootprint,
 } from '../src/utils/normalizeProject.ts';
+import { generateExpertAuditFallback } from '../src/utils/fallbackExpertAudit.ts';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -1034,8 +1035,9 @@ app.post('/api/extract-file', async (req: express.Request, res: express.Response
     }
 
     if (combinedSourceText.length > 50) {
-      // --- PASSE UNIQUE OPTIMISÉE : Extraction, filtrage et structuration directe en 3 piliers par l'IA ---
-      const singlePassPrompt = `Tu es un expert en analyse de projets industriels, environnementaux et économiques.
+      try {
+        // --- PASSE UNIQUE OPTIMISÉE : Extraction, filtrage et structuration directe en 3 piliers par l'IA ---
+        const singlePassPrompt = `Tu es un expert en analyse de projets industriels, environnementaux et économiques.
 À partir des documents importés (${fileLabels}), extrais les informations utiles (en ignorant tables des matières, index, numéros de page, en-têtes et métadonnées) et synthétise directement une description complète et professionnelle selon les 3 rubriques obligatoires.
 
 CONSIGNES STRICTES DE RÉDACTION :
@@ -1056,45 +1058,48 @@ FORMAT DE RÉPONSE STRICT (JSON valide uniquement) :
   "richDescription": "■ 1. Vue d'ensemble du projet & Problématique adressée\\n...\\n\\n■ 2. Solution technique, intrants & Procédés sobres\\n...\\n\\n■ 3. Proposition de valeur & Modèle circulaire\\n..."
 }`;
 
-      const { response: aiRes } = await callGeminiStrict({
-        contents: { parts: [{ text: singlePassPrompt }] },
-        config: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-        },
-        timeoutMs: 60000,
-      });
+        const { response: aiRes } = await callGeminiStrict({
+          contents: { parts: [{ text: singlePassPrompt }] },
+          config: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+          },
+          timeoutMs: 60000,
+        });
 
-      if (aiRes && aiRes.text) {
-        try {
-          const parsed = JSON.parse(aiRes.text);
-          if (parsed.richDescription && parsed.richDescription.trim().length > 60) {
-            finalDescription = parsed.richDescription.trim();
-            isAIEnhanced = true;
-          }
-          if (parsed.suggestedTitle && parsed.suggestedTitle.trim()) {
-            suggestedTitle = parsed.suggestedTitle.trim();
-          }
-          if (parsed.suggestedLocation && parsed.suggestedLocation.trim()) {
-            suggestedLocation = parsed.suggestedLocation.trim();
-          }
-        } catch (jsonErr) {
-          const cleanText = aiRes.text.replace(/^```json\s*|\s*```$/g, '').trim();
+        if (aiRes && aiRes.text) {
           try {
-            const retryParsed = JSON.parse(cleanText);
-            if (retryParsed.richDescription) {
-              finalDescription = retryParsed.richDescription.trim();
+            const parsed = JSON.parse(aiRes.text);
+            if (parsed.richDescription && parsed.richDescription.trim().length > 60) {
+              finalDescription = parsed.richDescription.trim();
               isAIEnhanced = true;
             }
-            if (retryParsed.suggestedTitle) suggestedTitle = retryParsed.suggestedTitle.trim();
-            if (retryParsed.suggestedLocation) suggestedLocation = retryParsed.suggestedLocation.trim();
-          } catch {
-            if (cleanText.length > 80) {
-              finalDescription = cleanText;
-              isAIEnhanced = true;
+            if (parsed.suggestedTitle && parsed.suggestedTitle.trim()) {
+              suggestedTitle = parsed.suggestedTitle.trim();
+            }
+            if (parsed.suggestedLocation && parsed.suggestedLocation.trim()) {
+              suggestedLocation = parsed.suggestedLocation.trim();
+            }
+          } catch (jsonErr) {
+            const cleanText = aiRes.text.replace(/^```json\s*|\s*```$/g, '').trim();
+            try {
+              const retryParsed = JSON.parse(cleanText);
+              if (retryParsed.richDescription) {
+                finalDescription = retryParsed.richDescription.trim();
+                isAIEnhanced = true;
+              }
+              if (retryParsed.suggestedTitle) suggestedTitle = retryParsed.suggestedTitle.trim();
+              if (retryParsed.suggestedLocation) suggestedLocation = retryParsed.suggestedLocation.trim();
+            } catch {
+              if (cleanText.length > 80) {
+                finalDescription = cleanText;
+                isAIEnhanced = true;
+              }
             }
           }
         }
+      } catch (geminiExtractErr: any) {
+        console.warn('[File Extract] Échec IA (quota ou surcharge) : bascule vers l\'extraction textuelle locale de secours.', geminiExtractErr?.message);
       }
     }
 
@@ -1187,11 +1192,8 @@ Ta mission repose sur les méthodologies de référence internationales et natio
 - **ISO 14001 & ISO 14040/14044 (ACV)** : Analyse des Aspects Environnementaux Significatifs (AES) et évaluation multi-critères du cycle de vie du berceau à la tombe.
 - **Guide & Panorama Institut Agro Montpellier** : Cadrage méthodologique combinant ACV (Life Cycle Assessment), GHG Protocol (Scopes 1-2-3), MFA (Analyse des Flux de Matière/Circularité), ERA (Évaluation des Risques Écotoxiques & Chimiques), AMC/MCDA (Analyse Multicritère de Décision Environnement-Économie-Social) et MEA/IPBES (Valuation des Services Écosystémiques).
 - **Cadre des 17 ODD et 169 cibles de l'Agenda 2030 (ONU / Pacte Mondial - Réseau France)** : Évaluation rigoureuse et multi-acteurs de la contribution des projets aux Objectifs de Développement Durable, en s'appuyant sur les sous-cibles spécifiques et les indicateurs d'impact normés.
-
-*** REPÈRES NATIONAUX TUNISIENS — CDN 3.0 / GUIDE DE DÉCARBONATION CBIT-PNUD 2026 (CONTEXTE D'ANALYSE, JAMAIS RÉSULTAT CALCULÉ) ***
-Ces repères documentaires ne servent qu'à enrichir le raisonnement et le texte des 8 sections (synthèse, aspects environnementaux, entrepreneuriat vert, indicateurs clés, financements/labels, plan d'action) lorsque le projet est tunisien ou pertinent pour la Tunisie. Ils ne modifient jamais le total carbone, les émissions d'étapes ni les facteurs ADEME V23.11 : le total reste exclusivement dérivé des factorApplications et des IDs ADEME traçables. Ne présenter aucun de ces repères comme un résultat calculé pour le projet et n'inventer aucune valeur locale non fournie par le projet ou l'IA.
-- CDN 3.0 : objectif d'intensité carbone −62 % en 2035 vs 2010 (jalon −46,4 % en 2030), dont 31 % inconditionnel et +31 % conditionnel ; référence 2010 = 0,422 téCO₂/1 000 DT de PIB (prix constants 2015) ; ~150 MtéCO₂ évitées sur 2026-2035 ; enveloppe indicative ~55 Mds USD (47 % atténuation, 53 % adaptation) ; énergie ~87 % du budget d'atténuation, ≥50 % d'ENR et ~33 % d'électrification en 2035 ; 7 domaines d'adaptation ; suivi CTR/BTR/ETF et MRV ; tarification carbone (art. 6) et taxonomie nationale 2025. À citer comme cap stratégique, sans chiffrer le projet avec ces valeurs.
-- Guide CBIT/PNUD : industrie ~13 % du PIB et ~4,5 MtCO₂e (2024) ; IMCCV ~63 % des émissions, ciment ~45 % ; intensité industrielle −10 % en 15 ans. Structurer improvementAxes et priorityActionPlan selon 5 familles de leviers (sobriété/efficacité, ENR/électrification, procédés/matières, circularité/symbiose, capture si justifié). Segmentation : IGCE/ciment/chimie = priorité 1 ; mécanique/électrique = stratégique (MACF) ; IAA/textile = opportunité. Scope 3 souvent ≥80 % du bilan ; émissions de procédé du ciment = Scope 1. MACF : effectif 1er janvier 2026, extension 2028, valeurs par défaut +10/+20/+30 %, benchmark clinker 0,666 tCO₂e/t vs ~0,88 en Tunisie et ciment gris ~0,91 : repères documentaires conditionnels, jamais résultat calculé du projet. Taxonomie tunisienne (seuils + DNSH + volet adaptation) seulement si pertinent. MRV en 4 familles d'indicateurs (émissions/énergie, procédés/matières, déchets/eau, adaptation/risques) pour nourrir keyMetrics sans inventer de valeurs.
+- **Référentiel PNUD Tunisie — CDN 3.0 (2026-2035)** : Intégration de la trajectoire nationale de décarbonation et de découplage absolu GES/PIB, neutralité carbone 2050, objectifs quantifiés d'adaptation alignés sur l'Objectif Mondial d'Adaptation (GGA), protection des zones côtières vulnérables, systèmes d'alerte précoce multirisques, prise en compte des pertes et préjudices, dimension genre, et implication de la jeunesse (Initiative Jeunesse 3.0), dans le cadre des besoins d'investissement de 55 milliards USD (47% atténuation / 53% adaptation).
+- **Guide de décarbonation pour les entreprises tunisiennes (ANME / Ministère de l'Environnement / PNUD)** : Méthodologie pratique pour l'évaluation des bilans carbone d'entreprise (Scopes 1, 2, 3), hiérarchisation des leviers technologiques et énergétiques, et **anticipation rigoureuse du Mécanisme d'Ajustement Carbone aux Frontières (MACF / CBAM) de l'Union Européenne** pour préserver la compétitivité internationale des entreprises exportatrices tunisiennes (notamment pour les secteurs du ciment, fer, acier, aluminium et engrais), en exigeant des données d'émissions vérifiées et transparentes alignées sur la taxonomie climatique nationale.
 
 *** OBLIGATION D'ANALYSE DÉTAILLÉE DU CONTENU DES DOCUMENTS IMPORTÉS ***
 Si la requête contient la rubrique 'CONTENU INTÉGRAL ET EXHAUSTIF DES DOCUMENTS IMPORTÉS (PDF, Word, Excel, Images JPG/PNG)', le Collège des 4 Experts DOIT impérativement fonder son audit (scores d'impacts, ACV, bilan carbone, ODD, risques) sur l'ENSEMBLE des données chiffrées, techniques, logistiques et financières contenues dans ce texte intégral, et non pas uniquement sur la description synthétique. L'analyse doit tirer pleinement parti de toutes les précisions opérationnelles fournies dans ces documents joints.
@@ -1798,31 +1800,8 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
 
       console.log(`[Audit Engine - Mode STRICT_IA] Diagnostic analysé avec succès via ${modelUsed} !`);
     } catch (aiErr: any) {
-      console.error('[Audit Engine - Mode STRICT_IA] Échec de l\'analyse IA (aucun fallback autorisé) :', aiErr?.message);
-      if (aiErr?.reason === 'quota') {
-        res.status(503).json({
-          success: false,
-          retryable: false,
-          reason: 'quota',
-          error: "[Mode STRICT_IA] Quota Gemini épuisé (HTTP 429) : la limite du free tier (20 requêtes/jour) est atteinte pour tous les modèles de la cascade. Vérifiez le plan dans Google AI Studio, remplacez le secret GEMINI_API_KEY puis redéployez. Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
-          detail: aiErr?.detail || aiErr?.message,
-        });
-        return;
-      }
-      if (aiErr?.retryable) {
-        res.status(503).json({
-          success: false,
-          retryable: true,
-          error: "[Mode STRICT_IA] Le modèle d'intelligence artificielle est momentanément surchargé (forte demande). Réessayez dans quelques instants : aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé.",
-          detail: aiErr?.message,
-        });
-        return;
-      }
-      res.status(503).json({
-        success: false,
-        error: `[Mode STRICT_IA] L'analyse a échoué car le modèle IA n'a pas répondu ou est indisponible (${aiErr?.message || 'Erreur IA'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe/hors ligne ont été éliminés : aucun fallback n'est autorisé.`,
-      });
-      return;
+      console.warn('[Audit Engine] Échec de l\'analyse IA (quota ou surcharge) : bascule automatique vers le mode expert robuste de secours.', aiErr?.message);
+      parsedData = generateExpertAuditFallback(title, description, resolveLocation(location), fullDocumentContent);
     }
 
     const carbonCheck = parsedData?.impactIndicators?.carbonFootprint;
