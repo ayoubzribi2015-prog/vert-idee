@@ -21,7 +21,6 @@ import {
   isValidFunctionalUnitOptions,
   normalizeCarbonFootprint,
 } from '../src/utils/normalizeProject.ts';
-import { generateExpertAuditFallback } from '../src/utils/fallbackExpertAudit.ts';
 import express, { type Request, type Response } from 'express';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -249,6 +248,9 @@ export async function executeGenerate({
       delete rest.topK;
       delete rest.candidateCount;
     }
+    if (model.toLowerCase().includes('flash-lite')) {
+      delete rest.thinkingConfig;
+    }
     if (Object.keys(rest).length > 0) cleanConfig = rest;
   }
 
@@ -319,6 +321,7 @@ async function callGeminiStrict(options: {
   config?: any;
   timeoutMs?: number;
   validateResponse?: (text: string) => boolean;
+  onModelAttempt?: (modelName: string, index: number, total: number) => void;
 }): Promise<{ response: { text: string }; modelUsed: string }> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
@@ -336,20 +339,21 @@ async function callGeminiStrict(options: {
   const expectsJson = options.config?.responseMimeType === 'application/json';
   let lastError: any = null;
   let sawTransientUpstreamError = false;
-  let sawQuotaError = false;
+  let quotaCount = 0;
   let quotaDetail: string | undefined = undefined;
   let sawInvalidModelResponse = false;
 
   for (let idx = 0; idx < modelsToTry.length; idx++) {
     const modelName = modelsToTry[idx];
-    // Laisser un budget confortable au 1er modèle, puis borner les modèles de repli pour éviter qu'un modèle bloqué ne fige toute la cascade
+    // 30s max si le premier modèle accroche en surcharge, 90s pour laisser les modèles capables terminer les gros documents
     const attemptTimeoutMs = idx === 0
-      ? Math.min(baseTimeoutMs, 90000)
-      : Math.min(baseTimeoutMs, 25000);
+      ? Math.min(baseTimeoutMs, 30000)
+      : Math.min(baseTimeoutMs, 90000);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), attemptTimeoutMs);
 
     try {
+      options.onModelAttempt?.(modelName, idx + 1, modelsToTry.length);
       console.log(`[Mode STRICT_IA] Tentative avec le modèle : ${modelName} (timeout ${Math.round(attemptTimeoutMs / 1000)}s)`);
       const result = await executeGenerate({
         apiKey,
@@ -402,7 +406,7 @@ async function callGeminiStrict(options: {
       if (isQuotaGeminiError(result.status, result.error)) {
         // Google reports free-tier quota per model. Keep the strict cascade:
         // no retry on this model, but try the next one in the ranking.
-        sawQuotaError = true;
+        quotaCount++;
         quotaDetail = quotaDetail || lastError.message;
         console.warn(`[Mode STRICT_IA] Quota atteint pour ${modelName}. Passage au modèle suivant dans le classement...`);
         continue;
@@ -421,8 +425,8 @@ async function callGeminiStrict(options: {
     }
   }
 
-  if (sawQuotaError) {
-    // Every model of the strict cascade returned a quota/billing error.
+  if (quotaCount > 0 && !sawTransientUpstreamError && !sawInvalidModelResponse) {
+    // Every reachable model of the strict cascade returned a quota/billing error.
     throw Object.assign(
       new Error("Quota Gemini épuisé (HTTP 429) : limite free tier atteinte pour tous les modèles de la cascade."),
       { retryable: false, reason: 'quota', detail: quotaDetail }
@@ -435,8 +439,11 @@ async function callGeminiStrict(options: {
     );
   }
 
-  throw new Error(
-    `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${lastError?.message || 'Erreur inconnue'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`
+  throw Object.assign(
+    new Error(
+      `[Mode STRICT_IA] Échec du diagnostic : Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu (${lastError?.message || 'Erreur inconnue'}). Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`
+    ),
+    { retryable: sawTransientUpstreamError }
   );
 }
 
@@ -1194,6 +1201,40 @@ function resolveLocation(loc?: string | null): string {
 
 // Expert Ecological Analysis API with EXACTLY the 8 required sections
 app.post('/api/analyze', async (req: express.Request, res: express.Response) => {
+  const wantsStream =
+    req.headers['x-stream-progress'] === '1' ||
+    String(req.headers.accept || '').includes('application/x-ndjson');
+  let heartbeatTimer: NodeJS.Timeout | null = null;
+  let streamStarted = false;
+
+  const stopHeartbeat = () => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+  };
+
+  const writeNdjson = (obj: any) => {
+    if (!streamStarted || res.writableEnded) return;
+    try {
+      res.write(JSON.stringify(obj) + '\n');
+    } catch {
+      // Ignore broken client pipe
+    }
+  };
+
+  const sendAnalyzeResponse = (status: number, body: any) => {
+    stopHeartbeat();
+    if (res.writableEnded) return;
+    if (wantsStream && streamStarted) {
+      res.end(JSON.stringify({ type: 'result', status, body }) + '\n');
+    } else {
+      res.status(status).json(body);
+    }
+  };
+
+  req.on('close', stopHeartbeat);
+
   try {
     // Élimination totale de tout cache de cohérence ou de mise en mémoire tampon HTTP
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -1204,8 +1245,20 @@ app.post('/api/analyze', async (req: express.Request, res: express.Response) => 
     const { title, description, location, sector, targetAudience, businessModel, lifeCycleDetails, fullDocumentContent } = req.body;
 
     if (!title || !description) {
-      res.status(400).json({ success: false, error: 'Le titre et la description du projet sont obligatoires.' });
+      sendAnalyzeResponse(400, { success: false, error: 'Le titre et la description du projet sont obligatoires.' });
       return;
+    }
+
+    if (wantsStream) {
+      res.status(200);
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
+      streamStarted = true;
+      writeNdjson({ type: 'heartbeat', ts: Date.now() });
+      heartbeatTimer = setInterval(() => {
+        writeNdjson({ type: 'heartbeat', ts: Date.now() });
+      }, 4000);
     }
 
     const systemPrompt = `
@@ -1380,19 +1433,114 @@ ${baseCarboneCtx.promptBlock ? `\n${baseCarboneCtx.promptBlock}\n` : ''}
 Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, exclusivement fondé sur la description et le contenu des documents fournis dans cette demande spécifique (sans aucun cache de cohérence ni contrainte d'alignement historique).
 `;
 
+    const hydrateAndCheckCarbonTraceability = (candidate: any): { valid: boolean; reason?: string } => {
+      if (!candidate || typeof candidate !== 'object') {
+        return { valid: false, reason: 'objet JSON absent' };
+      }
+      if (candidate.needsInfo === true) {
+        return { valid: true };
+      }
+      if (!candidate.projectSynthesis) {
+        return { valid: false, reason: 'projectSynthesis absent' };
+      }
+      const cf = candidate?.impactIndicators?.carbonFootprint;
+      if (!cf || typeof cf !== 'object') {
+        return { valid: false, reason: 'impactIndicators.carbonFootprint absent' };
+      }
+
+      const stages = Array.isArray(cf.lifecycleStages) ? cf.lifecycleStages : [];
+      let computedStageSum = 0;
+      for (const stage of stages) {
+        if (!stage || typeof stage !== 'object') continue;
+        const lines = Array.isArray(stage.factorApplications) ? stage.factorApplications : [];
+        let lineSum = 0;
+        for (const line of lines) {
+          if (!line || typeof line !== 'object') continue;
+          const cleanId = String(line.ademeId || line.id || '')
+            .replace(/^#/, '')
+            .trim();
+          if (cleanId) line.ademeId = cleanId;
+          const qty = Number(line.quantity);
+          if (cleanId && Number.isFinite(qty) && qty > 0) {
+            const localMatch = resolveFactorById(cleanId);
+            if (localMatch && localMatch.value > 0) {
+              line.factorKgCO2e = localMatch.value;
+              line.unit = localMatch.unit;
+              line.emissionKgCO2e = Number((qty * localMatch.value).toFixed(6));
+            }
+          }
+          const factorVal = Number(line.factorKgCO2e);
+          if (Number.isFinite(qty) && qty > 0 && Number.isFinite(factorVal) && factorVal > 0) {
+            lineSum += qty * factorVal;
+          }
+        }
+        if (lineSum > 0) {
+          stage.emissionKgCO2e = Number(lineSum.toFixed(4));
+        }
+        const stageEmission = Number(stage.emissionKgCO2e);
+        if (Number.isFinite(stageEmission) && stageEmission > 0) {
+          computedStageSum += stageEmission;
+        }
+      }
+
+      if (computedStageSum > 0 && !(Number(cf.totalCarbonKgCO2e) > 0)) {
+        cf.totalCarbonKgCO2e = Number(computedStageSum.toFixed(4));
+      }
+
+      if (!isValidFunctionalUnitOptions(cf.functionalUnitOptions)) {
+        return {
+          valid: false,
+          reason: 'functionalUnitOptions invalides (4 options concrètes avec fu1 scaleFactor=1 requises)',
+        };
+      }
+      if (!isConcreteFunctionalUnit(cf.functionalUnit)) {
+        cf.functionalUnit = cf.functionalUnitOptions[0].label;
+      }
+      if (!(Number(cf.totalCarbonKgCO2e) > 0)) {
+        return { valid: false, reason: 'totalCarbonKgCO2e <= 0' };
+      }
+
+      const traceableStages = stages.filter(
+        (stage: any) =>
+          Array.isArray(stage?.factorApplications) &&
+          stage.factorApplications.some(
+            (line: any) =>
+              String(line?.ademeId || '').length > 0 &&
+              Number(line?.quantity) > 0 &&
+              Number(line?.factorKgCO2e) > 0
+          )
+      );
+      if (traceableStages.length === 0) {
+        return {
+          valid: false,
+          reason: 'aucune étape avec factorApplications traçable à un ID ADEME',
+        };
+      }
+      return { valid: true };
+    };
+
     let parsedData: any = null;
+    let lastTraceabilityReason: string | undefined;
 
     try {
       const { response, modelUsed } = await callGeminiStrict({
         contents: userPrompt,
-        timeoutMs: 180000, // 3 minutes timeout for deep analysis
+        timeoutMs: 240000, // 4 minutes timeout for deep analysis
+        onModelAttempt: (modelName, index, total) => {
+          writeNdjson({ type: 'progress', model: modelName, index, total });
+        },
         validateResponse: (text) => {
           const parsed = JSON.parse(text);
-          return Boolean(parsed?.needsInfo || parsed?.projectSynthesis);
+          const check = hydrateAndCheckCarbonTraceability(parsed);
+          if (!check.valid) {
+            lastTraceabilityReason = check.reason;
+            console.warn(`[Mode STRICT_IA] Rejet réponse partielle : ${check.reason}`);
+          }
+          return check.valid;
         },
         config: {
           systemInstruction: systemPrompt,
-          maxOutputTokens: 16384,
+          maxOutputTokens: 32768,
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: {
@@ -1845,41 +1993,48 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
 
       if (parsedData.needsInfo) {
         console.log(`[Audit Engine] Le modèle demande plus d'informations.`);
-        res.json({ success: true, needsInfo: true, questions: parsedData.questions });
+        sendAnalyzeResponse(200, { success: true, needsInfo: true, questions: parsedData.questions });
         return;
       }
 
       console.log(`[Audit Engine - Mode STRICT_IA] Diagnostic analysé avec succès via ${modelUsed} !`);
     } catch (aiErr: any) {
-      console.warn('[Audit Engine] Échec de l\'analyse IA (quota ou surcharge) : bascule automatique vers le mode expert robuste de secours.', aiErr?.message);
-      parsedData = generateExpertAuditFallback(title, description, resolveLocation(location), fullDocumentContent);
+      console.error('[Audit Engine - Mode STRICT_IA] Échec de l\'analyse IA :', aiErr?.message);
+      if (aiErr?.reason === 'quota') {
+        sendAnalyzeResponse(503, {
+          success: false,
+          retryable: false,
+          reason: 'quota',
+          error:
+            "[Mode STRICT_IA] Quota Gemini épuisé (HTTP 429) : la limite est atteinte pour tous les modèles disponibles. Vérifiez le quota dans Google AI Studio. Aucun total carbone n'a été inventé et aucun fallback déterministe n'est autorisé.",
+          detail: aiErr?.detail || aiErr?.message,
+        });
+        return;
+      }
+      if (aiErr?.retryable) {
+        sendAnalyzeResponse(503, {
+          success: false,
+          retryable: true,
+          error:
+            "[Mode STRICT_IA] Le modèle d'intelligence artificielle est momentanément surchargé (forte demande). Réessayez dans quelques instants : aucun total carbone n'a été inventé et aucun fallback déterministe n'est autorisé.",
+          detail: aiErr?.message,
+        });
+        return;
+      }
+      sendAnalyzeResponse(502, {
+        success: false,
+        retryable: Boolean(aiErr?.retryable),
+        error: aiErr?.message || '[Mode STRICT_IA] Échec du diagnostic : le modèle IA n’a pas pu produire un bilan carbone ADEME V23.11 complet.',
+        ...(lastTraceabilityReason ? { detail: lastTraceabilityReason } : {}),
+      });
+      return;
     }
 
-    const carbonCheck = parsedData?.impactIndicators?.carbonFootprint;
-    const traceableStages = Array.isArray(carbonCheck?.lifecycleStages)
-      ? carbonCheck.lifecycleStages.filter(
-          (stage: any) =>
-            Array.isArray(stage?.factorApplications) &&
-            stage.factorApplications.some(
-              (line: any) =>
-                String(line?.ademeId || '').length > 0 &&
-                Number(line?.quantity) > 0 &&
-                Number(line?.factorKgCO2e) > 0
-            )
-        )
-      : [];
-
-    if (
-      !parsedData ||
-      !parsedData.projectSynthesis ||
-      !isConcreteFunctionalUnit(carbonCheck?.functionalUnit) ||
-      !isValidFunctionalUnitOptions(carbonCheck?.functionalUnitOptions) ||
-      !(Number(carbonCheck?.totalCarbonKgCO2e) > 0) ||
-      traceableStages.length === 0
-    ) {
-      res.status(502).json({
+    const finalCheck = hydrateAndCheckCarbonTraceability(parsedData);
+    if (!finalCheck.valid) {
+      sendAnalyzeResponse(502, {
         success: false,
-        error: '[Mode STRICT_IA] La réponse de l\'IA est incomplète : bilan carbone ADEME V23.11 absent ou non traçable (unité fonctionnelle, étapes et facteurs). Aucun total carbone n\'a été inventé et aucun fallback déterministe n\'est autorisé.',
+        error: `[Mode STRICT_IA] La réponse de l'IA est incomplète : bilan carbone ADEME V23.11 absent ou non traçable (${finalCheck.reason || 'unité fonctionnelle, étapes et facteurs'}). Aucun total carbone n'a été inventé et aucun fallback déterministe n'est autorisé.`,
       });
       return;
     }
@@ -1966,13 +2121,15 @@ Consigne d'évaluation : Réalise un audit direct, indépendant et dynamique, ex
       saveProjectToFirestore(auditResult);
     }
 
-    res.json({ success: true, data: auditResult });
+    sendAnalyzeResponse(200, { success: true, data: auditResult });
   } catch (error: any) {
     console.error('Error in /api/analyze:', error);
-    res.status(500).json({
+    sendAnalyzeResponse(500, {
       success: false,
       error: error?.message || 'Une erreur est survenue lors de l\'analyse environnementale.',
     });
+  } finally {
+    stopHeartbeat();
   }
 });
 

@@ -1,17 +1,17 @@
 // Découverte et hiérarchisation stricte des modèles Gemini selon le classement imposé :
 // 1. gemini-4-hydrogen (Gemini 4 Hydrogen)
-// 2. gemini-3.8-flash
-// 3. gemini-3.5-flash-lite
-// 4. gemini-3.6
+// 2. gemini-3-flash-preview (Gemini 3 Flash Preview — rapide et fiable sur schémas JSON complets)
+// 3. gemini-3.8-flash
+// 4. gemini-3.5-flash-lite
 // 5. gemini-3.6-flash
 // 6. gemini-3.1-flash-lite
-// On commence avec 1. gemini-4-hydrogen puis on passe au modèle suivant uniquement si le modèle actuel échoue ou renvoie une réponse vide.
+// On commence avec 1. gemini-4-hydrogen puis on passe au modèle suivant uniquement si le modèle actuel échoue ou renvoie une réponse incomplète.
 
 export const ORDERED_GEMINI_MODELS = [
   'gemini-4-hydrogen',
+  'gemini-3-flash-preview',
   'gemini-3.8-flash',
   'gemini-3.5-flash-lite',
-  'gemini-3.6',
   'gemini-3.6-flash',
   'gemini-3.1-flash-lite',
 ] as const;
@@ -32,13 +32,16 @@ const clean = (name: string) => name.replace(/^models\//, '');
 
 function getModelRank(name: string): number {
   const lower = name.toLowerCase();
-  if (/(tts|image|live|transcribe|translate|embedding|audio|veo|lyria)/.test(lower)) return 99;
+  if (/(tts|image|live|transcribe|translate|embedding|audio|veo|lyria|robotics|computer-use)/.test(lower)) return 99;
+  if (lower === 'gemini-2.5-pro' || lower === 'gemini-2.5-flash' || lower === 'gemini-3-pro-preview') return 99;
   if (lower === 'gemini-4-hydrogen') return 1;
-  if (lower === 'gemini-3.8-flash') return 2;
-  if (lower === 'gemini-3.5-flash-lite') return 3;
-  if (lower === 'gemini-3.6') return 4;
+  if (lower === 'gemini-3-flash-preview') return 2;
+  if (lower === 'gemini-3.8-flash') return 3;
+  if (lower === 'gemini-3.5-flash-lite') return 4;
   if (lower === 'gemini-3.6-flash') return 5;
   if (lower === 'gemini-3.1-flash-lite') return 6;
+  if (lower.startsWith('gemini-3')) return 9;
+  if (lower.startsWith('gemini-')) return 20;
   return 99;
 }
 
@@ -68,7 +71,10 @@ export async function discoverGeminiModels(apiKey: string, _preferred?: string):
           .filter((n) => n && getModelRank(n) < 90)
           .sort((a, b) => getModelRank(a) - getModelRank(b));
 
-        const models = found.length > 0 ? found : [...ORDERED_GEMINI_MODELS];
+        const merged = Array.from(new Set([...ORDERED_GEMINI_MODELS, ...found])).sort(
+          (a, b) => getModelRank(a) - getModelRank(b)
+        );
+        const models = merged.length > 0 ? merged.slice(0, 8) : [...ORDERED_GEMINI_MODELS];
         base = {
           models,
           source: found.length > 0 ? 'listModels' : 'default',
@@ -88,9 +94,7 @@ export async function discoverGeminiModels(apiKey: string, _preferred?: string):
     cache = { key: apiKey, at: now, value: base };
   }
 
-  // Ordre fixe strict établi par ORDERED_GEMINI_MODELS :
-  // 1. gemini-4-hydrogen, 2. gemini-3.8-flash, 3. gemini-3.5-flash-lite, 4. gemini-3.6, 5. gemini-3.6-flash, 6. gemini-3.1-flash-lite
-  return { ...base, models: [...ORDERED_GEMINI_MODELS] };
+  return base;
 }
 
 /**

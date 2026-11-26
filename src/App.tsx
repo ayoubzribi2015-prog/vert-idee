@@ -296,7 +296,9 @@ export default function App() {
         : { ...formData, shouldSave: !!user };
 
       let result: any = null;
+      let effectiveStatus = 200;
       let apiFailed = false;
+      let transientProxyOrNetwork = false;
 
       try {
         const controller = new AbortController();
@@ -309,6 +311,7 @@ export default function App() {
             cache: 'no-store',
             headers: {
               'Content-Type': 'application/json',
+              'X-Stream-Progress': '1',
               'Cache-Control': 'no-cache, no-store, must-revalidate',
               'Pragma': 'no-cache',
             },
@@ -319,20 +322,66 @@ export default function App() {
           clearTimeout(abortTimeout);
         }
 
-        const rawText = await res.text();
-        try {
-          result = JSON.parse(rawText);
-        } catch (parseErr) {
-          console.warn('Non-JSON response from /api/analyze:', res.status, rawText.slice(0, 120));
-          apiFailed = true;
-        }
-        if (!res.ok) {
-          console.warn(`API /api/analyze returned status ${res.status}:`, result?.error || rawText.slice(0, 120));
-          apiFailed = true;
+        effectiveStatus = res.status;
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+
+        if (contentType.includes('application/x-ndjson')) {
+          let accumulated = '';
+          if (res.body && typeof res.body.getReader === 'function') {
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            while (true) {
+              const { value, done } = await reader.read();
+              if (value) {
+                accumulated += decoder.decode(value, { stream: !done });
+              }
+              if (done) break;
+            }
+            accumulated += decoder.decode();
+          } else {
+            accumulated = await res.text();
+          }
+
+          const lines = accumulated
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+          for (const line of lines) {
+            try {
+              const evt = JSON.parse(line);
+              if (evt && evt.type === 'result') {
+                effectiveStatus = Number(evt.status || res.status || 200);
+                result = evt.body ?? null;
+              }
+            } catch {
+              // Ignore incomplete partial heartbeat line
+            }
+          }
+          if (!result || effectiveStatus >= 400) {
+            apiFailed = true;
+            if (!result) transientProxyOrNetwork = true;
+          }
+        } else {
+          const rawText = await res.text();
+          try {
+            result = JSON.parse(rawText);
+          } catch (parseErr) {
+            console.warn('Non-JSON response from /api/analyze:', res.status, rawText.slice(0, 120));
+            apiFailed = true;
+            transientProxyOrNetwork = res.status >= 500 || res.status === 0;
+          }
+          if (!res.ok) {
+            console.warn(`API /api/analyze returned status ${res.status}:`, result?.error || rawText.slice(0, 120));
+            apiFailed = true;
+            if (!result && res.status >= 500) {
+              transientProxyOrNetwork = true;
+            }
+          }
         }
       } catch (fetchErr) {
         console.warn('Fetch /api/analyze network error or timeout:', fetchErr);
         apiFailed = true;
+        transientProxyOrNetwork = true;
       }
 
       // If backend API succeeded and returned valid diagnostic
@@ -361,11 +410,14 @@ export default function App() {
       }
 
       // Mode STRICT_IA : L'analyse échoue explicitement si l'IA ne répond pas (aucun fallback autorisé)
+      const isTransientFailure = Boolean(result?.retryable || transientProxyOrNetwork);
       const failureReason =
         result?.error ||
-        `Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`;
-      // A temporary upstream overload is not a STRICT_IA rejection: offer a retry.
-      setRetryableError(Boolean(result?.retryable));
+        (transientProxyOrNetwork
+          ? `Le serveur d'analyse ou le modèle d'intelligence artificielle est momentanément surchargé (HTTP ${effectiveStatus || 'timeout'}). Réessayez dans quelques instants : aucun total carbone n'a été inventé et aucun fallback déterministe n'est autorisé.`
+          : `Le modèle d'intelligence artificielle est indisponible ou n'a pas répondu. Conformément au Mode STRICT_IA, les modes hybride et déterministe ont été éliminés : aucun fallback n'est autorisé.`);
+      // A temporary upstream overload or proxy timeout is not a STRICT_IA rejection: offer a retry.
+      setRetryableError(isTransientFailure);
       throw new Error(
         failureReason.startsWith('[Mode STRICT_IA]')
           ? failureReason

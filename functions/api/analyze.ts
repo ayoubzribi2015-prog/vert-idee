@@ -41,15 +41,56 @@ const respond = (data: unknown, status = 200) =>
 function hasTraceableCarbonFootprint(data: any): boolean {
   const cf = data?.impactIndicators?.carbonFootprint;
   if (!cf || typeof cf !== 'object') return false;
-  if (!isConcreteFunctionalUnit(cf.functionalUnit)) return false;
-  // The user must be able to choose among exactly four expert proposals.
-  if (!isValidFunctionalUnitOptions(cf.functionalUnitOptions)) return false;
-
-  const declaredTotal = Number(cf.totalCarbonKgCO2e);
-  if (!Number.isFinite(declaredTotal) || declaredTotal <= 0) return false;
 
   const stages = Array.isArray(cf.lifecycleStages) ? cf.lifecycleStages : [];
   if (stages.length === 0) return false;
+
+  let stageSum = 0;
+  for (const stage of stages) {
+    if (!stage || typeof stage !== 'object') continue;
+    const lines = Array.isArray(stage.factorApplications) ? stage.factorApplications : [];
+    let lineSum = 0;
+    for (const line of lines) {
+      if (!line || typeof line !== 'object') continue;
+      const cleanId = String(line.ademeId || line.id || '')
+        .replace(/^#/, '')
+        .trim();
+      if (cleanId) line.ademeId = cleanId;
+      const qty = Number(line.quantity);
+      if (cleanId && Number.isFinite(qty) && qty > 0) {
+        const localMatch = resolveFactorById(cleanId);
+        if (localMatch && localMatch.value > 0) {
+          line.factorKgCO2e = localMatch.value;
+          line.unit = localMatch.unit;
+          line.emissionKgCO2e = Number((qty * localMatch.value).toFixed(6));
+        }
+      }
+      const factorVal = Number(line.factorKgCO2e);
+      if (Number.isFinite(qty) && qty > 0 && Number.isFinite(factorVal) && factorVal > 0) {
+        lineSum += qty * factorVal;
+      }
+    }
+    if (lineSum > 0) {
+      stage.emissionKgCO2e = Number(lineSum.toFixed(4));
+    }
+    const emission = Number(stage.emissionKgCO2e);
+    if (Number.isFinite(emission) && emission > 0) {
+      stageSum += emission;
+    }
+  }
+
+  if (stageSum > 0 && !(Number(cf.totalCarbonKgCO2e) > 0)) {
+    cf.totalCarbonKgCO2e = Number(stageSum.toFixed(4));
+  }
+
+  // The user must be able to choose among exactly four expert proposals.
+  if (!isValidFunctionalUnitOptions(cf.functionalUnitOptions)) return false;
+  if (!isConcreteFunctionalUnit(cf.functionalUnit)) {
+    cf.functionalUnit = cf.functionalUnitOptions[0].label;
+  }
+
+  const declaredTotal = Number(cf.totalCarbonKgCO2e);
+  if (!Number.isFinite(declaredTotal) || declaredTotal <= 0) return false;
 
   const traceableStages = stages.filter(
     (stage: any) =>
@@ -66,11 +107,6 @@ function hasTraceableCarbonFootprint(data: any): boolean {
           Number(line.factorKgCO2e) > 0
       )
   );
-
-  const stageSum = stages.reduce((sum: number, stage: any) => {
-    const emission = Number(stage?.emissionKgCO2e);
-    return sum + (Number.isFinite(emission) && emission > 0 ? emission : 0);
-  }, 0);
 
   return traceableStages.length > 0 && stageSum > 0;
 }
@@ -218,14 +254,14 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   let parsedData: any = null;
   let lastError: any = null;
   let sawTransientUpstreamError = false;
-  let sawQuotaError = false;
+  let quotaCount = 0;
   let quotaDetail: string | undefined = undefined;
   let sawInvalidModelResponse = false;
 
   for (let idx = 0; idx < models.length; idx++) {
     const model = models[idx];
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), idx === 0 ? 90000 : 25000);
+    const timer = setTimeout(() => controller.abort(), idx === 0 ? 30000 : 90000);
 
     try {
       const upstream = await fetch(
@@ -242,7 +278,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
             generationConfig: {
               responseMimeType: 'application/json',
               maxOutputTokens: 32768,
-              thinkingConfig: { thinkingLevel: "LOW" },
+              ...(model.toLowerCase().includes('flash-lite') ? {} : { thinkingConfig: { thinkingLevel: "LOW" } }),
               responseSchema: {
                 type: "OBJECT",
                 properties: {
@@ -685,7 +721,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
         if (isQuotaGeminiError(upstream.status, message)) {
           // Google reports free-tier quota per model. Keep the strict cascade:
           // no retry on this model, but try the next one in the ranking.
-          sawQuotaError = true;
+          quotaCount++;
           quotaDetail = quotaDetail || message;
           console.warn(`[Mode STRICT_IA] Quota atteint pour ${model}. Passage au modèle suivant dans le classement...`);
           continue;
@@ -708,7 +744,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
   }
 
   if (!parsedData || !parsedData.projectSynthesis || !hasTraceableCarbonFootprint(parsedData)) {
-    if (sawQuotaError) {
+    if (quotaCount > 0 && !sawTransientUpstreamError && !sawInvalidModelResponse) {
       return respond(
         {
           success: false,
@@ -736,6 +772,7 @@ Consigne : Réalise un audit direct et rigoureux en JSON valide.
     return respond(
       {
         success: false,
+        retryable: sawTransientUpstreamError,
         error: `[Mode STRICT_IA] Échec du diagnostic : le modèle n'a pas fourni un bilan carbone complet et traçable (unité fonctionnelle concrète, étapes et facteurs ADEME V23.11). Aucun total carbone n'a été inventé, conformément au Mode STRICT_IA : aucun fallback déterministe n'est autorisé. (${lastError?.message || 'Réponse IA incomplète'})`,
       },
       503
